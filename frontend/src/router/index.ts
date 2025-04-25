@@ -18,6 +18,11 @@ const routes = [
         component: () => import('../views/IdeaViewOne.vue'),
     },
     {
+        path: "/test2",
+        name: "Test2",
+        component: () => import('../views/IdeaViewTwo.vue'),
+    },
+    {
         path: "/:pathMatch(.*)*",
         component: () => import('../views/PageNotFoundView.vue'),
     }
