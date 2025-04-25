@@ -162,7 +162,6 @@
 
 <script setup lang="ts">
 import {inject} from "vue";
-import {LokiHeader} from "@/components/loki-header";
 import {AxiosInstance} from "axios";
 
 const axios = inject<AxiosInstance>('axios');
