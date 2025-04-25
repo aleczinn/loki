@@ -44,7 +44,7 @@ module.exports = {
                 '3xl': '2000px'
             },
             maxWidth: {
-                "loki": "87rem"
+                "loki": "120rem"
             },
             fontSize: {
                 "4xs": "0.375rem",
