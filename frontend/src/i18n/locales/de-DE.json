@@ -1,0 +1,35 @@
+{
+    "login": {
+        "who-is-watching": "Wer schaut grade?",
+        "add-profile": "Profil hinzufügen"
+    },
+    "navbar": {
+        "home": "Home",
+        "live": "Live",
+        "movies": "Filme",
+        "series": "Serien",
+        "images": "Bilder",
+        "watchlist": "Merkliste"
+    },
+    "genre": {
+        "adventure": "Abenteuer",
+        "action": "Action",
+        "animation": "Animation",
+        "anime": "Anime",
+        "drama": "Drama",
+        "documentary": "Dokumentation",
+        "family": "Familie",
+        "fantasy": "Fantasy",
+        "horror": "Horror",
+        "comedy": "Komödie",
+        "crime": "Krimi",
+        "science-fiction": "Science Fiction",
+        "thriller": "Thriller",
+        "war": "Krieg"
+    },
+    "language": {
+        "language": "Sprachen",
+        "german": "Deutsch",
+        "english": "Englisch"
+    }
+}

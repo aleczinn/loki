@@ -1,0 +1,8 @@
+@import "tailwind.css";
+@import "fonts.css";
+@import "scrollbar.css";
+@import "preflight.css";
+
+html {
+    scroll-behavior: smooth;
+}
