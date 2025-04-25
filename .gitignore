@@ -1,0 +1,17 @@
+# IDE
+.idea
+.vscode
+
+# General
+data
+.env
+
+
+# Frontend
+/frontend/node_modules
+/frontend/dist
+/frontend/package-lock.json
+
+# Backend
+/backend/node_modules
+/backend/package-lock.json
