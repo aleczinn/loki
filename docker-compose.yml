@@ -1,0 +1,32 @@
+version: '3.7'
+
+services:
+  database:
+    image: mariadb
+    restart: always
+    environment:
+      MYSQL_DATABASE: ${DATABASE_NAME}
+      MYSQL_USER: ${DATABASE_USER}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+      MYSQL_RANDOM_ROOT_PASSWORD: yes
+    ports:
+      - '3306:3306'
+    volumes:
+      - ./data/database:/var/lib/mysql
+      - ./database/scripts:/docker-entrypoint-initdb.d
+  backend:
+    restart: always
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile-backend
+    ports:
+      - '3000:3000'
+#    depends_on:
+#      - database
+  frontend:
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile-frontend
+    restart: always
+    ports:
+      - '80:80'
