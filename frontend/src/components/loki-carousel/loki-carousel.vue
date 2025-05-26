@@ -1,109 +1,84 @@
 <template>
     <div class="carousel-container">
         <!-- Carousel Container -->
-        <div
-            class="relative w-full h-full"
-            @mouseenter="pauseAutoplay"
-            @mouseleave="resumeAutoplay"
-        >
-            <!-- Slides Container -->
-            <div v-if="transitionType !== 'fade'"
-                 ref="slidesContainer"
-                 class="flex w-full h-full "
+        <div class="relative w-full h-full" @mouseenter="pauseAutoplay" @mouseleave="resumeAutoplay">
+            <!-- Slides container for 'none/slide' transition -->
+            <div v-if="transitionType !== 'fade'" class="slides-container" ref="slidesContainer"
                  :class="{'slide-transition-slide': transitionType === 'slide', 'slide-transition-none': transitionType === 'none'}"
                  :style="slideStyles"
             >
-                <!-- Slides for slide/none transition -->
-                <div
-                    v-for="(slide, index) in allSlides"
-                    :key="`slide-${index}`"
+                <div v-for="(slide, index) in allSlides" :key="`slide-${index}`"
                     class="flex-shrink-0 h-full relative"
                     :style="getSlideStyle(index)"
                 >
-                    <slot :name="`slide-${getOriginalSlideIndex(index)}`" :slideIndex="getOriginalSlideIndex(index)">
-                        <div
-                            class="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xl font-bold">
-                            Slide {{ getOriginalSlideIndex(index) + 1 }}
-                        </div>
-                    </slot>
+                    <slot :name="`slide-${getOriginalSlideIndex(index)}`" :slideIndex="getOriginalSlideIndex(index)"></slot>
                 </div>
             </div>
 
-            <!-- Fade Transition Container -->
+            <!-- Slides container for 'fade' transition -->
             <div v-if="transitionType === 'fade'" class="relative w-full h-full">
-                <div
-                    v-for="(_, index) in originalSlideCount"
-                    :key="`fade-slide-${index}`"
-                    class="absolute inset-0 w-full h-full transition-opacity duration-500 ease-in-out"
-                    :class="{
-            'opacity-100 z-10': index === currentSlide,
-            'opacity-0 z-0': index !== currentSlide
-          }"
+                <div v-for="(_, index) in originalSlideCount" :key="`fade-slide-${index}`"
+                     class="absolute inset-0 w-full h-full transition-opacity ease-in-out" :style="{transitionDelay: `${props.transitionDelay}`}"
+                     :class="{'opacity-100 z-10': index === currentSlide, 'opacity-0 z-0': index !== currentSlide}"
                 >
-                    <slot :name="`slide-${index}`" :slideIndex="index">
-                        <div
-                            class="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xl font-bold">
-                            Slide {{ index + 1 }}
-                        </div>
-                    </slot>
+                    <slot :name="`slide-${index}`" :slideIndex="index"></slot>
                 </div>
             </div>
 
             <!-- Navigation Arrows -->
-            <button
-                v-if="showArrows"
-                @click="previousSlide"
-                class="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-all duration-200 backdrop-blur-sm z-20"
-            >
+            <button v-if="arrows" @click="previousSlide" class="btn-arrow-left">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                 </svg>
             </button>
 
-            <button
-                v-if="showArrows"
-                @click="nextSlide"
-                class="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-all duration-200 backdrop-blur-sm z-20"
-            >
+            <button v-if="arrows" @click="nextSlide" class="btn-arrow-right">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
                 </svg>
             </button>
 
-            <!-- Dots Indicator -->
-            <div v-if="showDots"
-                 class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center gap-1.5 z-20">
-                <!-- Bei einzelnen Slides: Standard Dots -->
-                <template v-if="props.slidesPerView === 1">
-                    <button
-                        v-for="(_, index) in originalSlideCount"
-                        :key="`dot-${index}`"
+            <!-- Dot Navigation - Single -->
+            <div v-if="dots && props.slidesPerView === 1" class="dots-container-single">
+                <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`"
                         @click="goToSlideByDot(index)"
-                        class="w-3 h-3 rounded-full transition-all duration-200 backdrop-blur-sm"
+                        class="dot"
                         :class="{'bg-white': index === getCurrentDotIndex(), 'bg-white bg-opacity-50 hover:bg-opacity-75': index !== getCurrentDotIndex()}"
-                    />
-                </template>
-
-                <!-- Bei mehreren Slides: Gruppierte Slide-Dots -->
-                <template v-else>
-                    <div
-                        v-for="groupIndex in Math.ceil(originalSlideCount / props.slidesPerView)"
-                        :key="`group-${groupIndex}`"
-                        class="flex items-center space-x-1 px-2 py-1 backdrop-blur-sm bg-opacity-10"
-                    >
-                        <button
-                            v-for="slideIndex in getSlidesInGroup(groupIndex - 1)"
-                            :key="`slide-dot-${slideIndex}`"
-                            @click="goToSpecificSlide(slideIndex)"
-                            class="w-2 h-2 rounded-full transition-all duration-200"
-                            :class="{
-                'bg-white': isSlideCurrentlyVisible(slideIndex),
-                'bg-white bg-opacity-40 hover:bg-opacity-60': !isSlideCurrentlyVisible(slideIndex)
-              }"
-                        />
-                    </div>
-                </template>
+                />
             </div>
+
+            <!-- Dot Navigation - Multiple -->
+            <div v-if="dots && props.slidesPerView > 1" class="dots-container-multiple">
+                <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`"
+                        @click="goToSlideByDot(index)"
+                        class="dot"
+                        :class="{'bg-white': isSlideCurrentlyVisible(index), 'bg-white bg-opacity-50 hover:bg-opacity-75': !isSlideCurrentlyVisible(index)}"
+                />
+            </div>
+
+
+            <!-- Dots Indicator -->
+
+<!--                &lt;!&ndash; Bei mehreren Slides: Gruppierte Slide-Dots &ndash;&gt;-->
+<!--                <template v-else>-->
+<!--                    <div-->
+<!--                        v-for="groupIndex in Math.ceil(originalSlideCount / props.slidesPerView)"-->
+<!--                        :key="`group-${groupIndex}`"-->
+<!--                        class="flex items-center space-x-1 px-2 py-1 backdrop-blur-sm bg-opacity-10"-->
+<!--                    >-->
+<!--                        <button-->
+<!--                            v-for="slideIndex in getSlidesInGroup(groupIndex - 1)"-->
+<!--                            :key="`slide-dot-${slideIndex}`"-->
+<!--                            @click="goToSpecificSlide(slideIndex)"-->
+<!--                            class="w-2 h-2 rounded-full transition-all duration-200"-->
+<!--                            :class="{-->
+<!--                'bg-white': isSlideCurrentlyVisible(slideIndex),-->
+<!--                'bg-white bg-opacity-40 hover:bg-opacity-60': !isSlideCurrentlyVisible(slideIndex)-->
+<!--              }"-->
+<!--                        />-->
+<!--                    </div>-->
+<!--                </template>-->
+<!--            </div>-->
         </div>
     </div>
 </template>
@@ -116,8 +91,8 @@ export interface CarouselProps {
     infinite?: boolean
     transitionType?: 'slide' | 'fade' | 'none'
     transitionDelay?: number;
-    showDots?: boolean
-    showArrows?: boolean
+    dots?: boolean
+    arrows?: boolean
     height?: string
     slidesPerView?: number
     slidesToScroll?: number
@@ -128,8 +103,9 @@ const props = withDefaults(defineProps<CarouselProps>(), {
     autoplayDelay: -1,
     infinite: true,
     transitionType: 'slide',
-    showDots: true,
-    showArrows: true,
+    transitionDelay: 500,
+    dots: true,
+    arrows: true,
     height: '16rem',
     slidesPerView: 1,
     slidesToScroll: 1,
@@ -250,9 +226,23 @@ const getSlidesInGroup = (groupIndex: number) => {
 }
 
 const isSlideCurrentlyVisible = (slideIndex: number) => {
-    const currentStart = currentSlide.value
-    const currentEnd = currentStart + props.slidesPerView - 1
-    return slideIndex >= currentStart && slideIndex <= currentEnd
+    let normalizedCurrentSlide = currentSlide.value;
+
+    if (props.infinite) {
+        while (normalizedCurrentSlide < 0) {
+            normalizedCurrentSlide += originalSlideCount.value;
+        }
+        normalizedCurrentSlide = normalizedCurrentSlide % originalSlideCount.value;
+    }
+
+    const start = normalizedCurrentSlide;
+    const end = normalizedCurrentSlide + props.slidesPerView - 1;
+
+    if (end >= originalSlideCount.value && props.infinite) {
+        const normalEnd = end % originalSlideCount.value;
+        return (slideIndex >= start) || (slideIndex <= normalEnd);
+    }
+    return slideIndex >= start && slideIndex <= end;
 }
 
 const goToSpecificSlide = (slideIndex: number) => {
@@ -266,7 +256,7 @@ const goToSpecificSlide = (slideIndex: number) => {
 
     setTimeout(() => {
         isTransitioning.value = false
-    }, props.transitionType === 'slide' ? 500 : 0)
+    }, props.transitionType === 'slide' ? props.transitionDelay : 0)
 }
 
 const goToSlideByDot = (dotIndex: number) => {
@@ -288,7 +278,7 @@ const slideStyles = computed(() => {
     const slideWidthWithGap = `(${slideWidth.value} + ${props.gap})`
     const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
 
-    return { transform: `translateX(${translateX})` }
+    return { transform: `translateX(${translateX})`, transitionDuration: `${props.transitionDelay}ms` }
 })
 
 const nextSlide = () => {
@@ -323,11 +313,11 @@ const nextSlide = () => {
                         isTransitioning.value = false
                     }, 50)
                 }
-            }, props.transitionType === 'slide' ? 500 : 0)
+            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
         } else {
             setTimeout(() => {
                 isTransitioning.value = false
-            }, props.transitionType === 'slide' ? 500 : 0)
+            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
         }
     } else {
         if (currentSlide.value + props.slidesToScroll <= maxSlide) {
@@ -337,7 +327,7 @@ const nextSlide = () => {
         }
         setTimeout(() => {
             isTransitioning.value = false
-        }, props.transitionType === 'slide' ? 500 : 0)
+        }, props.transitionType === 'slide' ? props.transitionDelay : 0)
     }
 }
 
@@ -371,11 +361,11 @@ const previousSlide = () => {
                         isTransitioning.value = false
                     }, 50)
                 }
-            }, props.transitionType === 'slide' ? 500 : 0)
+            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
         } else {
             setTimeout(() => {
                 isTransitioning.value = false
-            }, props.transitionType === 'slide' ? 500 : 0)
+            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
         }
     } else {
         if (currentSlide.value - props.slidesToScroll >= 0) {
@@ -385,7 +375,7 @@ const previousSlide = () => {
         }
         setTimeout(() => {
             isTransitioning.value = false
-        }, props.transitionType === 'slide' ? 500 : 0)
+        }, props.transitionType === 'slide' ? props.transitionDelay : 0)
     }
 }
 
@@ -405,7 +395,7 @@ const goToSlide = (dotIndex: number) => {
 
     setTimeout(() => {
         isTransitioning.value = false
-    }, props.transitionType === 'slide' ? 500 : 0)
+    }, props.transitionType === 'slide' ? props.transitionDelay : 0)
 }
 
 const startAutoplay = () => {
@@ -465,11 +455,36 @@ defineExpose({
     @apply relative w-full overflow-hidden;
 }
 
+.slides-container {
+    @apply flex w-full h-full;
+}
+
 .slide-transition-none {
     @apply transition-none;
 }
 
 .slide-transition-slide {
-    @apply transition-transform duration-500 ease-in-out;
+    @apply transition-transform;
+    transition-timing-function: cubic-bezier(0.802, 0.02, 0.39, 1.01) !important;
+}
+
+.btn-arrow-left {
+    @apply absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-all duration-200 backdrop-blur-sm z-20;
+}
+
+.btn-arrow-right {
+    @apply absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-all duration-200 backdrop-blur-sm z-20;
+}
+
+.dots-container-single {
+    @apply absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center gap-1.5 z-20;
+}
+
+.dots-container-multiple {
+    @apply absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center gap-1.5 z-20;
+}
+
+.dot {
+    @apply w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur-sm;
 }
 </style>
