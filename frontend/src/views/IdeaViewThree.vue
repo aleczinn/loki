@@ -14,6 +14,8 @@
                     transition-type="slide"
                     :show-dots="true"
                     :show-arrows="true"
+                    :slides-per-view="3"
+                    :slides-to-scroll="1"
                 >
                     <template #slide-0>
                         <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
