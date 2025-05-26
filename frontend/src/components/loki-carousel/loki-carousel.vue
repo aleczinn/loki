@@ -1,21 +1,17 @@
 <template>
-    <div class="relative w-full overflow-hidden">
+    <div class="carousel-container">
         <!-- Carousel Container -->
         <div
-            class="relative w-full h-64"
+            class="relative w-full h-full"
             @mouseenter="pauseAutoplay"
             @mouseleave="resumeAutoplay"
         >
             <!-- Slides Container -->
-            <div
-                v-if="transitionType !== 'fade'"
-                ref="slidesContainer"
-                class="flex w-full h-full"
-                :class="{
-          'transition-transform duration-500 ease-in-out': transitionType === 'slide',
-          'transition-none': transitionType === 'none'
-        }"
-                :style="slideStyles"
+            <div v-if="transitionType !== 'fade'"
+                 ref="slidesContainer"
+                 class="flex w-full h-full "
+                 :class="{'slide-transition-slide': transitionType === 'slide', 'slide-transition-none': transitionType === 'none'}"
+                 :style="slideStyles"
             >
                 <!-- Slides for slide/none transition -->
                 <div
@@ -25,7 +21,8 @@
                     :style="getSlideStyle(index)"
                 >
                     <slot :name="`slide-${getOriginalSlideIndex(index)}`" :slideIndex="getOriginalSlideIndex(index)">
-                        <div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xl font-bold">
+                        <div
+                            class="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xl font-bold">
                             Slide {{ getOriginalSlideIndex(index) + 1 }}
                         </div>
                     </slot>
@@ -44,7 +41,8 @@
           }"
                 >
                     <slot :name="`slide-${index}`" :slideIndex="index">
-                        <div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xl font-bold">
+                        <div
+                            class="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xl font-bold">
                             Slide {{ index + 1 }}
                         </div>
                     </slot>
@@ -73,7 +71,8 @@
             </button>
 
             <!-- Dots Indicator -->
-            <div v-if="showDots" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center space-x-3 z-20">
+            <div v-if="showDots"
+                 class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center gap-1.5 z-20">
                 <!-- Bei einzelnen Slides: Standard Dots -->
                 <template v-if="props.slidesPerView === 1">
                     <button
@@ -81,10 +80,7 @@
                         :key="`dot-${index}`"
                         @click="goToSlideByDot(index)"
                         class="w-3 h-3 rounded-full transition-all duration-200 backdrop-blur-sm"
-                        :class="{
-              'bg-white': index === getCurrentDotIndex(),
-              'bg-white bg-opacity-50 hover:bg-opacity-75': index !== getCurrentDotIndex()
-            }"
+                        :class="{'bg-white': index === getCurrentDotIndex(), 'bg-white bg-opacity-50 hover:bg-opacity-75': index !== getCurrentDotIndex()}"
                     />
                 </template>
 
@@ -116,10 +112,10 @@
 import { ref, computed, onMounted, onUnmounted, watch, useSlots } from 'vue'
 
 export interface CarouselProps {
-    autoplay?: boolean
     autoplayDelay?: number
     infinite?: boolean
     transitionType?: 'slide' | 'fade' | 'none'
+    transitionDelay?: number;
     showDots?: boolean
     showArrows?: boolean
     height?: string
@@ -129,8 +125,7 @@ export interface CarouselProps {
 }
 
 const props = withDefaults(defineProps<CarouselProps>(), {
-    autoplay: false,
-    autoplayDelay: 3000,
+    autoplayDelay: -1,
     infinite: true,
     transitionType: 'slide',
     showDots: true,
@@ -263,7 +258,6 @@ const isSlideCurrentlyVisible = (slideIndex: number) => {
 const goToSpecificSlide = (slideIndex: number) => {
     if (isTransitioning.value) return
 
-    // Berechne die Position so, dass die gewünschte Slide sichtbar ist
     const maxPosition = originalSlideCount.value - props.slidesPerView
     const targetPosition = Math.min(slideIndex, maxPosition)
 
@@ -286,19 +280,15 @@ const goToSlideByDot = (dotIndex: number) => {
     }
 }
 
-// Berechne die Slide-Styles
 const slideStyles = computed(() => {
     if (props.transitionType === 'fade') {
         return {}
     }
 
-    // Einfache Berechnung: Jede Slide + Gap ist eine Einheit
     const slideWidthWithGap = `(${slideWidth.value} + ${props.gap})`
     const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
 
-    return {
-        transform: `translateX(${translateX})`
-    }
+    return { transform: `translateX(${translateX})` }
 })
 
 const nextSlide = () => {
@@ -419,7 +409,7 @@ const goToSlide = (dotIndex: number) => {
 }
 
 const startAutoplay = () => {
-    if (!props.autoplay) return
+    if (props.autoplayDelay === -1) return
 
     autoplayTimer = setInterval(() => {
         nextSlide()
@@ -434,35 +424,26 @@ const stopAutoplay = () => {
 }
 
 const pauseAutoplay = () => {
-    if (props.autoplay) {
+    if (props.autoplayDelay !== -1) {
         stopAutoplay()
     }
 }
 
 const resumeAutoplay = () => {
-    if (props.autoplay) {
+    if (props.autoplayDelay !== -1) {
         startAutoplay()
     }
 }
 
-// Watch für Autoplay-Änderungen
-watch(() => props.autoplay, (newVal) => {
-    if (newVal) {
-        startAutoplay()
-    } else {
-        stopAutoplay()
-    }
-})
-
 watch(() => props.autoplayDelay, () => {
-    if (props.autoplay) {
-        stopAutoplay()
+    stopAutoplay()
+    if (props.autoplayDelay !== -1) {
         startAutoplay()
     }
 })
 
 onMounted(() => {
-    if (props.autoplay) {
+    if (props.autoplayDelay !== -1) {
         startAutoplay()
     }
 })
@@ -471,7 +452,6 @@ onUnmounted(() => {
     stopAutoplay()
 })
 
-// Expose methods for parent component
 defineExpose({
     nextSlide,
     previousSlide,
@@ -480,6 +460,16 @@ defineExpose({
 })
 </script>
 
-<style scoped>
-/* Zusätzliche Styles falls nötig */
+<style scoped lang="postcss">
+.carousel-container {
+    @apply relative w-full overflow-hidden;
+}
+
+.slide-transition-none {
+    @apply transition-none;
+}
+
+.slide-transition-slide {
+    @apply transition-transform duration-500 ease-in-out;
+}
 </style>
