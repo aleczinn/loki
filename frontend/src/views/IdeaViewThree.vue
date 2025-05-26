@@ -11,25 +11,43 @@
                     :autoplay="true"
                     :autoplay-delay="4000"
                     :infinite="true "
-                    transition-type="fade"
+                    transition-type="slide"
                     :show-dots="true"
                     :show-arrows="true"
                 >
                     <template #slide-0>
                         <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
-                            Erste Slide
+                            1
                         </div>
                     </template>
 
                     <template #slide-1>
                         <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
-                            Zweite Slide
+                            2
                         </div>
                     </template>
 
                     <template #slide-2>
                         <div class="w-full h-full bg-yellow-200 flex items-center justify-center text-white text-2xl">
-                            Dritter Slide
+                            3
+                        </div>
+                    </template>
+
+                    <template #slide-3>
+                        <div class="w-full h-full bg-blue-200 flex items-center justify-center text-white text-2xl">
+                            3
+                        </div>
+                    </template>
+
+                    <template #slide-4>
+                        <div class="w-full h-full bg-purple-500 flex items-center justify-center text-white text-2xl">
+                            4
+                        </div>
+                    </template>
+
+                    <template #slide-5>
+                        <div class="w-full h-full bg-yellow-900 flex items-center justify-center text-white text-2xl">
+                            5
                         </div>
                     </template>
                 </loki-carousel>
