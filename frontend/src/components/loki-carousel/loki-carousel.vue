@@ -73,17 +73,40 @@
             </button>
 
             <!-- Dots Indicator -->
-            <div v-if="showDots" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center space-x-2 z-20">
-                <button
-                    v-for="(_, index) in dotCount"
-                    :key="`dot-${index}`"
-                    @click="goToSlide(index)"
-                    class="w-3 h-3 rounded-full transition-all duration-200 backdrop-blur-sm"
-                    :class="{
-            'bg-white': index === getCurrentDotIndex(),
-            'bg-white bg-opacity-50 hover:bg-opacity-75': index !== getCurrentDotIndex()
-          }"
-                />
+            <div v-if="showDots" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center space-x-3 z-20">
+                <!-- Bei einzelnen Slides: Standard Dots -->
+                <template v-if="props.slidesPerView === 1">
+                    <button
+                        v-for="(_, index) in originalSlideCount"
+                        :key="`dot-${index}`"
+                        @click="goToSlideByDot(index)"
+                        class="w-3 h-3 rounded-full transition-all duration-200 backdrop-blur-sm"
+                        :class="{
+              'bg-white': index === getCurrentDotIndex(),
+              'bg-white bg-opacity-50 hover:bg-opacity-75': index !== getCurrentDotIndex()
+            }"
+                    />
+                </template>
+
+                <!-- Bei mehreren Slides: Gruppierte Slide-Dots -->
+                <template v-else>
+                    <div
+                        v-for="groupIndex in Math.ceil(originalSlideCount / props.slidesPerView)"
+                        :key="`group-${groupIndex}`"
+                        class="flex items-center space-x-1 px-2 py-1 backdrop-blur-sm bg-opacity-10"
+                    >
+                        <button
+                            v-for="slideIndex in getSlidesInGroup(groupIndex - 1)"
+                            :key="`slide-dot-${slideIndex}`"
+                            @click="goToSpecificSlide(slideIndex)"
+                            class="w-2 h-2 rounded-full transition-all duration-200"
+                            :class="{
+                'bg-white': isSlideCurrentlyVisible(slideIndex),
+                'bg-white bg-opacity-40 hover:bg-opacity-60': !isSlideCurrentlyVisible(slideIndex)
+              }"
+                        />
+                    </div>
+                </template>
             </div>
         </div>
     </div>
@@ -214,6 +237,53 @@ const getCurrentDotIndex = () => {
     }
 
     return Math.floor(currentSlide.value / props.slidesToScroll)
+}
+
+// Hilfsfunktionen für Multi-Slide Dots
+const getSlidesInGroup = (groupIndex: number) => {
+    const startSlide = groupIndex * props.slidesPerView
+    const slides = []
+
+    for (let i = 0; i < props.slidesPerView; i++) {
+        const slideIndex = startSlide + i
+        if (slideIndex < originalSlideCount.value) {
+            slides.push(slideIndex)
+        }
+    }
+
+    return slides
+}
+
+const isSlideCurrentlyVisible = (slideIndex: number) => {
+    const currentStart = currentSlide.value
+    const currentEnd = currentStart + props.slidesPerView - 1
+    return slideIndex >= currentStart && slideIndex <= currentEnd
+}
+
+const goToSpecificSlide = (slideIndex: number) => {
+    if (isTransitioning.value) return
+
+    // Berechne die Position so, dass die gewünschte Slide sichtbar ist
+    const maxPosition = originalSlideCount.value - props.slidesPerView
+    const targetPosition = Math.min(slideIndex, maxPosition)
+
+    currentSlide.value = Math.max(0, targetPosition)
+    isTransitioning.value = true
+
+    setTimeout(() => {
+        isTransitioning.value = false
+    }, props.transitionType === 'slide' ? 500 : 0)
+}
+
+const goToSlideByDot = (dotIndex: number) => {
+    if (props.slidesPerView === 1) {
+        // Bei einzelnen Slides: Direkt zu Slide
+        if (props.transitionType === 'fade') {
+            currentSlide.value = dotIndex
+            return
+        }
+        goToSpecificSlide(dotIndex)
+    }
 }
 
 // Berechne die Slide-Styles
@@ -410,6 +480,6 @@ defineExpose({
 })
 </script>
 
-<style scoped lang="postcss">
-
+<style scoped>
+/* Zusätzliche Styles falls nötig */
 </style>

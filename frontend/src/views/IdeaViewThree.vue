@@ -11,11 +11,11 @@
                     :autoplay="true"
                     :autoplay-delay="4000"
                     :infinite="true "
-                    transition-type="fade"
+                    transition-type="slide"
                     :show-dots="true"
                     :show-arrows="true"
                     :slides-per-view="3"
-                    :slides-to-scroll="2"
+                    :slides-to-scroll="1"
                     gap="2rem"
                 >
                     <template #slide-0>
