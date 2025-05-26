@@ -1,15 +1,20 @@
 <template>
     <div class="carousel-container">
         <!-- Carousel Container -->
-        <div class="relative w-full h-full" @mouseenter="pauseAutoplay" @mouseleave="resumeAutoplay">
+        <div
+            class="relative w-full h-full"
+            @mouseenter="pauseAutoplay"
+            @mouseleave="resumeAutoplay"
+            :style="containerStyles"
+        >
             <!-- Slides container for 'none/slide' transition -->
             <div v-if="transitionType !== 'fade'" class="slides-container" ref="slidesContainer"
                  :class="{'slide-transition-slide': transitionType === 'slide', 'slide-transition-none': transitionType === 'none'}"
                  :style="slideStyles"
             >
                 <div v-for="(slide, index) in allSlides" :key="`slide-${index}`"
-                    class="flex-shrink-0 h-full relative"
-                    :style="getSlideStyle(index)"
+                     class="flex-shrink-0 h-full relative"
+                     :style="getSlideStyle(index)"
                 >
                     <slot :name="`slide-${getOriginalSlideIndex(index)}`" :slideIndex="getOriginalSlideIndex(index)"></slot>
                 </div>
@@ -17,8 +22,21 @@
 
             <!-- Slides container for 'fade' transition -->
             <div v-if="transitionType === 'fade'" class="relative w-full h-full">
+                <!-- Hidden slides für Höhenmessung -->
+                <div
+                    v-for="(_, index) in originalSlideCount"
+                    :key="`measure-slide-${index}`"
+                    ref="measureSlides"
+                    class="absolute inset-0 w-full opacity-0 pointer-events-none z-[-1]"
+                    :style="{ visibility: slideHeightCalculated ? 'hidden' : 'visible' }"
+                >
+                    <slot :name="`slide-${index}`" :slideIndex="index"></slot>
+                </div>
+
+                <!-- Sichtbare slides -->
                 <div v-for="(_, index) in originalSlideCount" :key="`fade-slide-${index}`"
-                     class="absolute inset-0 w-full h-full transition-opacity ease-in-out" :style="{transitionDelay: `${props.transitionDelay}`}"
+                     class="absolute inset-0 w-full h-full transition-opacity ease-in-out"
+                     :style="{transitionDuration: `${props.transitionDelay}ms`}"
                      :class="{'opacity-100 z-10': index === currentSlide, 'opacity-0 z-0': index !== currentSlide}"
                 >
                     <slot :name="`slide-${index}`" :slideIndex="index"></slot>
@@ -60,7 +78,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, useSlots } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, useSlots, nextTick } from 'vue'
 
 export interface CarouselProps {
     autoplayDelay?: number
@@ -90,7 +108,10 @@ const props = withDefaults(defineProps<CarouselProps>(), {
 
 const slots = useSlots()
 const slidesContainer = ref<HTMLElement>()
+const measureSlides = ref<HTMLElement[]>([])
 const currentSlide = ref(0)
+const calculatedHeight = ref<number>(0)
+const slideHeightCalculated = ref(false)
 let autoplayTimer: NodeJS.Timeout | null = null
 let isTransitioning = ref(false)
 
@@ -98,6 +119,79 @@ let isTransitioning = ref(false)
 const originalSlideCount = computed(() => {
     const slideSlots = Object.keys(slots).filter(key => key.startsWith('slide-'))
     return slideSlots.length || 3 // Fallback für Demo-Zwecke
+})
+
+// Container Styles - verwendet berechnete Höhe bei fade transition
+const containerStyles = computed(() => {
+    if (props.transitionType === 'fade' && slideHeightCalculated.value && calculatedHeight.value > 0) {
+        return {
+            height: `${calculatedHeight.value}px`
+        }
+    }
+    return {
+        height: props.height
+    }
+})
+
+// Berechne Slide-Höhen für fade transition
+const calculateSlideHeights = async () => {
+    if (props.transitionType !== 'fade') {
+        slideHeightCalculated.value = true
+        return
+    }
+
+    await nextTick()
+
+    let maxHeight = 0
+
+    if (measureSlides.value && measureSlides.value.length > 0) {
+        measureSlides.value.forEach((slideEl) => {
+            if (slideEl) {
+                // Temporär sichtbar machen für Messung
+                slideEl.style.position = 'static'
+                slideEl.style.visibility = 'visible'
+                slideEl.style.opacity = '1'
+
+                const height = slideEl.offsetHeight
+                if (height > maxHeight) {
+                    maxHeight = height
+                }
+
+                // Zurück zu ursprünglichem Zustand
+                slideEl.style.position = 'absolute'
+                slideEl.style.visibility = 'hidden'
+                slideEl.style.opacity = '0'
+            }
+        })
+    }
+
+    if (maxHeight > 0) {
+        calculatedHeight.value = maxHeight
+    }
+
+    slideHeightCalculated.value = true
+}
+
+// Watch für Slot-Änderungen um Höhe neu zu berechnen
+watch(() => originalSlideCount.value, () => {
+    if (props.transitionType === 'fade') {
+        slideHeightCalculated.value = false
+        nextTick(() => {
+            calculateSlideHeights()
+        })
+    }
+})
+
+// Watch für transition type Änderungen
+watch(() => props.transitionType, () => {
+    if (props.transitionType === 'fade') {
+        slideHeightCalculated.value = false
+        nextTick(() => {
+            calculateSlideHeights()
+        })
+    } else {
+        slideHeightCalculated.value = true
+    }
 })
 
 // Berechne die Slide-Breite basierend auf slidesPerView und Gap
@@ -410,6 +504,15 @@ onMounted(() => {
     if (props.autoplayDelay !== -1) {
         startAutoplay()
     }
+
+    // Höhe für fade transition berechnen
+    if (props.transitionType === 'fade') {
+        nextTick(() => {
+            calculateSlideHeights()
+        })
+    } else {
+        slideHeightCalculated.value = true
+    }
 })
 
 onUnmounted(() => {
@@ -420,7 +523,8 @@ defineExpose({
     nextSlide,
     previousSlide,
     goToSlide,
-    getCurrentSlide: () => currentSlide.value
+    getCurrentSlide: () => currentSlide.value,
+    recalculateHeight: calculateSlideHeights
 })
 </script>
 
