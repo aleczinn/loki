@@ -11,11 +11,12 @@
                     :autoplay="true"
                     :autoplay-delay="4000"
                     :infinite="true "
-                    transition-type="slide"
+                    transition-type="fade"
                     :show-dots="true"
                     :show-arrows="true"
                     :slides-per-view="3"
-                    :slides-to-scroll="1"
+                    :slides-to-scroll="2"
+                    gap="2rem"
                 >
                     <template #slide-0>
                         <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
@@ -37,19 +38,19 @@
 
                     <template #slide-3>
                         <div class="w-full h-full bg-blue-200 flex items-center justify-center text-white text-2xl">
-                            3
+                            4
                         </div>
                     </template>
 
                     <template #slide-4>
                         <div class="w-full h-full bg-purple-500 flex items-center justify-center text-white text-2xl">
-                            4
+                            5
                         </div>
                     </template>
 
                     <template #slide-5>
                         <div class="w-full h-full bg-yellow-900 flex items-center justify-center text-white text-2xl">
-                            5
+                            6
                         </div>
                     </template>
                 </loki-carousel>

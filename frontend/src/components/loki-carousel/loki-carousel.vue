@@ -16,14 +16,13 @@
           'transition-none': transitionType === 'none'
         }"
                 :style="slideStyles"
-                :gap="slideGap"
             >
                 <!-- Slides for slide/none transition -->
                 <div
                     v-for="(slide, index) in allSlides"
                     :key="`slide-${index}`"
                     class="flex-shrink-0 h-full relative"
-                    :style="{ width: slideWidth, marginRight: index < allSlides.length - 1 ? slideGap : '0' }"
+                    :style="getSlideStyle(index)"
                 >
                     <slot :name="`slide-${getOriginalSlideIndex(index)}`" :slideIndex="getOriginalSlideIndex(index)">
                         <div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-400 to-purple-500 text-white text-xl font-bold">
@@ -134,12 +133,17 @@ const originalSlideCount = computed(() => {
 // Berechne die Slide-Breite basierend auf slidesPerView und Gap
 const slideWidth = computed(() => {
     if (props.slidesPerView === 1) return '100%'
-
-    const gapValue = parseFloat(props.gap)
-    const totalGapWidth = (props.slidesPerView - 1) * gapValue
-    const slideWidth = (100 - (totalGapWidth / (window.innerWidth / 100))) / props.slidesPerView
-    return `calc(${slideWidth}% - ${gapValue / props.slidesPerView}rem)`
+    return `calc((100% - ${(props.slidesPerView - 1)} * ${props.gap}) / ${props.slidesPerView})`
 })
+
+// Funktion für individuelle Slide-Styles
+const getSlideStyle = (index: number) => {
+    const isLastSlide = index === allSlides.value.length - 1
+    return {
+        width: slideWidth.value,
+        marginRight: isLastSlide ? '0' : props.gap
+    }
+}
 
 // Gap zwischen Slides
 const slideGap = computed(() => props.gap)
@@ -218,13 +222,12 @@ const slideStyles = computed(() => {
         return {}
     }
 
-    const slideWidthPercent = 100 / props.slidesPerView
-    const gapPercent = (parseFloat(props.gap) * 16) / (window.innerWidth / 100) // Convert rem to %
-    const totalGapPercent = gapPercent * (props.slidesPerView - 1) / props.slidesPerView
+    // Einfache Berechnung: Jede Slide + Gap ist eine Einheit
+    const slideWidthWithGap = `(${slideWidth.value} + ${props.gap})`
+    const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
 
-    const translateX = -getCurrentSlideIndex() * (slideWidthPercent + totalGapPercent)
     return {
-        transform: `translateX(${translateX}%)`
+        transform: `translateX(${translateX})`
     }
 })
 
@@ -407,6 +410,6 @@ defineExpose({
 })
 </script>
 
-<style scoped>
-/* Zusätzliche Styles falls nötig */
+<style scoped lang="postcss">
+
 </style>
