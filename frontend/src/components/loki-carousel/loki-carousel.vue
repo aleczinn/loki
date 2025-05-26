@@ -329,12 +329,23 @@ const goToSpecificSlide = (slideIndex: number) => {
 
 const goToSlideByDot = (dotIndex: number) => {
     if (props.slidesPerView === 1) {
-        // Bei einzelnen Slides: Direkt zu Slide
         if (props.transitionType === 'fade') {
             currentSlide.value = dotIndex
             return
         }
         goToSpecificSlide(dotIndex)
+    } else {
+        const maxSlide = originalSlideCount.value - props.slidesPerView
+        const targetSlide = Math.max(0, Math.min(dotIndex, maxSlide))
+
+        if (isTransitioning.value) return
+
+        currentSlide.value = targetSlide
+        isTransitioning.value = true
+
+        setTimeout(() => {
+            isTransitioning.value = false
+        }, props.transitionType === 'slide' ? props.transitionDelay : 0)
     }
 }
 
