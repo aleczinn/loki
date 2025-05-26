@@ -43,7 +43,7 @@
                 <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`"
                         @click="goToSlideByDot(index)"
                         class="dot"
-                        :class="{'bg-white': index === getCurrentDotIndex(), 'bg-white bg-opacity-50 hover:bg-opacity-75': index !== getCurrentDotIndex()}"
+                        :class="{'dot-active': index === getCurrentDotIndex(), 'dot-base': index !== getCurrentDotIndex()}"
                 />
             </div>
 
@@ -52,33 +52,9 @@
                 <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`"
                         @click="goToSlideByDot(index)"
                         class="dot"
-                        :class="{'bg-white': isSlideCurrentlyVisible(index), 'bg-white bg-opacity-50 hover:bg-opacity-75': !isSlideCurrentlyVisible(index)}"
+                        :class="{'dot-active': isSlideCurrentlyVisible(index), 'dot-base': !isSlideCurrentlyVisible(index)}"
                 />
             </div>
-
-
-            <!-- Dots Indicator -->
-
-<!--                &lt;!&ndash; Bei mehreren Slides: Gruppierte Slide-Dots &ndash;&gt;-->
-<!--                <template v-else>-->
-<!--                    <div-->
-<!--                        v-for="groupIndex in Math.ceil(originalSlideCount / props.slidesPerView)"-->
-<!--                        :key="`group-${groupIndex}`"-->
-<!--                        class="flex items-center space-x-1 px-2 py-1 backdrop-blur-sm bg-opacity-10"-->
-<!--                    >-->
-<!--                        <button-->
-<!--                            v-for="slideIndex in getSlidesInGroup(groupIndex - 1)"-->
-<!--                            :key="`slide-dot-${slideIndex}`"-->
-<!--                            @click="goToSpecificSlide(slideIndex)"-->
-<!--                            class="w-2 h-2 rounded-full transition-all duration-200"-->
-<!--                            :class="{-->
-<!--                'bg-white': isSlideCurrentlyVisible(slideIndex),-->
-<!--                'bg-white bg-opacity-40 hover:bg-opacity-60': !isSlideCurrentlyVisible(slideIndex)-->
-<!--              }"-->
-<!--                        />-->
-<!--                    </div>-->
-<!--                </template>-->
-<!--            </div>-->
         </div>
     </div>
 </template>
@@ -201,12 +177,10 @@ const dotCount = computed(() => {
     return Math.ceil(visibleSlides / props.slidesToScroll)
 })
 
-// Berechne welcher Dot aktiv sein soll
 const getCurrentDotIndex = () => {
     if (props.transitionType === 'fade') {
         return currentSlide.value
     }
-
     return Math.floor(currentSlide.value / props.slidesToScroll)
 }
 
@@ -486,5 +460,13 @@ defineExpose({
 
 .dot {
     @apply w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur-sm;
+}
+
+.dot-base {
+    @apply bg-white bg-opacity-50 hover:bg-opacity-75;
+}
+
+.dot-active {
+    @apply bg-white;
 }
 </style>
