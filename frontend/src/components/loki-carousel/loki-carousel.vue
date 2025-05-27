@@ -1,32 +1,50 @@
 <template>
     <div class="carousel">
-        <div class="carousel-container" @mouseenter="pauseAutoplay" @mouseleave="resumeAutoplay" :style="carouselContainerStyles">
+        <div
+            class="carousel-container"
+            @mouseenter="pauseAutoplay"
+            @mouseleave="resumeAutoplay"
+            :style="carouselContainerStyles"
+        >
             <!-- slides container for 'none/slide' transition -->
-            <div v-if="config.transitionType !== 'fade'" ref="slidesContainer" :class="slideContainerClasses" :style="slideContainerStyles">
-                <div v-for="(_, index) in computedSlides" :key="`slide-${index}`" class="slide" :style="slideStyles(index)">
-                    <slot :name="`slide-${getOriginalSlideIndex(index)}`" :slideIndex="getOriginalSlideIndex(index)"></slot>
+            <div
+                v-if="config.transitionType !== 'fade'"
+                ref="slidesContainer"
+                :class="slideContainerClasses"
+                :style="slideContainerStyles"
+            >
+                <div
+                    v-for="(slideIndex, index) in computedSlides"
+                    :key="`slide-${index}`"
+                    class="slide"
+                    :style="slideStyles(index)"
+                >
+                    <component :is="slides[slideIndex]" />
                 </div>
             </div>
 
             <!-- slides container for 'fade' transition -->
             <div v-if="config.transitionType === 'fade'" class="relative w-full h-full">
-                <!-- hidden slides for height-measurement -->
-                <div v-for="(_, index) in originalSlideCount"
+                <!-- hidden slides for height measurement -->
+                <div
+                    v-for="(slide, index) in slides"
                     :key="`measure-slide-${index}`"
                     ref="measureSlides"
                     class="absolute inset-0 w-full opacity-0 pointer-events-none z-[-1]"
                     :style="{ visibility: slideHeightCalculated ? 'hidden' : 'visible' }"
                 >
-                    <slot :name="`slide-${index}`" :slideIndex="index"></slot>
+                    <component :is="slide" />
                 </div>
 
                 <!-- visible slides -->
-                <div v-for="(_, index) in originalSlideCount" :key="`fade-slide-${index}`"
-                     class="absolute inset-0 w-full h-full transition-opacity ease-in-out"
-                     :style="{transitionDuration: `${config.transitionDelay}ms`}"
-                     :class="{'opacity-100 z-10': index === currentSlide, 'opacity-0 z-0': index !== currentSlide}"
+                <div
+                    v-for="(slide, index) in slides"
+                    :key="`fade-slide-${index}`"
+                    class="absolute inset-0 w-full h-full transition-opacity ease-in-out"
+                    :style="{transitionDuration: `${config.transitionDelay}ms`}"
+                    :class="{'opacity-100 z-10': index === currentSlide, 'opacity-0 z-0': index !== currentSlide}"
                 >
-                    <slot :name="`slide-${index}`" :slideIndex="index"></slot>
+                    <component :is="slide" />
                 </div>
             </div>
 
@@ -39,21 +57,21 @@
                 <icon-arrow-right class="w-6 h-6"></icon-arrow-right>
             </button>
 
-            <!-- dot bavigation - single -->
-            <div v-if="config.dots && config.slidesPerView === 1" class="dots-container">
-                <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`" @click="slideTo(index)" :class="dotClasses(index)"/>
-            </div>
-
-            <!-- dot navigation - multiple -->
-            <div v-if="config.dots && config.slidesPerView > 1" class="dots-container">
-                <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`" @click="slideTo(index)" :class="dotClasses(index)"/>
+            <!-- dot navigation -->
+            <div v-if="config.dots" class="dots-container">
+                <button
+                    v-for="(_, index) in slides"
+                    :key="`dot-${index}`"
+                    @click="slideTo(index)"
+                    :class="dotClasses(index)"
+                />
             </div>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, useSlots, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, VNode } from 'vue'
 import IconArrowLeft from "@/icons/icon-arrow-left.vue";
 import IconArrowRight from "@/icons/icon-arrow-right.vue";
 
@@ -91,13 +109,16 @@ const props = withDefaults(defineProps<CarouselProps>(), {
     transitionDelay: 500,
     dots: true,
     arrows: true,
-    height: '16rem',
+    height: 'auto',
     slidesPerView: 1,
     slidesToScroll: 1,
     gap: '0rem'
 })
 
-const slots = useSlots()
+const slots = defineSlots<{
+    default(): any
+}>()
+
 const slidesContainer = ref<HTMLElement>()
 const measureSlides = ref<HTMLElement[]>([])
 const currentSlide = ref(0)
@@ -119,7 +140,18 @@ const breakpoints = {
 
 type BreakpointKey = keyof typeof breakpoints
 
-// Aktuellen Breakpoint bestimmen (mobile-first approach wie Tailwind)
+// Get slides from default slot
+const slides = computed((): VNode[] => {
+    const defaultSlot = slots.default?.()
+    if (!defaultSlot) return []
+
+    return defaultSlot.filter(vnode =>
+        vnode.type !== Comment &&
+        (typeof vnode.type !== 'symbol' || vnode.children)
+    )
+})
+
+// Current breakpoint (mobile-first approach like Tailwind)
 const currentBreakpoint = computed((): BreakpointKey | 'base' => {
     if (windowWidth.value >= breakpoints['4xl']) return '4xl'
     if (windowWidth.value >= breakpoints['3xl']) return '3xl'
@@ -128,7 +160,7 @@ const currentBreakpoint = computed((): BreakpointKey | 'base' => {
     if (windowWidth.value >= breakpoints.lg) return 'lg'
     if (windowWidth.value >= breakpoints.md) return 'md'
     if (windowWidth.value >= breakpoints.sm) return 'sm'
-    return 'base' // < 640px
+    return 'base'
 })
 
 const config = computed((): Required<ResponsiveConfig> => {
@@ -145,18 +177,12 @@ const config = computed((): Required<ResponsiveConfig> => {
         gap: props.gap
     }
 
-    if (!props.responsive) {
-        return baseConfig
-    }
+    if (!props.responsive) return baseConfig
 
-    // Mobile-first cascade - jeder Breakpoint erbt von vorherigen
     let mergedConfig = { ...baseConfig }
-
-    // Definiere die Reihenfolge der Breakpoints (mobile-first)
     const breakpointOrder: (BreakpointKey | 'base')[] = ['base', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl']
     const currentIndex = breakpointOrder.indexOf(currentBreakpoint.value)
 
-    // Wende alle Breakpoint-Configs bis zum aktuellen an
     for (let i = 1; i <= currentIndex; i++) {
         const breakpointKey = breakpointOrder[i] as BreakpointKey
         const breakpointConfig = props.responsive[breakpointKey]
@@ -174,173 +200,12 @@ const config = computed((): Required<ResponsiveConfig> => {
     return mergedConfig
 })
 
-const nextSlide = () => {
-    if (isTransitioning.value) return
-
-    if (config.value.transitionType === 'fade') {
-        currentSlide.value = (currentSlide.value + 1) % originalSlideCount.value
-        return
-    }
-
-    isTransitioning.value = true
-
-    const maxSlide = originalSlideCount.value - config.value.slidesPerView
-
-    if (config.value.infinite) {
-        currentSlide.value += config.value.slidesToScroll
-
-        // Wenn wir über das Ende hinaus sind
-        if (currentSlide.value > maxSlide) {
-            setTimeout(() => {
-                if (slidesContainer.value) {
-                    slidesContainer.value.style.transition = 'none'
-                    currentSlide.value = currentSlide.value - originalSlideCount.value
-
-                    // Force reflow
-                    slidesContainer.value.offsetHeight
-
-                    setTimeout(() => {
-                        if (slidesContainer.value) {
-                            slidesContainer.value.style.transition = ''
-                        }
-                        isTransitioning.value = false
-                    }, 50)
-                }
-            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-        } else {
-            setTimeout(() => {
-                isTransitioning.value = false
-            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-        }
-    } else {
-        if (currentSlide.value + config.value.slidesToScroll <= maxSlide) {
-            currentSlide.value += config.value.slidesToScroll
-        } else {
-            currentSlide.value = maxSlide
-        }
-        setTimeout(() => {
-            isTransitioning.value = false
-        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-    }
-}
-
-const previousSlide = () => {
-    if (isTransitioning.value) return
-
-    if (config.value.transitionType === 'fade') {
-        currentSlide.value = currentSlide.value === 0 ? originalSlideCount.value - 1 : currentSlide.value - 1
-        return
-    }
-
-    isTransitioning.value = true
-
-    if (config.value.infinite) {
-        currentSlide.value -= config.value.slidesToScroll
-
-        // Wenn wir unter 0 sind
-        if (currentSlide.value < 0) {
-            setTimeout(() => {
-                if (slidesContainer.value) {
-                    slidesContainer.value.style.transition = 'none'
-                    currentSlide.value = currentSlide.value + originalSlideCount.value
-
-                    // Force reflow
-                    slidesContainer.value.offsetHeight
-
-                    setTimeout(() => {
-                        if (slidesContainer.value) {
-                            slidesContainer.value.style.transition = ''
-                        }
-                        isTransitioning.value = false
-                    }, 50)
-                }
-            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-        } else {
-            setTimeout(() => {
-                isTransitioning.value = false
-            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-        }
-    } else {
-        if (currentSlide.value - config.value.slidesToScroll >= 0) {
-            currentSlide.value -= config.value.slidesToScroll
-        } else {
-            currentSlide.value = 0
-        }
-        setTimeout(() => {
-            isTransitioning.value = false
-        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-    }
-}
-
-const slideTo = (dotIndex: number) => {
-    if (config.value.slidesPerView === 1) {
-        if (config.value.transitionType === 'fade') {
-            currentSlide.value = dotIndex
-            return
-        }
-        goToSpecificSlide(dotIndex)
-    } else {
-        const maxSlide = originalSlideCount.value - config.value.slidesPerView
-        const targetSlide = Math.max(0, Math.min(dotIndex, maxSlide))
-
-        if (isTransitioning.value) return
-
-        currentSlide.value = targetSlide
-        isTransitioning.value = true
-
-        setTimeout(() => {
-            isTransitioning.value = false
-        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-    }
-}
-
-const updateWindowWidth = () => {
-    windowWidth.value = window.innerWidth
-}
-
-
-
-
-
-
-// Reset currentSlide when breakpoint changes to avoid out-of-bounds
-watch(currentBreakpoint, (newBreakpoint, oldBreakpoint) => {
-    if (newBreakpoint !== oldBreakpoint) {
-        // Stoppe autoplay temporär
-        stopAutoplay()
-
-        // Prüfe, ob aktueller Slide noch gültig ist
-        const maxSlide = originalSlideCount.value - config.value.slidesPerView
-        if (currentSlide.value > maxSlide) {
-            currentSlide.value = Math.max(0, maxSlide)
-        }
-
-        // Höhe neu berechnen bei fade transition
-        if (config.value.transitionType === 'fade') {
-            slideHeightCalculated.value = false
-            nextTick(() => {
-                calculateSlideHeights()
-            })
-        }
-
-        // Autoplay neu starten falls aktiv
-        if (config.value.autoplayDelay !== -1) {
-            startAutoplay()
-        }
-    }
-})
-
-// Berechne die Anzahl der Original-Slides basierend auf den Slots
-const originalSlideCount = computed(() => {
-    const slideSlots = Object.keys(slots).filter(key => key.startsWith('slide-'))
-    return slideSlots.length || 3 // Fallback für Demo-Zwecke
-})
-
 const carouselContainerStyles = computed(() => {
-    if (config.value.transitionType === 'fade' && slideHeightCalculated.value && calculatedHeight.value > 0) {
-        return {
-            height: `${calculatedHeight.value}px`
+    if (config.value.height === 'auto') {
+        if (config.value.transitionType === 'fade' && slideHeightCalculated.value && calculatedHeight.value > 0) {
+            return { height: `${calculatedHeight.value}px` }
         }
+        return { height: 'auto' }
     }
     return { height: config.value.height }
 })
@@ -357,7 +222,10 @@ const slideContainerStyles = computed(() => {
     const slideWidthWithGap = `(${slideWidth.value} + ${config.value.gap})`
     const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
 
-    return { transform: `translateX(${translateX})`, transitionDuration: `${config.value.transitionDelay}ms` }
+    return {
+        transform: `translateX(${translateX})`,
+        transitionDuration: `${config.value.transitionDelay}ms`
+    }
 })
 
 const slideStyles = (index: number) => {
@@ -368,28 +236,179 @@ const slideStyles = (index: number) => {
     }
 }
 
+const slideWidth = computed(() => {
+    if (config.value.slidesPerView === 1) return '100%'
+    return `calc((100% - ${(config.value.slidesPerView - 1)} * ${config.value.gap}) / ${config.value.slidesPerView})`
+})
+
+const computedSlides = computed(() => {
+    if (config.value.transitionType === 'fade' || !config.value.infinite) {
+        return Array.from({ length: slides.value.length }, (_, i) => i)
+    }
+
+    // For infinite scrolling: copies at beginning and end
+    const slideIndices: number[] = []
+
+    // Copy slides at beginning
+    for (let i = 0; i < config.value.slidesPerView; i++) {
+        const index = slides.value.length - config.value.slidesPerView + i
+        slideIndices.push(index >= 0 ? index : slides.value.length + index)
+    }
+
+    // Original slides
+    for (let i = 0; i < slides.value.length; i++) {
+        slideIndices.push(i)
+    }
+
+    // Copy slides at end
+    for (let i = 0; i < config.value.slidesPerView; i++) {
+        slideIndices.push(i)
+    }
+
+    return slideIndices
+})
+
+const getCurrentSlideIndex = () => {
+    if (config.value.transitionType === 'fade') return currentSlide.value
+    return config.value.infinite ? currentSlide.value + config.value.slidesPerView : currentSlide.value
+}
+
+const isSlideCurrentlyVisible = (slideIndex: number) => {
+    let normalizedCurrentSlide = currentSlide.value
+
+    if (config.value.infinite) {
+        while (normalizedCurrentSlide < 0) {
+            normalizedCurrentSlide += slides.value.length
+        }
+        normalizedCurrentSlide = normalizedCurrentSlide % slides.value.length
+    }
+
+    const start = normalizedCurrentSlide
+    const end = normalizedCurrentSlide + config.value.slidesPerView - 1
+
+    if (end >= slides.value.length && config.value.infinite) {
+        const normalEnd = end % slides.value.length
+        return (slideIndex >= start) || (slideIndex <= normalEnd)
+    }
+    return slideIndex >= start && slideIndex <= end
+}
+
 const dotClasses = (index: number) => ({
     'dot-base': true,
     'dot-active': isSlideCurrentlyVisible(index),
-    'dot-inactive': !isSlideCurrentlyVisible(index),
-});
+    'dot-inactive': !isSlideCurrentlyVisible(index)
+})
 
+const nextSlide = () => {
+    if (isTransitioning.value) return
 
-// Berechne Slide-Höhen für fade transition
+    if (config.value.transitionType === 'fade') {
+        currentSlide.value = (currentSlide.value + 1) % slides.value.length
+        return
+    }
+
+    isTransitioning.value = true
+    const maxSlide = slides.value.length - config.value.slidesPerView
+
+    if (config.value.infinite) {
+        currentSlide.value += config.value.slidesToScroll
+
+        if (currentSlide.value > maxSlide) {
+            setTimeout(() => {
+                if (slidesContainer.value) {
+                    slidesContainer.value.style.transition = 'none'
+                    currentSlide.value = currentSlide.value - slides.value.length
+                    slidesContainer.value.offsetHeight
+                    setTimeout(() => {
+                        if (slidesContainer.value) {
+                            slidesContainer.value.style.transition = ''
+                        }
+                        isTransitioning.value = false
+                    }, 50)
+                }
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+        } else {
+            setTimeout(() => {
+                isTransitioning.value = false
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+        }
+    } else {
+        currentSlide.value = Math.min(currentSlide.value + config.value.slidesToScroll, maxSlide)
+        setTimeout(() => {
+            isTransitioning.value = false
+        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+    }
+}
+
+const previousSlide = () => {
+    if (isTransitioning.value) return
+
+    if (config.value.transitionType === 'fade') {
+        currentSlide.value = currentSlide.value === 0 ? slides.value.length - 1 : currentSlide.value - 1
+        return
+    }
+
+    isTransitioning.value = true
+
+    if (config.value.infinite) {
+        currentSlide.value -= config.value.slidesToScroll
+
+        if (currentSlide.value < 0) {
+            setTimeout(() => {
+                if (slidesContainer.value) {
+                    slidesContainer.value.style.transition = 'none'
+                    currentSlide.value = currentSlide.value + slides.value.length
+                    slidesContainer.value.offsetHeight
+                    setTimeout(() => {
+                        if (slidesContainer.value) {
+                            slidesContainer.value.style.transition = ''
+                        }
+                        isTransitioning.value = false
+                    }, 50)
+                }
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+        } else {
+            setTimeout(() => {
+                isTransitioning.value = false
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+        }
+    } else {
+        currentSlide.value = Math.max(currentSlide.value - config.value.slidesToScroll, 0)
+        setTimeout(() => {
+            isTransitioning.value = false
+        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+    }
+}
+
+const slideTo = (slideIndex: number) => {
+    if (isTransitioning.value) return
+
+    if (config.value.transitionType === 'fade') {
+        currentSlide.value = slideIndex
+        return
+    }
+
+    const maxSlide = slides.value.length - config.value.slidesPerView
+    currentSlide.value = Math.max(0, Math.min(slideIndex, maxSlide))
+    isTransitioning.value = true
+
+    setTimeout(() => {
+        isTransitioning.value = false
+    }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+}
+
 const calculateSlideHeights = async () => {
-    if (config.value.transitionType !== 'fade') {
+    if (config.value.transitionType !== 'fade' || config.value.height !== 'auto') {
         slideHeightCalculated.value = true
         return
     }
 
     await nextTick()
-
     let maxHeight = 0
 
     if (measureSlides.value && measureSlides.value.length > 0) {
         measureSlides.value.forEach((slideEl) => {
             if (slideEl) {
-                // Temporär sichtbar machen für Messung
                 slideEl.style.position = 'static'
                 slideEl.style.visibility = 'visible'
                 slideEl.style.opacity = '1'
@@ -399,7 +418,6 @@ const calculateSlideHeights = async () => {
                     maxHeight = height
                 }
 
-                // Zurück zu ursprünglichem Zustand
                 slideEl.style.position = 'absolute'
                 slideEl.style.visibility = 'hidden'
                 slideEl.style.opacity = '0'
@@ -414,121 +432,8 @@ const calculateSlideHeights = async () => {
     slideHeightCalculated.value = true
 }
 
-// Watch für Slot-Änderungen um Höhe neu zu berechnen
-watch(() => originalSlideCount.value, () => {
-    if (config.value.transitionType === 'fade') {
-        slideHeightCalculated.value = false
-        nextTick(() => {
-            calculateSlideHeights()
-        })
-    }
-})
-
-// Watch für transition type Änderungen
-watch(() => config.value.transitionType, () => {
-    if (config.value.transitionType === 'fade') {
-        slideHeightCalculated.value = false
-        nextTick(() => {
-            calculateSlideHeights()
-        })
-    } else {
-        slideHeightCalculated.value = true
-    }
-})
-
-// Berechne die Slide-Breite basierend auf slidesPerView und Gap
-const slideWidth = computed(() => {
-    if (config.value.slidesPerView === 1) return '100%'
-    return `calc((100% - ${(config.value.slidesPerView - 1)} * ${config.value.gap}) / ${config.value.slidesPerView})`
-})
-
-// Für infinite scrolling erstellen wir zusätzliche Slides (nur bei slide/none transition)
-const computedSlides = computed(() => {
-    if (config.value.transitionType === 'fade') {
-        return Array.from({ length: originalSlideCount.value }, (_, i) => i)
-    }
-
-    if (!config.value.infinite) {
-        return Array.from({ length: originalSlideCount.value }, (_, i) => i)
-    }
-
-    // Für infinite scrolling: Original + Kopien am Anfang und Ende
-    const slides: Array<number> = []
-
-    // Genug Slides am Anfang kopieren für smooth transition
-    for (let i = 0; i < config.value.slidesPerView; i++) {
-        const index = originalSlideCount.value - config.value.slidesPerView + i
-        slides.push(index >= 0 ? index : originalSlideCount.value + index)
-    }
-
-    // Alle Original-Slides
-    for (let i = 0; i < originalSlideCount.value; i++) {
-        slides.push(i)
-    }
-
-    // Genug Slides am Ende kopieren für smooth transition
-    for (let i = 0; i < config.value.slidesPerView; i++) {
-        slides.push(i)
-    }
-
-    return slides
-})
-
-// Berechne den aktuellen Slide-Index für die Anzeige
-const getCurrentSlideIndex = () => {
-    if (config.value.transitionType === 'fade') {
-        return currentSlide.value
-    }
-    return config.value.infinite ? currentSlide.value + config.value.slidesPerView : currentSlide.value
-}
-
-// Hole den ursprünglichen Slide-Index
-const getOriginalSlideIndex = (index: number) => {
-    return computedSlides.value[index]
-}
-
-const isSlideCurrentlyVisible = (slideIndex: number) => {
-    let normalizedCurrentSlide = currentSlide.value;
-
-    if (config.value.infinite) {
-        while (normalizedCurrentSlide < 0) {
-            normalizedCurrentSlide += originalSlideCount.value;
-        }
-        normalizedCurrentSlide = normalizedCurrentSlide % originalSlideCount.value;
-    }
-
-    const start = normalizedCurrentSlide;
-    const end = normalizedCurrentSlide + config.value.slidesPerView - 1;
-
-    if (end >= originalSlideCount.value && config.value.infinite) {
-        const normalEnd = end % originalSlideCount.value;
-        return (slideIndex >= start) || (slideIndex <= normalEnd);
-    }
-    return slideIndex >= start && slideIndex <= end;
-}
-
-const goToSpecificSlide = (slideIndex: number) => {
-    if (isTransitioning.value) return
-
-    const maxPosition = originalSlideCount.value - config.value.slidesPerView
-    const targetPosition = Math.min(slideIndex, maxPosition)
-
-    currentSlide.value = Math.max(0, targetPosition)
-    isTransitioning.value = true
-
-    setTimeout(() => {
-        isTransitioning.value = false
-    }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
-}
-
-
-
-
-
-
 const startAutoplay = () => {
     if (config.value.autoplayDelay === -1) return
-
     autoplayTimer = setInterval(() => {
         nextSlide()
     }, config.value.autoplayDelay)
@@ -553,7 +458,60 @@ const resumeAutoplay = () => {
     }
 }
 
-// Watch für autoplay changes basierend auf aktueller Konfiguration
+const updateWindowWidth = () => {
+    windowWidth.value = window.innerWidth
+}
+
+// Watch for breakpoint changes
+watch(currentBreakpoint, (newBreakpoint, oldBreakpoint) => {
+    if (newBreakpoint !== oldBreakpoint) {
+        stopAutoplay()
+
+        const maxSlide = slides.value.length - config.value.slidesPerView
+        if (currentSlide.value > maxSlide) {
+            currentSlide.value = Math.max(0, maxSlide)
+        }
+
+        if (config.value.transitionType === 'fade') {
+            slideHeightCalculated.value = false
+            nextTick(() => calculateSlideHeights())
+        }
+
+        if (config.value.autoplayDelay !== -1) {
+            startAutoplay()
+        }
+    }
+})
+
+// Watch for slide count changes
+watch(() => slides.value.length, () => {
+    if (config.value.transitionType === 'fade' && config.value.height === 'auto') {
+        slideHeightCalculated.value = false
+        nextTick(() => calculateSlideHeights())
+    }
+})
+
+// Watch for transition type changes
+watch(() => config.value.transitionType, () => {
+    if (config.value.transitionType === 'fade' && config.value.height === 'auto') {
+        slideHeightCalculated.value = false
+        nextTick(() => calculateSlideHeights())
+    } else {
+        slideHeightCalculated.value = true
+    }
+})
+
+// Watch for height changes
+watch(() => config.value.height, () => {
+    if (config.value.height === 'auto' && config.value.transitionType === 'fade') {
+        slideHeightCalculated.value = false
+        nextTick(() => calculateSlideHeights())
+    } else {
+        slideHeightCalculated.value = true
+    }
+})
+
+// Watch for autoplay changes
 watch(() => config.value.autoplayDelay, (newDelay, oldDelay) => {
     if (newDelay !== oldDelay) {
         stopAutoplay()
@@ -564,7 +522,6 @@ watch(() => config.value.autoplayDelay, (newDelay, oldDelay) => {
 })
 
 onMounted(() => {
-    // Window width tracking
     updateWindowWidth()
     window.addEventListener('resize', updateWindowWidth)
 
@@ -572,11 +529,8 @@ onMounted(() => {
         startAutoplay()
     }
 
-    // Höhe für fade transition berechnen
-    if (config.value.transitionType === 'fade') {
-        nextTick(() => {
-            calculateSlideHeights()
-        })
+    if (config.value.transitionType === 'fade' && config.value.height === 'auto') {
+        nextTick(() => calculateSlideHeights())
     } else {
         slideHeightCalculated.value = true
     }

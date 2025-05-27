@@ -8,221 +8,111 @@
                 <p class="">Carousel's</p>
 
                 <loki-carousel
-                    :autoplay-delay="-1"
+                    :autoplay-delay="4000"
                     :infinite="true "
                     transition-type="slide"
+                    height="auto"
                     :dots="true"
                     :arrows="true"
                     :slides-per-view="1"
                     :slides-to-scroll="1"
+                    class="mb-8"
+                >
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
+                            1
+                        </div>
+                    </div>
+
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
+                            2
+                        </div>
+                    </div>
+
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
+                            3
+                        </div>
+                    </div>
+                </loki-carousel>
+
+                <loki-carousel
+                    :autoplay-delay="4000"
+                    :infinite="true"
+                    transition-type="slide"
+                    height="auto"
+                    :dots="true"
+                    :arrows="true"
+                    :slides-per-view="2"
+                    :slides-to-scroll="1"
+                    class="mb-8"
+                >
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
+                            1
+                        </div>
+                    </div>
+
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
+                            2
+                        </div>
+                    </div>
+
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
+                            3
+                        </div>
+                    </div>
+                </loki-carousel>
+
+                <loki-carousel
+                    :autoplay-delay="-1"
+                    :infinite="true"
+                    transition-type="slide"
+                    height="auto"
+                    :dots="true"
+                    :arrows="true"
+                    :slides-per-view="1"
+                    :slides-to-scroll="1"
+                    gap="2rem"
+                    class="mb-8"
                     :responsive="{
                         lg: {
                             slidesPerView: 2
                         }
                     }"
-                    class="mb-8"
                 >
-                    <template #slide-0>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
-                                1
-                            </div>
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
+                            1
                         </div>
-                    </template>
+                    </div>
 
-                    <template #slide-1>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
-                                2
-                            </div>
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
+                            2
                         </div>
-                    </template>
+                    </div>
 
-                    <template #slide-2>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
-                                3
-                            </div>
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
+                            3
                         </div>
-                    </template>
-                </loki-carousel>
+                    </div>
 
-                <loki-carousel
-                    :autoplay-delay="-1"
-                    :infinite="true "
-                    transition-type="slide"
-                    :dots="true"
-                    :arrows="true"
-                    :slides-per-view="1"
-                    :slides-to-scroll="1"
-                    class="mb-8"
-                >
-                    <template #slide-0>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
-                                1
-                            </div>
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-blue-500 flex items-center justify-center text-white text-2xl">
+                            4
                         </div>
-                    </template>
+                    </div>
 
-                    <template #slide-1>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
-                                2
-                            </div>
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-purple-500 flex items-center justify-center text-white text-2xl">
+                            5
                         </div>
-                    </template>
-
-                    <template #slide-2>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
-                                3
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-3>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-blue-500 flex items-center justify-center text-white text-2xl">
-                                4
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-4>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-purple-500 flex items-center justify-center text-white text-2xl">
-                                5
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-5>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-yellow-900 flex items-center justify-center text-white text-2xl">
-                                6
-                            </div>
-                        </div>
-                    </template>
-                </loki-carousel>
-
-                <loki-carousel
-                    :autoplay-delay="-1"
-                    :infinite="true "
-                    transition-type="slide"
-                    :dots="true"
-                    :arrows="true"
-                    :slides-per-view="3"
-                    :slides-to-scroll="1"
-                    gap="2rem"
-                    class="mb-8"
-                >
-                    <template #slide-0>
-                        <div class="aspect-w-16 aspect-h-9">
-                            <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
-                                1
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-1>
-                        <div class="aspect-w-16 aspect-h-9">
-                            <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
-                                2
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-2>
-                        <div class="aspect-w-16 aspect-h-9">
-                            <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
-                                3
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-3>
-                        <div class="aspect-w-16 aspect-h-9">
-                            <div class="w-full h-full bg-blue-500 flex items-center justify-center text-white text-2xl">
-                                4
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-4>
-                        <div class="aspect-w-16 aspect-h-9">
-                            <div class="w-full h-full bg-purple-500 flex items-center justify-center text-white text-2xl">
-                                5
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-5>
-                        <div class="aspect-w-16 aspect-h-9">
-                            <div class="w-full h-full bg-yellow-900 flex items-center justify-center text-white text-2xl">
-                                6
-                            </div>
-                        </div>
-                    </template>
-                </loki-carousel>
-
-                <loki-carousel
-                    :autoplay-delay="-1"
-                    :infinite="true "
-                    transition-type="fade"
-                    :transition-delay="500"
-                    :dots="true"
-                    :arrows="true"
-                    :slides-per-view="1"
-                    :slides-to-scroll="1"
-                >
-                    <template #slide-0>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
-                                1
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-1>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
-                                2
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-2>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
-                                3
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-3>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-blue-500 flex items-center justify-center text-white text-2xl">
-                                4
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-4>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-purple-500 flex items-center justify-center text-white text-2xl">
-                                5
-                            </div>
-                        </div>
-                    </template>
-
-                    <template #slide-5>
-                        <div class="aspect-w-16 aspect-h-3">
-                            <div class="w-full h-full bg-yellow-900 flex items-center justify-center text-white text-2xl">
-                                6
-                            </div>
-                        </div>
-                    </template>
+                    </div>
                 </loki-carousel>
             </div>
         </main>
