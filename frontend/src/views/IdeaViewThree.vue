@@ -8,8 +8,8 @@
                 <p class="">Carousel's</p>
 
                 <loki-carousel
-                    :autoplay-delay="4000"
-                    :infinite="true "
+                    :autoplay-delay="-1"
+                    :infinite="false"
                     transition-type="slide"
                     height="auto"
                     :dots="true"
@@ -17,6 +17,11 @@
                     :slides-per-view="1"
                     :slides-to-scroll="1"
                     class="mb-8"
+                    @slide-changed="(slideIndex) => console.log('Slide changed to:', slideIndex)"
+                    @end-reached="() => console.log('End reached!')"
+                    @start-reached="() => console.log('Start reached!')"
+                    @autoplay-started="() => console.log('Autoplay started')"
+                    @autoplay-stopped="() => console.log('Autoplay stopped')"
                 >
                     <div class="aspect-w-16 aspect-h-3">
                         <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
@@ -33,6 +38,18 @@
                     <div class="aspect-w-16 aspect-h-3">
                         <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
                             3
+                        </div>
+                    </div>
+
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-blue-500 flex items-center justify-center text-white text-2xl">
+                            4
+                        </div>
+                    </div>
+
+                    <div class="aspect-w-16 aspect-h-3">
+                        <div class="w-full h-full bg-purple-500 flex items-center justify-center text-white text-2xl">
+                            5
                         </div>
                     </div>
                 </loki-carousel>

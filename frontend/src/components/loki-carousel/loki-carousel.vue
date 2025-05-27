@@ -24,13 +24,13 @@
             </div>
 
             <!-- slides container for 'fade' transition -->
-            <div v-if="config.transitionType === 'fade'" class="relative w-full h-full">
+            <div v-if="config.transitionType === 'fade'" class="fade-container">
                 <!-- hidden slides for height measurement -->
                 <div
                     v-for="(slide, index) in slides"
                     :key="`measure-slide-${index}`"
                     ref="measureSlides"
-                    class="absolute inset-0 w-full opacity-0 pointer-events-none z-[-1]"
+                    class="measure-slide"
                     :style="{ visibility: slideHeightCalculated ? 'hidden' : 'visible' }"
                 >
                     <component :is="slide" />
@@ -40,21 +40,30 @@
                 <div
                     v-for="(slide, index) in slides"
                     :key="`fade-slide-${index}`"
-                    class="absolute inset-0 w-full h-full transition-opacity ease-in-out"
+                    :class="['fade-slide', { 'fade-slide-active': index === currentSlide }]"
                     :style="{transitionDuration: `${config.transitionDelay}ms`}"
-                    :class="{'opacity-100 z-10': index === currentSlide, 'opacity-0 z-0': index !== currentSlide}"
                 >
                     <component :is="slide" />
                 </div>
             </div>
 
             <!-- navigation arrows -->
-            <button v-if="config.arrows" @click="previousSlide" class="btn-arrow-left">
-                <icon-arrow-left class="w-6 h-6"></icon-arrow-left>
+            <button
+                v-if="config.arrows"
+                @click="previousSlide"
+                :disabled="isNavigationDisabled.previous"
+                :class="['btn-arrow', 'btn-arrow-left', { 'btn-disabled': isNavigationDisabled.previous }]"
+            >
+                <icon-arrow-left class="w-6 h-6" />
             </button>
 
-            <button v-if="config.arrows" @click="nextSlide" class="btn-arrow-right">
-                <icon-arrow-right class="w-6 h-6"></icon-arrow-right>
+            <button
+                v-if="config.arrows"
+                @click="nextSlide"
+                :disabled="isNavigationDisabled.next"
+                :class="['btn-arrow', 'btn-arrow-right', { 'btn-disabled': isNavigationDisabled.next }]"
+            >
+                <icon-arrow-right class="w-6 h-6" />
             </button>
 
             <!-- dot navigation -->
@@ -63,7 +72,7 @@
                     v-for="(_, index) in slides"
                     :key="`dot-${index}`"
                     @click="slideTo(index)"
-                    :class="dotClasses(index)"
+                    :class="['dot', { 'dot-active': isSlideCurrentlyVisible(index) }]"
                 />
             </div>
         </div>
@@ -115,19 +124,32 @@ const props = withDefaults(defineProps<CarouselProps>(), {
     gap: '0rem'
 })
 
+// Events
+const emit = defineEmits<{
+    slideChanged: [slideIndex: number]
+    endReached: []
+    startReached: []
+    autoplayStarted: []
+    autoplayStopped: []
+}>()
+
 const slots = defineSlots<{
     default(): any
 }>()
 
+// Refs
 const slidesContainer = ref<HTMLElement>()
 const measureSlides = ref<HTMLElement[]>([])
 const currentSlide = ref(0)
 const calculatedHeight = ref<number>(0)
 const slideHeightCalculated = ref(false)
 const windowWidth = ref(0)
-let autoplayTimer: NodeJS.Timeout | null = null
-let isTransitioning = ref(false)
+const isTransitioning = ref(false)
 
+// Timers
+let autoplayTimer: NodeJS.Timeout | null = null
+
+// Constants
 const breakpoints = {
     sm: 640,
     md: 768,
@@ -140,7 +162,7 @@ const breakpoints = {
 
 type BreakpointKey = keyof typeof breakpoints
 
-// Get slides from default slot
+// Computed: Slides
 const slides = computed((): VNode[] => {
     const defaultSlot = slots.default?.()
     if (!defaultSlot) return []
@@ -151,7 +173,7 @@ const slides = computed((): VNode[] => {
     )
 })
 
-// Current breakpoint (mobile-first approach like Tailwind)
+// Computed: Current breakpoint
 const currentBreakpoint = computed((): BreakpointKey | 'base' => {
     if (windowWidth.value >= breakpoints['4xl']) return '4xl'
     if (windowWidth.value >= breakpoints['3xl']) return '3xl'
@@ -163,6 +185,7 @@ const currentBreakpoint = computed((): BreakpointKey | 'base' => {
     return 'base'
 })
 
+// Computed: Merged config
 const config = computed((): Required<ResponsiveConfig> => {
     const baseConfig: Required<ResponsiveConfig> = {
         autoplayDelay: props.autoplayDelay,
@@ -200,6 +223,7 @@ const config = computed((): Required<ResponsiveConfig> => {
     return mergedConfig
 })
 
+// Computed: Styles
 const carouselContainerStyles = computed(() => {
     if (config.value.height === 'auto') {
         if (config.value.transitionType === 'fade' && slideHeightCalculated.value && calculatedHeight.value > 0) {
@@ -228,25 +252,23 @@ const slideContainerStyles = computed(() => {
     }
 })
 
-const slideStyles = (index: number) => {
-    const isLastSlide = index === computedSlides.value.length - 1
-    return {
-        width: slideWidth.value,
-        marginRight: isLastSlide ? '0' : config.value.gap
-    }
-}
-
 const slideWidth = computed(() => {
     if (config.value.slidesPerView === 1) return '100%'
     return `calc((100% - ${(config.value.slidesPerView - 1)} * ${config.value.gap}) / ${config.value.slidesPerView})`
 })
 
+// Computed: Navigation state
+const isNavigationDisabled = computed(() => ({
+    previous: !config.value.infinite && currentSlide.value <= 0,
+    next: !config.value.infinite && currentSlide.value >= slides.value.length - config.value.slidesPerView
+}))
+
+// Computed: Slides for rendering
 const computedSlides = computed(() => {
     if (config.value.transitionType === 'fade' || !config.value.infinite) {
         return Array.from({ length: slides.value.length }, (_, i) => i)
     }
 
-    // For infinite scrolling: copies at beginning and end
     const slideIndices: number[] = []
 
     // Copy slides at beginning
@@ -268,6 +290,7 @@ const computedSlides = computed(() => {
     return slideIndices
 })
 
+// Helper functions
 const getCurrentSlideIndex = () => {
     if (config.value.transitionType === 'fade') return currentSlide.value
     return config.value.infinite ? currentSlide.value + config.value.slidesPerView : currentSlide.value
@@ -293,14 +316,18 @@ const isSlideCurrentlyVisible = (slideIndex: number) => {
     return slideIndex >= start && slideIndex <= end
 }
 
-const dotClasses = (index: number) => ({
-    'dot-base': true,
-    'dot-active': isSlideCurrentlyVisible(index),
-    'dot-inactive': !isSlideCurrentlyVisible(index)
-})
+const slideStyles = (index: number) => {
+    const isLastSlide = index === computedSlides.value.length - 1
+    return {
+        width: slideWidth.value,
+        marginRight: isLastSlide ? '0' : config.value.gap
+    }
+}
 
+// Navigation functions
 const nextSlide = () => {
     if (isTransitioning.value) return
+    if (!config.value.infinite && currentSlide.value >= slides.value.length - config.value.slidesPerView) return
 
     if (config.value.transitionType === 'fade') {
         currentSlide.value = (currentSlide.value + 1) % slides.value.length
@@ -318,13 +345,13 @@ const nextSlide = () => {
                 if (slidesContainer.value) {
                     slidesContainer.value.style.transition = 'none'
                     currentSlide.value = currentSlide.value - slides.value.length
-                    slidesContainer.value.offsetHeight
-                    setTimeout(() => {
+                    void slidesContainer.value.offsetHeight
+                    requestAnimationFrame(() => {
                         if (slidesContainer.value) {
                             slidesContainer.value.style.transition = ''
                         }
                         isTransitioning.value = false
-                    }, 50)
+                    })
                 }
             }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
         } else {
@@ -342,6 +369,7 @@ const nextSlide = () => {
 
 const previousSlide = () => {
     if (isTransitioning.value) return
+    if (!config.value.infinite && currentSlide.value <= 0) return
 
     if (config.value.transitionType === 'fade') {
         currentSlide.value = currentSlide.value === 0 ? slides.value.length - 1 : currentSlide.value - 1
@@ -358,13 +386,13 @@ const previousSlide = () => {
                 if (slidesContainer.value) {
                     slidesContainer.value.style.transition = 'none'
                     currentSlide.value = currentSlide.value + slides.value.length
-                    slidesContainer.value.offsetHeight
-                    setTimeout(() => {
+                    void slidesContainer.value.offsetHeight
+                    requestAnimationFrame(() => {
                         if (slidesContainer.value) {
                             slidesContainer.value.style.transition = ''
                         }
                         isTransitioning.value = false
-                    }, 50)
+                    })
                 }
             }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
         } else {
@@ -389,14 +417,19 @@ const slideTo = (slideIndex: number) => {
     }
 
     const maxSlide = slides.value.length - config.value.slidesPerView
-    currentSlide.value = Math.max(0, Math.min(slideIndex, maxSlide))
-    isTransitioning.value = true
+    const targetSlide = Math.max(0, Math.min(slideIndex, maxSlide))
 
-    setTimeout(() => {
-        isTransitioning.value = false
-    }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+    if (currentSlide.value !== targetSlide) {
+        isTransitioning.value = true
+        currentSlide.value = targetSlide
+
+        setTimeout(() => {
+            isTransitioning.value = false
+        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
+    }
 }
 
+// Height calculation
 const calculateSlideHeights = async () => {
     if (config.value.transitionType !== 'fade' || config.value.height !== 'auto') {
         slideHeightCalculated.value = true
@@ -432,8 +465,10 @@ const calculateSlideHeights = async () => {
     slideHeightCalculated.value = true
 }
 
+// Autoplay functions
 const startAutoplay = () => {
     if (config.value.autoplayDelay === -1) return
+    emit('autoplayStarted')
     autoplayTimer = setInterval(() => {
         nextSlide()
     }, config.value.autoplayDelay)
@@ -443,6 +478,7 @@ const stopAutoplay = () => {
     if (autoplayTimer) {
         clearInterval(autoplayTimer)
         autoplayTimer = null
+        emit('autoplayStopped')
     }
 }
 
@@ -458,9 +494,35 @@ const resumeAutoplay = () => {
     }
 }
 
+// Window resize handler
 const updateWindowWidth = () => {
     windowWidth.value = window.innerWidth
 }
+
+// Watch for slide changes and emit events
+watch(currentSlide, (newSlide, oldSlide) => {
+    if (newSlide !== oldSlide) {
+        // Normalize slide index for events
+        let normalizedSlide = newSlide
+        if (config.value.infinite && normalizedSlide < 0) {
+            normalizedSlide = slides.value.length + normalizedSlide
+        } else if (config.value.infinite && normalizedSlide >= slides.value.length) {
+            normalizedSlide = normalizedSlide % slides.value.length
+        }
+
+        emit('slideChanged', normalizedSlide)
+
+        // Check for start/end reached (only for non-infinite mode)
+        if (!config.value.infinite) {
+            if (normalizedSlide === 0) {
+                emit('startReached')
+            }
+            if (normalizedSlide >= slides.value.length - config.value.slidesPerView) {
+                emit('endReached')
+            }
+        }
+    }
+})
 
 // Watch for breakpoint changes
 watch(currentBreakpoint, (newBreakpoint, oldBreakpoint) => {
@@ -521,6 +583,7 @@ watch(() => config.value.autoplayDelay, (newDelay, oldDelay) => {
     }
 })
 
+// Lifecycle hooks
 onMounted(() => {
     updateWindowWidth()
     window.addEventListener('resize', updateWindowWidth)
@@ -541,6 +604,7 @@ onUnmounted(() => {
     window.removeEventListener('resize', updateWindowWidth)
 })
 
+// Expose public methods
 defineExpose({
     nextSlide,
     previousSlide,
@@ -554,50 +618,78 @@ defineExpose({
 <style scoped lang="postcss">
 .carousel {
     @apply relative w-full overflow-hidden;
-}
 
-.carousel-container {
-    @apply relative w-full h-full;
+    .carousel-container {
+        @apply relative w-full h-full;
+    }
 }
 
 .slides-container {
     @apply flex w-full h-full;
+
+    &.slide-transition-none {
+        @apply transition-none;
+    }
+
+    &.slide-transition-slide {
+        @apply transition-transform;
+        transition-timing-function: cubic-bezier(0.802, 0.02, 0.39, 1.01) !important;
+    }
+
+    .slide {
+        @apply flex-shrink-0 h-full relative;
+    }
 }
 
-.slide-transition-none {
-    @apply transition-none;
+.fade-container {
+    @apply relative w-full h-full;
+
+    .measure-slide {
+        @apply absolute inset-0 w-full opacity-0 pointer-events-none z-[-1];
+    }
+
+    .fade-slide {
+        @apply absolute inset-0 w-full h-full transition-opacity ease-in-out opacity-0 z-0;
+
+        &.fade-slide-active {
+            @apply opacity-100 z-10;
+        }
+    }
 }
 
-.slide-transition-slide {
-    @apply transition-transform;
-    transition-timing-function: cubic-bezier(0.802, 0.02, 0.39, 1.01) !important;
-}
+.btn-arrow {
+    @apply absolute top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 text-white p-2 rounded-full transition-all duration-200 backdrop-blur-sm z-20;
 
-.slide {
-    @apply flex-shrink-0 h-full relative;
-}
+    &:hover:not(.btn-disabled) {
+        @apply bg-opacity-30;
+    }
 
-.btn-arrow-left {
-    @apply absolute left-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-all duration-200 backdrop-blur-sm z-20;
-}
+    &.btn-disabled {
+        @apply opacity-0 pointer-events-none;
+    }
 
-.btn-arrow-right {
-    @apply absolute right-4 top-1/2 transform -translate-y-1/2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white p-2 rounded-full transition-all duration-200 backdrop-blur-sm z-20;
+    &.btn-arrow-left {
+        @apply left-4;
+    }
+
+    &.btn-arrow-right {
+        @apply right-4;
+    }
 }
 
 .dots-container {
     @apply absolute bottom-4 left-1/2 transform -translate-x-1/2 flex justify-center gap-1.5 z-20;
-}
 
-.dot-base {
-    @apply w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur-sm;
-}
+    .dot {
+        @apply w-2.5 h-2.5 rounded-full transition-all duration-200 backdrop-blur-sm bg-white bg-opacity-50;
 
-.dot-inactive {
-    @apply bg-white bg-opacity-50 hover:bg-opacity-75;
-}
+        &:hover {
+            @apply bg-opacity-75;
+        }
 
-.dot-active {
-    @apply bg-white;
+        &.dot-active {
+            @apply bg-white bg-opacity-100;
+        }
+    }
 }
 </style>
