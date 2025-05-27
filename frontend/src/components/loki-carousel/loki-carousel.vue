@@ -1,17 +1,8 @@
 <template>
-    <div class="carousel-container">
-        <!-- Carousel Container -->
-        <div
-            class="relative w-full h-full"
-            @mouseenter="pauseAutoplay"
-            @mouseleave="resumeAutoplay"
-            :style="containerStyles"
-        >
+    <div class="carousel">
+        <div class="carousel-container" @mouseenter="pauseAutoplay" @mouseleave="resumeAutoplay" :style="carouselContainerStyles">
             <!-- Slides container for 'none/slide' transition -->
-            <div v-if="transitionType !== 'fade'" class="slides-container" ref="slidesContainer"
-                 :class="{'slide-transition-slide': transitionType === 'slide', 'slide-transition-none': transitionType === 'none'}"
-                 :style="slideStyles"
-            >
+            <div v-if="config.transitionType !== 'fade'" ref="slidesContainer" :class="slideClasses" :style="slideStyles">
                 <div v-for="(slide, index) in allSlides" :key="`slide-${index}`"
                      class="flex-shrink-0 h-full relative"
                      :style="getSlideStyle(index)"
@@ -21,10 +12,9 @@
             </div>
 
             <!-- Slides container for 'fade' transition -->
-            <div v-if="transitionType === 'fade'" class="relative w-full h-full">
+            <div v-if="config.transitionType === 'fade'" class="relative w-full h-full">
                 <!-- Hidden slides für Höhenmessung -->
-                <div
-                    v-for="(_, index) in originalSlideCount"
+                <div v-for="(_, index) in originalSlideCount"
                     :key="`measure-slide-${index}`"
                     ref="measureSlides"
                     class="absolute inset-0 w-full opacity-0 pointer-events-none z-[-1]"
@@ -36,7 +26,7 @@
                 <!-- Sichtbare slides -->
                 <div v-for="(_, index) in originalSlideCount" :key="`fade-slide-${index}`"
                      class="absolute inset-0 w-full h-full transition-opacity ease-in-out"
-                     :style="{transitionDuration: `${props.transitionDelay}ms`}"
+                     :style="{transitionDuration: `${config.transitionDelay}ms`}"
                      :class="{'opacity-100 z-10': index === currentSlide, 'opacity-0 z-0': index !== currentSlide}"
                 >
                     <slot :name="`slide-${index}`" :slideIndex="index"></slot>
@@ -44,29 +34,25 @@
             </div>
 
             <!-- Navigation Arrows -->
-            <button v-if="arrows" @click="previousSlide" class="btn-arrow-left">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                </svg>
+            <button v-if="config.arrows" @click="previousSlide" class="btn-arrow-left">
+                <icon-arrow-left class="w-6 h-6"></icon-arrow-left>
             </button>
 
-            <button v-if="arrows" @click="nextSlide" class="btn-arrow-right">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                </svg>
+            <button v-if="config.arrows" @click="nextSlide" class="btn-arrow-right">
+                <icon-arrow-right class="w-6 h-6"></icon-arrow-right>
             </button>
 
             <!-- Dot Navigation - Single -->
-            <div v-if="dots && props.slidesPerView === 1" class="dots-container-single">
+            <div v-if="config.dots && config.slidesPerView === 1" class="dots-container-single">
                 <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`"
                         @click="goToSlideByDot(index)"
                         class="dot"
-                        :class="{'dot-active': index === getCurrentDotIndex(), 'dot-base': index !== getCurrentDotIndex()}"
+                        :class="{'dot-active': isSlideCurrentlyVisible(index), 'dot-base': !isSlideCurrentlyVisible(index)}"
                 />
             </div>
 
             <!-- Dot Navigation - Multiple -->
-            <div v-if="dots && props.slidesPerView > 1" class="dots-container-multiple">
+            <div v-if="config.dots && config.slidesPerView > 1" class="dots-container-multiple">
                 <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`"
                         @click="goToSlideByDot(index)"
                         class="dot"
@@ -79,18 +65,38 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, useSlots, nextTick } from 'vue'
+import IconArrowLeft from "@/icons/icon-arrow-left.vue";
+import IconArrowRight from "@/icons/icon-arrow-right.vue";
 
-export interface CarouselProps {
+// Breakpoint-spezifische Konfiguration
+export interface ResponsiveConfig {
     autoplayDelay?: number
     infinite?: boolean
     transitionType?: 'slide' | 'fade' | 'none'
-    transitionDelay?: number;
+    transitionDelay?: number
     dots?: boolean
     arrows?: boolean
     height?: string
     slidesPerView?: number
     slidesToScroll?: number
     gap?: string
+}
+
+// Responsive Breakpoint Definition (Tailwind Breakpoints)
+export interface ResponsiveBreakpoints {
+    sm?: ResponsiveConfig   // 640px+
+    md?: ResponsiveConfig   // 768px+
+    lg?: ResponsiveConfig   // 1024px+
+    xl?: ResponsiveConfig   // 1280px+
+    '2xl'?: ResponsiveConfig // 1536px+
+    '3xl'?: ResponsiveConfig // 1792px+
+    '4xl'?: ResponsiveConfig // 2048px+
+}
+
+export interface CarouselProps extends ResponsiveConfig {
+    // Responsive Breakpoints
+    responsive?: ResponsiveBreakpoints
+    // Fallback zu den ursprünglichen Props für Desktop, wenn keine responsive config vorhanden
 }
 
 const props = withDefaults(defineProps<CarouselProps>(), {
@@ -112,8 +118,109 @@ const measureSlides = ref<HTMLElement[]>([])
 const currentSlide = ref(0)
 const calculatedHeight = ref<number>(0)
 const slideHeightCalculated = ref(false)
+const windowWidth = ref(0)
 let autoplayTimer: NodeJS.Timeout | null = null
 let isTransitioning = ref(false)
+
+// Aktuelle Bildschirmgröße tracken
+const updateWindowWidth = () => {
+    windowWidth.value = window.innerWidth
+}
+
+// Tailwind Breakpoint-Definitionen (in px)
+const breakpoints = {
+    sm: 640,
+    md: 768,
+    lg: 1024,
+    xl: 1280,
+    '2xl': 1536,
+    '3xl': 1792,
+    '4xl': 2048
+} as const
+
+type BreakpointKey = keyof typeof breakpoints
+
+// Aktuellen Breakpoint bestimmen (mobile-first approach wie Tailwind)
+const currentBreakpoint = computed((): BreakpointKey | 'base' => {
+    if (windowWidth.value >= breakpoints['4xl']) return '4xl'
+    if (windowWidth.value >= breakpoints['3xl']) return '3xl'
+    if (windowWidth.value >= breakpoints['2xl']) return '2xl'
+    if (windowWidth.value >= breakpoints.xl) return 'xl'
+    if (windowWidth.value >= breakpoints.lg) return 'lg'
+    if (windowWidth.value >= breakpoints.md) return 'md'
+    if (windowWidth.value >= breakpoints.sm) return 'sm'
+    return 'base' // < 640px
+})
+
+const config = computed((): Required<ResponsiveConfig> => {
+    const baseConfig: Required<ResponsiveConfig> = {
+        autoplayDelay: props.autoplayDelay,
+        infinite: props.infinite,
+        transitionType: props.transitionType,
+        transitionDelay: props.transitionDelay,
+        dots: props.dots,
+        arrows: props.arrows,
+        height: props.height,
+        slidesPerView: props.slidesPerView,
+        slidesToScroll: props.slidesToScroll,
+        gap: props.gap
+    }
+
+    if (!props.responsive) {
+        return baseConfig
+    }
+
+    // Mobile-first cascade - jeder Breakpoint erbt von vorherigen
+    let mergedConfig = { ...baseConfig }
+
+    // Definiere die Reihenfolge der Breakpoints (mobile-first)
+    const breakpointOrder: (BreakpointKey | 'base')[] = ['base', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl']
+    const currentIndex = breakpointOrder.indexOf(currentBreakpoint.value)
+
+    // Wende alle Breakpoint-Configs bis zum aktuellen an
+    for (let i = 1; i <= currentIndex; i++) {
+        const breakpointKey = breakpointOrder[i] as BreakpointKey
+        const breakpointConfig = props.responsive[breakpointKey]
+
+        if (breakpointConfig) {
+            mergedConfig = {
+                ...mergedConfig,
+                ...Object.fromEntries(
+                    Object.entries(breakpointConfig).filter(([_, value]) => value !== undefined)
+                )
+            } as Required<ResponsiveConfig>
+        }
+    }
+
+    return mergedConfig
+})
+
+// Reset currentSlide when breakpoint changes to avoid out-of-bounds
+watch(currentBreakpoint, (newBreakpoint, oldBreakpoint) => {
+    if (newBreakpoint !== oldBreakpoint) {
+        // Stoppe autoplay temporär
+        stopAutoplay()
+
+        // Prüfe, ob aktueller Slide noch gültig ist
+        const maxSlide = originalSlideCount.value - config.value.slidesPerView
+        if (currentSlide.value > maxSlide) {
+            currentSlide.value = Math.max(0, maxSlide)
+        }
+
+        // Höhe neu berechnen bei fade transition
+        if (config.value.transitionType === 'fade') {
+            slideHeightCalculated.value = false
+            nextTick(() => {
+                calculateSlideHeights()
+            })
+        }
+
+        // Autoplay neu starten falls aktiv
+        if (config.value.autoplayDelay !== -1) {
+            startAutoplay()
+        }
+    }
+})
 
 // Berechne die Anzahl der Original-Slides basierend auf den Slots
 const originalSlideCount = computed(() => {
@@ -121,21 +228,35 @@ const originalSlideCount = computed(() => {
     return slideSlots.length || 3 // Fallback für Demo-Zwecke
 })
 
-// Container Styles - verwendet berechnete Höhe bei fade transition
-const containerStyles = computed(() => {
-    if (props.transitionType === 'fade' && slideHeightCalculated.value && calculatedHeight.value > 0) {
+const carouselContainerStyles = computed(() => {
+    if (config.value.transitionType === 'fade' && slideHeightCalculated.value && calculatedHeight.value > 0) {
         return {
             height: `${calculatedHeight.value}px`
         }
     }
-    return {
-        height: props.height
+    return { height: config.value.height }
+})
+
+const slideClasses = computed(() => ({
+    'slides-container': true,
+    'slide-transition-slide': config.value.transitionType === 'slide',
+    'slide-transition-none': config.value.transitionType === 'none'
+}))
+
+const slideStyles = computed(() => {
+    if (config.value.transitionType === 'fade') {
+        return {}
     }
+
+    const slideWidthWithGap = `(${slideWidth.value} + ${config.value.gap})`
+    const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
+
+    return { transform: `translateX(${translateX})`, transitionDuration: `${config.value.transitionDelay}ms` }
 })
 
 // Berechne Slide-Höhen für fade transition
 const calculateSlideHeights = async () => {
-    if (props.transitionType !== 'fade') {
+    if (config.value.transitionType !== 'fade') {
         slideHeightCalculated.value = true
         return
     }
@@ -174,7 +295,7 @@ const calculateSlideHeights = async () => {
 
 // Watch für Slot-Änderungen um Höhe neu zu berechnen
 watch(() => originalSlideCount.value, () => {
-    if (props.transitionType === 'fade') {
+    if (config.value.transitionType === 'fade') {
         slideHeightCalculated.value = false
         nextTick(() => {
             calculateSlideHeights()
@@ -183,8 +304,8 @@ watch(() => originalSlideCount.value, () => {
 })
 
 // Watch für transition type Änderungen
-watch(() => props.transitionType, () => {
-    if (props.transitionType === 'fade') {
+watch(() => config.value.transitionType, () => {
+    if (config.value.transitionType === 'fade') {
         slideHeightCalculated.value = false
         nextTick(() => {
             calculateSlideHeights()
@@ -196,8 +317,8 @@ watch(() => props.transitionType, () => {
 
 // Berechne die Slide-Breite basierend auf slidesPerView und Gap
 const slideWidth = computed(() => {
-    if (props.slidesPerView === 1) return '100%'
-    return `calc((100% - ${(props.slidesPerView - 1)} * ${props.gap}) / ${props.slidesPerView})`
+    if (config.value.slidesPerView === 1) return '100%'
+    return `calc((100% - ${(config.value.slidesPerView - 1)} * ${config.value.gap}) / ${config.value.slidesPerView})`
 })
 
 // Funktion für individuelle Slide-Styles
@@ -205,20 +326,17 @@ const getSlideStyle = (index: number) => {
     const isLastSlide = index === allSlides.value.length - 1
     return {
         width: slideWidth.value,
-        marginRight: isLastSlide ? '0' : props.gap
+        marginRight: isLastSlide ? '0' : config.value.gap
     }
 }
 
-// Gap zwischen Slides
-const slideGap = computed(() => props.gap)
-
 // Für infinite scrolling erstellen wir zusätzliche Slides (nur bei slide/none transition)
 const allSlides = computed(() => {
-    if (props.transitionType === 'fade') {
+    if (config.value.transitionType === 'fade') {
         return Array.from({ length: originalSlideCount.value }, (_, i) => i)
     }
 
-    if (!props.infinite) {
+    if (!config.value.infinite) {
         return Array.from({ length: originalSlideCount.value }, (_, i) => i)
     }
 
@@ -226,8 +344,8 @@ const allSlides = computed(() => {
     const slides = []
 
     // Genug Slides am Anfang kopieren für smooth transition
-    for (let i = 0; i < props.slidesPerView; i++) {
-        const index = originalSlideCount.value - props.slidesPerView + i
+    for (let i = 0; i < config.value.slidesPerView; i++) {
+        const index = originalSlideCount.value - config.value.slidesPerView + i
         slides.push(index >= 0 ? index : originalSlideCount.value + index)
     }
 
@@ -237,7 +355,7 @@ const allSlides = computed(() => {
     }
 
     // Genug Slides am Ende kopieren für smooth transition
-    for (let i = 0; i < props.slidesPerView; i++) {
+    for (let i = 0; i < config.value.slidesPerView; i++) {
         slides.push(i)
     }
 
@@ -246,10 +364,10 @@ const allSlides = computed(() => {
 
 // Berechne den aktuellen Slide-Index für die Anzeige
 const getCurrentSlideIndex = () => {
-    if (props.transitionType === 'fade') {
+    if (config.value.transitionType === 'fade') {
         return currentSlide.value
     }
-    return props.infinite ? currentSlide.value + props.slidesPerView : currentSlide.value
+    return config.value.infinite ? currentSlide.value + config.value.slidesPerView : currentSlide.value
 }
 
 // Hole den ursprünglichen Slide-Index
@@ -257,46 +375,10 @@ const getOriginalSlideIndex = (index: number) => {
     return allSlides.value[index]
 }
 
-// Berechne die Anzahl der Dots basierend auf slidesPerView und slidesToScroll
-const dotCount = computed(() => {
-    if (props.transitionType === 'fade') {
-        return originalSlideCount.value
-    }
-
-    if (props.slidesPerView >= originalSlideCount.value) {
-        return 1
-    }
-
-    const visibleSlides = originalSlideCount.value - props.slidesPerView + 1
-    return Math.ceil(visibleSlides / props.slidesToScroll)
-})
-
-const getCurrentDotIndex = () => {
-    if (props.transitionType === 'fade') {
-        return currentSlide.value
-    }
-    return Math.floor(currentSlide.value / props.slidesToScroll)
-}
-
-// Hilfsfunktionen für Multi-Slide Dots
-const getSlidesInGroup = (groupIndex: number) => {
-    const startSlide = groupIndex * props.slidesPerView
-    const slides = []
-
-    for (let i = 0; i < props.slidesPerView; i++) {
-        const slideIndex = startSlide + i
-        if (slideIndex < originalSlideCount.value) {
-            slides.push(slideIndex)
-        }
-    }
-
-    return slides
-}
-
 const isSlideCurrentlyVisible = (slideIndex: number) => {
     let normalizedCurrentSlide = currentSlide.value;
 
-    if (props.infinite) {
+    if (config.value.infinite) {
         while (normalizedCurrentSlide < 0) {
             normalizedCurrentSlide += originalSlideCount.value;
         }
@@ -304,9 +386,9 @@ const isSlideCurrentlyVisible = (slideIndex: number) => {
     }
 
     const start = normalizedCurrentSlide;
-    const end = normalizedCurrentSlide + props.slidesPerView - 1;
+    const end = normalizedCurrentSlide + config.value.slidesPerView - 1;
 
-    if (end >= originalSlideCount.value && props.infinite) {
+    if (end >= originalSlideCount.value && config.value.infinite) {
         const normalEnd = end % originalSlideCount.value;
         return (slideIndex >= start) || (slideIndex <= normalEnd);
     }
@@ -316,7 +398,7 @@ const isSlideCurrentlyVisible = (slideIndex: number) => {
 const goToSpecificSlide = (slideIndex: number) => {
     if (isTransitioning.value) return
 
-    const maxPosition = originalSlideCount.value - props.slidesPerView
+    const maxPosition = originalSlideCount.value - config.value.slidesPerView
     const targetPosition = Math.min(slideIndex, maxPosition)
 
     currentSlide.value = Math.max(0, targetPosition)
@@ -324,18 +406,18 @@ const goToSpecificSlide = (slideIndex: number) => {
 
     setTimeout(() => {
         isTransitioning.value = false
-    }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+    }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
 }
 
 const goToSlideByDot = (dotIndex: number) => {
-    if (props.slidesPerView === 1) {
-        if (props.transitionType === 'fade') {
+    if (config.value.slidesPerView === 1) {
+        if (config.value.transitionType === 'fade') {
             currentSlide.value = dotIndex
             return
         }
         goToSpecificSlide(dotIndex)
     } else {
-        const maxSlide = originalSlideCount.value - props.slidesPerView
+        const maxSlide = originalSlideCount.value - config.value.slidesPerView
         const targetSlide = Math.max(0, Math.min(dotIndex, maxSlide))
 
         if (isTransitioning.value) return
@@ -345,35 +427,24 @@ const goToSlideByDot = (dotIndex: number) => {
 
         setTimeout(() => {
             isTransitioning.value = false
-        }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
     }
 }
-
-const slideStyles = computed(() => {
-    if (props.transitionType === 'fade') {
-        return {}
-    }
-
-    const slideWidthWithGap = `(${slideWidth.value} + ${props.gap})`
-    const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
-
-    return { transform: `translateX(${translateX})`, transitionDuration: `${props.transitionDelay}ms` }
-})
 
 const nextSlide = () => {
     if (isTransitioning.value) return
 
-    if (props.transitionType === 'fade') {
+    if (config.value.transitionType === 'fade') {
         currentSlide.value = (currentSlide.value + 1) % originalSlideCount.value
         return
     }
 
     isTransitioning.value = true
 
-    const maxSlide = originalSlideCount.value - props.slidesPerView
+    const maxSlide = originalSlideCount.value - config.value.slidesPerView
 
-    if (props.infinite) {
-        currentSlide.value += props.slidesToScroll
+    if (config.value.infinite) {
+        currentSlide.value += config.value.slidesToScroll
 
         // Wenn wir über das Ende hinaus sind
         if (currentSlide.value > maxSlide) {
@@ -392,36 +463,36 @@ const nextSlide = () => {
                         isTransitioning.value = false
                     }, 50)
                 }
-            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
         } else {
             setTimeout(() => {
                 isTransitioning.value = false
-            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
         }
     } else {
-        if (currentSlide.value + props.slidesToScroll <= maxSlide) {
-            currentSlide.value += props.slidesToScroll
+        if (currentSlide.value + config.value.slidesToScroll <= maxSlide) {
+            currentSlide.value += config.value.slidesToScroll
         } else {
             currentSlide.value = maxSlide
         }
         setTimeout(() => {
             isTransitioning.value = false
-        }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
     }
 }
 
 const previousSlide = () => {
     if (isTransitioning.value) return
 
-    if (props.transitionType === 'fade') {
+    if (config.value.transitionType === 'fade') {
         currentSlide.value = currentSlide.value === 0 ? originalSlideCount.value - 1 : currentSlide.value - 1
         return
     }
 
     isTransitioning.value = true
 
-    if (props.infinite) {
-        currentSlide.value -= props.slidesToScroll
+    if (config.value.infinite) {
+        currentSlide.value -= config.value.slidesToScroll
 
         // Wenn wir unter 0 sind
         if (currentSlide.value < 0) {
@@ -440,49 +511,49 @@ const previousSlide = () => {
                         isTransitioning.value = false
                     }, 50)
                 }
-            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
         } else {
             setTimeout(() => {
                 isTransitioning.value = false
-            }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+            }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
         }
     } else {
-        if (currentSlide.value - props.slidesToScroll >= 0) {
-            currentSlide.value -= props.slidesToScroll
+        if (currentSlide.value - config.value.slidesToScroll >= 0) {
+            currentSlide.value -= config.value.slidesToScroll
         } else {
             currentSlide.value = 0
         }
         setTimeout(() => {
             isTransitioning.value = false
-        }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+        }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
     }
 }
 
 const goToSlide = (dotIndex: number) => {
     if (isTransitioning.value) return
 
-    if (props.transitionType === 'fade') {
+    if (config.value.transitionType === 'fade') {
         currentSlide.value = dotIndex
         return
     }
 
-    const targetSlide = dotIndex * props.slidesToScroll
-    const maxSlide = originalSlideCount.value - props.slidesPerView
+    const targetSlide = dotIndex * config.value.slidesToScroll
+    const maxSlide = originalSlideCount.value - config.value.slidesPerView
 
     currentSlide.value = Math.min(targetSlide, maxSlide)
     isTransitioning.value = true
 
     setTimeout(() => {
         isTransitioning.value = false
-    }, props.transitionType === 'slide' ? props.transitionDelay : 0)
+    }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
 }
 
 const startAutoplay = () => {
-    if (props.autoplayDelay === -1) return
+    if (config.value.autoplayDelay === -1) return
 
     autoplayTimer = setInterval(() => {
         nextSlide()
-    }, props.autoplayDelay)
+    }, config.value.autoplayDelay)
 }
 
 const stopAutoplay = () => {
@@ -493,31 +564,38 @@ const stopAutoplay = () => {
 }
 
 const pauseAutoplay = () => {
-    if (props.autoplayDelay !== -1) {
+    if (config.value.autoplayDelay !== -1) {
         stopAutoplay()
     }
 }
 
 const resumeAutoplay = () => {
-    if (props.autoplayDelay !== -1) {
+    if (config.value.autoplayDelay !== -1) {
         startAutoplay()
     }
 }
 
-watch(() => props.autoplayDelay, () => {
-    stopAutoplay()
-    if (props.autoplayDelay !== -1) {
-        startAutoplay()
+// Watch für autoplay changes basierend auf aktueller Konfiguration
+watch(() => config.value.autoplayDelay, (newDelay, oldDelay) => {
+    if (newDelay !== oldDelay) {
+        stopAutoplay()
+        if (newDelay !== -1) {
+            startAutoplay()
+        }
     }
 })
 
 onMounted(() => {
-    if (props.autoplayDelay !== -1) {
+    // Window width tracking
+    updateWindowWidth()
+    window.addEventListener('resize', updateWindowWidth)
+
+    if (config.value.autoplayDelay !== -1) {
         startAutoplay()
     }
 
     // Höhe für fade transition berechnen
-    if (props.transitionType === 'fade') {
+    if (config.value.transitionType === 'fade') {
         nextTick(() => {
             calculateSlideHeights()
         })
@@ -528,6 +606,7 @@ onMounted(() => {
 
 onUnmounted(() => {
     stopAutoplay()
+    window.removeEventListener('resize', updateWindowWidth)
 })
 
 defineExpose({
@@ -535,13 +614,19 @@ defineExpose({
     previousSlide,
     goToSlide,
     getCurrentSlide: () => currentSlide.value,
-    recalculateHeight: calculateSlideHeights
+    recalculateHeight: calculateSlideHeights,
+    getCurrentBreakpoint: () => currentBreakpoint.value,
+    getCurrentConfig: () => config.value
 })
 </script>
 
 <style scoped lang="postcss">
-.carousel-container {
+.carousel {
     @apply relative w-full overflow-hidden;
+}
+
+.carousel-container {
+    @apply relative w-full h-full;
 }
 
 .slides-container {
