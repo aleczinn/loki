@@ -9,19 +9,15 @@
 
                 <loki-carousel
                     :autoplay-delay="-1"
-                    :infinite="false"
+                    :infinite="true"
                     transition-type="slide"
                     height="auto"
                     :dots="true"
                     :arrows="true"
                     :slides-per-view="1"
                     :slides-to-scroll="1"
+                    :draggable="true"
                     class="mb-8"
-                    @slide-changed="(slideIndex) => console.log('Slide changed to:', slideIndex)"
-                    @end-reached="() => console.log('End reached!')"
-                    @start-reached="() => console.log('Start reached!')"
-                    @autoplay-started="() => console.log('Autoplay started')"
-                    @autoplay-stopped="() => console.log('Autoplay stopped')"
                 >
                     <div class="aspect-w-16 aspect-h-3">
                         <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
@@ -55,7 +51,7 @@
                 </loki-carousel>
 
                 <loki-carousel
-                    :autoplay-delay="4000"
+                    :autoplay-delay="-1"
                     :infinite="true"
                     transition-type="slide"
                     height="auto"
@@ -63,6 +59,7 @@
                     :arrows="true"
                     :slides-per-view="2"
                     :slides-to-scroll="1"
+                    :draggable="true"
                     class="mb-8"
                 >
                     <div class="aspect-w-16 aspect-h-3">

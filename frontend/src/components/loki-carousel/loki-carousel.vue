@@ -1,78 +1,67 @@
 <template>
     <div class="carousel">
-        <div
-            class="carousel-container"
-            @mouseenter="pauseAutoplay"
-            @mouseleave="resumeAutoplay"
-            :style="carouselContainerStyles"
-        >
+        <div class="carousel-container" @mouseenter="pauseAutoplay" @mouseleave="resumeAutoplay"
+             :style="carouselContainerStyles">
             <!-- slides container for 'none/slide' transition -->
-            <div
-                v-if="config.transitionType !== 'fade'"
-                ref="slidesContainer"
-                :class="slideContainerClasses"
-                :style="slideContainerStyles"
+            <div v-if="config.transitionType !== 'fade'"
+                 ref="slidesContainer"
+                 :class="slideContainerClasses"
+                 :style="slideContainerStyles"
+                 @touchstart="handleDragStart"
+                 @touchmove="handleDragMove"
+                 @touchend="handleDragEnd"
+                 @mousedown="handleDragStart"
+                 @mousemove="handleDragMove"
+                 @mouseup="handleDragEnd"
+                 @mouseleave="handleDragEnd"
             >
-                <div
-                    v-for="(slideIndex, index) in computedSlides"
-                    :key="`slide-${index}`"
-                    class="slide"
-                    :style="slideStyles(index)"
-                >
-                    <component :is="slides[slideIndex]" />
+                <div v-for="(slideIndex, index) in computedSlides" :key="`slide-${index}`" class="slide"
+                     :style="slideStyles(index)">
+                    <component :is="slides[slideIndex]"/>
                 </div>
             </div>
 
             <!-- slides container for 'fade' transition -->
             <div v-if="config.transitionType === 'fade'" class="fade-container">
                 <!-- hidden slides for height measurement -->
-                <div
-                    v-for="(slide, index) in slides"
-                    :key="`measure-slide-${index}`"
-                    ref="measureSlides"
-                    class="measure-slide"
-                    :style="{ visibility: slideHeightCalculated ? 'hidden' : 'visible' }"
+                <div v-for="(slide, index) in slides" :key="`measure-slide-${index}`"
+                     ref="measureSlides"
+                     class="measure-slide"
+                     :style="{ visibility: slideHeightCalculated ? 'hidden' : 'visible' }"
                 >
-                    <component :is="slide" />
+                    <component :is="slide"/>
                 </div>
 
                 <!-- visible slides -->
-                <div
-                    v-for="(slide, index) in slides"
-                    :key="`fade-slide-${index}`"
-                    :class="['fade-slide', { 'fade-slide-active': index === currentSlide }]"
-                    :style="{transitionDuration: `${config.transitionDelay}ms`}"
+                <div v-for="(slide, index) in slides"
+                     :key="`fade-slide-${index}`"
+                     :class="['fade-slide', { 'fade-slide-active': index === currentSlide }]"
+                     :style="{transitionDuration: `${config.transitionDelay}ms`}"
                 >
-                    <component :is="slide" />
+                    <component :is="slide"/>
                 </div>
             </div>
 
             <!-- navigation arrows -->
-            <button
-                v-if="config.arrows"
-                @click="previousSlide"
-                :disabled="isNavigationDisabled.previous"
-                :class="['btn-arrow', 'btn-arrow-left', { 'btn-disabled': isNavigationDisabled.previous }]"
+            <button v-if="config.arrows" @click="previousSlide(true)"
+                    :disabled="isNavigationDisabled.previous"
+                    :class="['btn-arrow', 'btn-arrow-left', { 'btn-disabled': isNavigationDisabled.previous }]"
             >
-                <icon-arrow-left class="w-6 h-6" />
+                <icon-arrow-left class="w-6 h-6"/>
             </button>
 
-            <button
-                v-if="config.arrows"
-                @click="nextSlide"
-                :disabled="isNavigationDisabled.next"
-                :class="['btn-arrow', 'btn-arrow-right', { 'btn-disabled': isNavigationDisabled.next }]"
+            <button v-if="config.arrows"
+                    @click="nextSlide(true)"
+                    :disabled="isNavigationDisabled.next"
+                    :class="['btn-arrow', 'btn-arrow-right', { 'btn-disabled': isNavigationDisabled.next }]"
             >
-                <icon-arrow-right class="w-6 h-6" />
+                <icon-arrow-right class="w-6 h-6"/>
             </button>
 
             <!-- dot navigation -->
             <div v-if="config.dots" class="dots-container">
-                <button
-                    v-for="(_, index) in slides"
-                    :key="`dot-${index}`"
-                    @click="slideTo(index)"
-                    :class="['dot', { 'dot-active': isSlideCurrentlyVisible(index) }]"
+                <button v-for="(_, index) in slides" :key="`dot-${index}`" @click="slideTo(index)"
+                        :class="['dot', { 'dot-active': isSlideCurrentlyVisible(index) }]"
                 />
             </div>
         </div>
@@ -95,6 +84,7 @@ export interface ResponsiveConfig {
     slidesPerView?: number
     slidesToScroll?: number
     gap?: string
+    draggable?: boolean
 }
 
 export interface ResponsiveBreakpoints {
@@ -121,7 +111,8 @@ const props = withDefaults(defineProps<CarouselProps>(), {
     height: 'auto',
     slidesPerView: 1,
     slidesToScroll: 1,
-    gap: '0rem'
+    gap: '0rem',
+    draggable: false
 })
 
 // Events
@@ -148,6 +139,12 @@ const isTransitioning = ref(false)
 
 // Timers
 let autoplayTimer: NodeJS.Timeout | null = null
+
+// Touch/Mouse drag state
+const isDragging = ref(false)
+const dragStartX = ref(0)
+const dragCurrentX = ref(0)
+const dragStartTime = ref(0)
 
 // Constants
 const breakpoints = {
@@ -197,7 +194,8 @@ const config = computed((): Required<ResponsiveConfig> => {
         height: props.height,
         slidesPerView: props.slidesPerView,
         slidesToScroll: props.slidesToScroll,
-        gap: props.gap
+        gap: props.gap,
+        draggable: props.draggable
     }
 
     if (!props.responsive) return baseConfig
@@ -244,11 +242,16 @@ const slideContainerStyles = computed(() => {
     if (config.value.transitionType === 'fade') return {}
 
     const slideWidthWithGap = `(${slideWidth.value} + ${config.value.gap})`
-    const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
+    const baseTranslateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
+
+    // Add drag offset if dragging
+    const dragOffset = isDragging.value ? dragCurrentX.value - dragStartX.value : 0
+    const translateX = dragOffset ? `calc(${baseTranslateX} + ${dragOffset}px)` : baseTranslateX
 
     return {
         transform: `translateX(${translateX})`,
-        transitionDuration: `${config.value.transitionDelay}ms`
+        transitionDuration: isDragging.value ? '0ms' : `${config.value.transitionDelay}ms`,
+        cursor: config.value.draggable ? (isDragging.value ? 'grabbing' : 'grab') : 'default'
     }
 })
 
@@ -509,6 +512,51 @@ const updateWindowWidth = () => {
     windowWidth.value = window.innerWidth
 }
 
+// Touch/Mouse drag handlers
+const handleDragStart = (e: TouchEvent | MouseEvent) => {
+    if (!config.value.draggable || config.value.transitionType === 'fade') return
+
+    isDragging.value = true
+    dragStartTime.value = Date.now()
+    dragStartX.value = 'touches' in e ? e.touches[0].clientX : e.clientX
+    dragCurrentX.value = dragStartX.value
+
+    // Prevent text selection
+    e.preventDefault()
+}
+
+const handleDragMove = (e: TouchEvent | MouseEvent) => {
+    if (!isDragging.value) return
+
+    dragCurrentX.value = 'touches' in e ? e.touches[0].clientX : e.clientX
+}
+
+const handleDragEnd = (e: TouchEvent | MouseEvent) => {
+    if (!isDragging.value) return
+
+    isDragging.value = false
+
+    const dragDistance = dragCurrentX.value - dragStartX.value
+    const dragDuration = Date.now() - dragStartTime.value
+    const velocity = Math.abs(dragDistance) / dragDuration
+
+    // Determine slide threshold (swipe if moved more than 50px or high velocity)
+    const threshold = 50
+    const velocityThreshold = 0.3
+
+    if (Math.abs(dragDistance) > threshold || velocity > velocityThreshold) {
+        if (dragDistance > 0) {
+            previousSlide()
+        } else {
+            nextSlide()
+        }
+    }
+
+    // Reset drag values
+    dragStartX.value = 0
+    dragCurrentX.value = 0
+}
+
 // Watch for slide changes and emit events
 watch(currentSlide, (newSlide, oldSlide) => {
     if (newSlide !== oldSlide) {
@@ -636,6 +684,10 @@ defineExpose({
 
 .slides-container {
     @apply flex w-full h-full;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
 
     &.slide-transition-none {
         @apply transition-none;
@@ -675,7 +727,7 @@ defineExpose({
     }
 
     &.btn-disabled {
-        @apply opacity-0 pointer-events-none;
+        @apply opacity-30 cursor-not-allowed;
     }
 
     &.btn-arrow-left {
