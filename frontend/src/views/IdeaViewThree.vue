@@ -15,6 +15,46 @@
                     :arrows="true"
                     :slides-per-view="1"
                     :slides-to-scroll="1"
+                    :responsive="{
+                        lg: {
+                            slidesPerView: 2
+                        }
+                    }"
+                    class="mb-8"
+                >
+                    <template #slide-0>
+                        <div class="aspect-w-16 aspect-h-3">
+                            <div class="w-full h-full bg-red-500 flex items-center justify-center text-white text-2xl">
+                                1
+                            </div>
+                        </div>
+                    </template>
+
+                    <template #slide-1>
+                        <div class="aspect-w-16 aspect-h-3">
+                            <div class="w-full h-full bg-green-500 flex items-center justify-center text-white text-2xl">
+                                2
+                            </div>
+                        </div>
+                    </template>
+
+                    <template #slide-2>
+                        <div class="aspect-w-16 aspect-h-3">
+                            <div class="w-full h-full bg-yellow-500 flex items-center justify-center text-white text-2xl">
+                                3
+                            </div>
+                        </div>
+                    </template>
+                </loki-carousel>
+
+                <loki-carousel
+                    :autoplay-delay="-1"
+                    :infinite="true "
+                    transition-type="slide"
+                    :dots="true"
+                    :arrows="true"
+                    :slides-per-view="1"
+                    :slides-to-scroll="1"
                     class="mb-8"
                 >
                     <template #slide-0>
