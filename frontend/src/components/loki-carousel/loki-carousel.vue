@@ -343,14 +343,19 @@ const nextSlide = () => {
         if (currentSlide.value > maxSlide) {
             setTimeout(() => {
                 if (slidesContainer.value) {
+                    // Disable transition for instant position reset
                     slidesContainer.value.style.transition = 'none'
                     currentSlide.value = currentSlide.value - slides.value.length
+                    // Force reflow to ensure the position change is applied
                     void slidesContainer.value.offsetHeight
+                    // Re-enable transition after a frame
                     requestAnimationFrame(() => {
-                        if (slidesContainer.value) {
-                            slidesContainer.value.style.transition = ''
-                        }
-                        isTransitioning.value = false
+                        requestAnimationFrame(() => {
+                            if (slidesContainer.value) {
+                                slidesContainer.value.style.transition = ''
+                            }
+                            isTransitioning.value = false
+                        })
                     })
                 }
             }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
@@ -384,14 +389,19 @@ const previousSlide = () => {
         if (currentSlide.value < 0) {
             setTimeout(() => {
                 if (slidesContainer.value) {
+                    // Disable transition for instant position reset
                     slidesContainer.value.style.transition = 'none'
                     currentSlide.value = currentSlide.value + slides.value.length
+                    // Force reflow to ensure the position change is applied
                     void slidesContainer.value.offsetHeight
+                    // Re-enable transition after a frame
                     requestAnimationFrame(() => {
-                        if (slidesContainer.value) {
-                            slidesContainer.value.style.transition = ''
-                        }
-                        isTransitioning.value = false
+                        requestAnimationFrame(() => {
+                            if (slidesContainer.value) {
+                                slidesContainer.value.style.transition = ''
+                            }
+                            isTransitioning.value = false
+                        })
                     })
                 }
             }, config.value.transitionType === 'slide' ? config.value.transitionDelay : 0)
