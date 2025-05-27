@@ -1,19 +1,16 @@
 <template>
     <div class="carousel">
         <div class="carousel-container" @mouseenter="pauseAutoplay" @mouseleave="resumeAutoplay" :style="carouselContainerStyles">
-            <!-- Slides container for 'none/slide' transition -->
-            <div v-if="config.transitionType !== 'fade'" ref="slidesContainer" :class="slideClasses" :style="slideStyles">
-                <div v-for="(_, index) in computedSlides" :key="`slide-${index}`"
-                     class="flex-shrink-0 h-full relative"
-                     :style="getSlideStyle(index)"
-                >
+            <!-- slides container for 'none/slide' transition -->
+            <div v-if="config.transitionType !== 'fade'" ref="slidesContainer" :class="slideContainerClasses" :style="slideContainerStyles">
+                <div v-for="(_, index) in computedSlides" :key="`slide-${index}`" class="slide" :style="slideStyles(index)">
                     <slot :name="`slide-${getOriginalSlideIndex(index)}`" :slideIndex="getOriginalSlideIndex(index)"></slot>
                 </div>
             </div>
 
-            <!-- Slides container for 'fade' transition -->
+            <!-- slides container for 'fade' transition -->
             <div v-if="config.transitionType === 'fade'" class="relative w-full h-full">
-                <!-- Hidden slides für Höhenmessung -->
+                <!-- hidden slides for height-measurement -->
                 <div v-for="(_, index) in originalSlideCount"
                     :key="`measure-slide-${index}`"
                     ref="measureSlides"
@@ -23,7 +20,7 @@
                     <slot :name="`slide-${index}`" :slideIndex="index"></slot>
                 </div>
 
-                <!-- Sichtbare slides -->
+                <!-- visible slides -->
                 <div v-for="(_, index) in originalSlideCount" :key="`fade-slide-${index}`"
                      class="absolute inset-0 w-full h-full transition-opacity ease-in-out"
                      :style="{transitionDuration: `${config.transitionDelay}ms`}"
@@ -33,7 +30,7 @@
                 </div>
             </div>
 
-            <!-- Navigation Arrows -->
+            <!-- navigation arrows -->
             <button v-if="config.arrows" @click="previousSlide" class="btn-arrow-left">
                 <icon-arrow-left class="w-6 h-6"></icon-arrow-left>
             </button>
@@ -42,12 +39,12 @@
                 <icon-arrow-right class="w-6 h-6"></icon-arrow-right>
             </button>
 
-            <!-- Dot Navigation - Single -->
+            <!-- dot bavigation - single -->
             <div v-if="config.dots && config.slidesPerView === 1" class="dots-container">
                 <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`" @click="slideTo(index)" :class="dotClasses(index)"/>
             </div>
 
-            <!-- Dot Navigation - Multiple -->
+            <!-- dot navigation - multiple -->
             <div v-if="config.dots && config.slidesPerView > 1" class="dots-container">
                 <button v-for="(_, index) in originalSlideCount" :key="`dot-${index}`" @click="slideTo(index)" :class="dotClasses(index)"/>
             </div>
@@ -60,7 +57,6 @@ import { ref, computed, onMounted, onUnmounted, watch, useSlots, nextTick } from
 import IconArrowLeft from "@/icons/icon-arrow-left.vue";
 import IconArrowRight from "@/icons/icon-arrow-right.vue";
 
-// Breakpoint-spezifische Konfiguration
 export interface ResponsiveConfig {
     autoplayDelay?: number
     infinite?: boolean
@@ -74,7 +70,6 @@ export interface ResponsiveConfig {
     gap?: string
 }
 
-// Responsive Breakpoint Definition (Tailwind Breakpoints)
 export interface ResponsiveBreakpoints {
     sm?: ResponsiveConfig   // 640px+
     md?: ResponsiveConfig   // 768px+
@@ -86,9 +81,7 @@ export interface ResponsiveBreakpoints {
 }
 
 export interface CarouselProps extends ResponsiveConfig {
-    // Responsive Breakpoints
     responsive?: ResponsiveBreakpoints
-    // Fallback zu den ursprünglichen Props für Desktop, wenn keine responsive config vorhanden
 }
 
 const props = withDefaults(defineProps<CarouselProps>(), {
@@ -114,7 +107,6 @@ const windowWidth = ref(0)
 let autoplayTimer: NodeJS.Timeout | null = null
 let isTransitioning = ref(false)
 
-// Tailwind Breakpoint-Definitionen (in px)
 const breakpoints = {
     sm: 640,
     md: 768,
@@ -306,6 +298,11 @@ const updateWindowWidth = () => {
     windowWidth.value = window.innerWidth
 }
 
+
+
+
+
+
 // Reset currentSlide when breakpoint changes to avoid out-of-bounds
 watch(currentBreakpoint, (newBreakpoint, oldBreakpoint) => {
     if (newBreakpoint !== oldBreakpoint) {
@@ -348,22 +345,28 @@ const carouselContainerStyles = computed(() => {
     return { height: config.value.height }
 })
 
-const slideClasses = computed(() => ({
+const slideContainerClasses = computed(() => ({
     'slides-container': true,
     'slide-transition-slide': config.value.transitionType === 'slide',
     'slide-transition-none': config.value.transitionType === 'none'
 }))
 
-const slideStyles = computed(() => {
-    if (config.value.transitionType === 'fade') {
-        return {}
-    }
+const slideContainerStyles = computed(() => {
+    if (config.value.transitionType === 'fade') return {}
 
     const slideWidthWithGap = `(${slideWidth.value} + ${config.value.gap})`
     const translateX = `calc(-${getCurrentSlideIndex()} * ${slideWidthWithGap})`
 
     return { transform: `translateX(${translateX})`, transitionDuration: `${config.value.transitionDelay}ms` }
 })
+
+const slideStyles = (index: number) => {
+    const isLastSlide = index === computedSlides.value.length - 1
+    return {
+        width: slideWidth.value,
+        marginRight: isLastSlide ? '0' : config.value.gap
+    }
+}
 
 const dotClasses = (index: number) => ({
     'dot-base': true,
@@ -438,15 +441,6 @@ const slideWidth = computed(() => {
     if (config.value.slidesPerView === 1) return '100%'
     return `calc((100% - ${(config.value.slidesPerView - 1)} * ${config.value.gap}) / ${config.value.slidesPerView})`
 })
-
-// Funktion für individuelle Slide-Styles
-const getSlideStyle = (index: number) => {
-    const isLastSlide = index === computedSlides.value.length - 1
-    return {
-        width: slideWidth.value,
-        marginRight: isLastSlide ? '0' : config.value.gap
-    }
-}
 
 // Für infinite scrolling erstellen wir zusätzliche Slides (nur bei slide/none transition)
 const computedSlides = computed(() => {
@@ -623,6 +617,10 @@ defineExpose({
 .slide-transition-slide {
     @apply transition-transform;
     transition-timing-function: cubic-bezier(0.802, 0.02, 0.39, 1.01) !important;
+}
+
+.slide {
+    @apply flex-shrink-0 h-full relative;
 }
 
 .btn-arrow-left {
