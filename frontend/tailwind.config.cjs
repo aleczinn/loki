@@ -41,7 +41,8 @@ module.exports = {
                 "white": "#ffffff"
             },
             screens: {
-                '3xl': '2000px'
+                '3xl': '112rem', // 1792px
+                '4xl': '128rem'  // 2048px
             },
             maxWidth: {
                 "loki": "120rem"
@@ -52,8 +53,9 @@ module.exports = {
                 "2xs": "0.625rem"
             },
             fontFamily: {
-                "loki": ["Fredoka", ...defaultTheme.fontFamily.sans],
-                "loki-funky": ["Oswald", ...defaultTheme.fontFamily.sans]
+                "loki": ["Inter", ...defaultTheme.fontFamily.sans],
+                "loki-fredoka": ["Fredoka", ...defaultTheme.fontFamily.sans],
+                "loki-oswald": ["Oswald", ...defaultTheme.fontFamily.sans]
             },
             borderWidth: {
                 1: "1px",
