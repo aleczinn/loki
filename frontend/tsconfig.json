@@ -1,55 +1,57 @@
 {
-  "compilerOptions": {
-    "module": "esnext",
-    "target": "esnext",
-    "lib": [
-      "esnext",
-      "dom",
-      "dom.iterable"
+    "compilerOptions": {
+        "module": "esnext",
+        "target": "esnext",
+        "lib": [
+            "esnext",
+            "dom",
+            "dom.iterable"
+        ],
+        "types": [
+            "node",
+            "vite/client"
+        ],
+        "baseUrl": ".",
+        "skipLibCheck": true,
+        "allowSyntheticDefaultImports": true,
+        "allowUnreachableCode": false,
+        "declaration": false,
+        "experimentalDecorators": true,
+        "noUnusedLocals": false,
+        "resolveJsonModule": true,
+        "esModuleInterop": true,
+        "outDir": "./types",
+        "rootDir": "./src",
+        "strict": true,
+        "noUnusedParameters": true,
+        "noImplicitReturns": true,
+        "noFallthroughCasesInSwitch": true,
+        "moduleResolution": "node",
+        "forceConsistentCasingInFileNames": true,
+        "noImplicitAny": false,
+        "strictFunctionTypes": false,
+        "paths": {
+            "@/*": [
+                "./src/*"
+            ]
+        }
+    },
+    "include": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "types/*.d.ts",
+        "src/**/*.ts",
+        "src/**/*.d.ts",
+        "src/**/*.tsx",
+        "src/**/*.vue"
     ],
-    "types": [
-      "node",
-      "vite/client"
+    "exclude": [
+        "node_modules",
+        "src/**/*.stories.ts"
     ],
-    "baseUrl": ".",
-    "skipLibCheck": true,
-    "allowSyntheticDefaultImports": true,
-    "allowUnreachableCode": false,
-    "declaration": false,
-    "experimentalDecorators": true,
-    "noUnusedLocals": false,
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
-    "outDir": "./types",
-    "rootDir": "./src",
-    "strict": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "moduleResolution": "node",
-    "forceConsistentCasingInFileNames": true,
-    "noImplicitAny": false,
-    "strictFunctionTypes": false,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "types/*.d.ts",
-    "src/**/*.ts",
-    "src/**/*.d.ts",
-    "src/**/*.tsx",
-    "src/**/*.vue"
-  ],
-  "exclude": [
-    "node_modules",
-    "src/**/*.stories.ts"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    }
-  ],
+    "references": [
+        {
+            "path": "./tsconfig.node.json"
+        }
+    ]
 }

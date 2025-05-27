@@ -1,9 +1,9 @@
-import {defineConfig, loadEnv} from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from "url";
 
-export default ({mode}) => {
-    process.env = {...process.env, ...loadEnv(mode, process.cwd())};
+export default ({ mode }) => {
+    process.env = { ...process.env, ...loadEnv(mode, process.cwd()) };
 
     // https://vitejs.dev/config/
     return defineConfig({
@@ -15,7 +15,7 @@ export default ({mode}) => {
         ],
         resolve: {
             alias: [
-                 { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
+                { find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) },
             ],
         },
         define: {
