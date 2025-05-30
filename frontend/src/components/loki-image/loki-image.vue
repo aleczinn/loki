@@ -11,7 +11,7 @@ const container = ref<HTMLDivElement | null>(null);
 const img = ref<HTMLImageElement | null>(null);
 
 interface Props {
-    src,
+    src: string,
     alt?: string,
     width?: string,
     height?: string,

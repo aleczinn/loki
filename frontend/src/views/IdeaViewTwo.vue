@@ -122,12 +122,11 @@
 </template>
 
 <script setup lang="ts">
-import {inject, ref} from "vue";
-import {AxiosInstance} from "axios";
-import {LokiImage} from "@/components/loki-image";
-import {LokiSidebar} from "@/components/loki-sidebar";
-
-const axios = inject<AxiosInstance>('axios');
+// import { inject } from "vue";
+import { ref } from "vue";
+// import type { AxiosInstance } from "axios";
+//
+// const axios = inject<AxiosInstance>('axios');
 
 const sidebarOpen = ref<boolean>(false);
 
@@ -231,7 +230,7 @@ const continueMovies = [
 .movie-title {
     @apply text-transparent font-bold uppercase;
     @apply text-3xl sm:text-4xl md:text-4xl lg:text-5xl;
-    @apply font-loki-funky;
+    @apply font-loki;
     background: url('/images/wall-texture.jpg') repeat-x 100% 100%;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;

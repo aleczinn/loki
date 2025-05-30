@@ -161,10 +161,10 @@
 </template>
 
 <script setup lang="ts">
-import {inject} from "vue";
-import {AxiosInstance} from "axios";
-
-const axios = inject<AxiosInstance>('axios');
+// import { inject } from "vue";
+// import type { AxiosInstance } from "axios";
+//
+// const axios = inject<AxiosInstance>('axios');
 
 const continueMovies = [
     {

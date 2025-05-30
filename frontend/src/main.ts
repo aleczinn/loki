@@ -1,11 +1,10 @@
-import {createApp} from 'vue'
+import { createApp } from 'vue'
+import './css/global.css'
+
 import App from './App.vue'
 import router from "./router"
 import i18n from "./i18n";
-
 import axios from './axios';
-
-import './css/global.css'
 
 const BASE_URL_DEV = '';
 const BASE_URL_PROD = '';

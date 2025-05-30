@@ -69,9 +69,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, VNode } from 'vue'
-import IconArrowLeft from "@/icons/icon-arrow-left.vue";
-import IconArrowRight from "@/icons/icon-arrow-right.vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, type VNode } from 'vue'
+import IconArrowRight from "../../icons/icon-arrow-right.vue";
+import IconArrowLeft from "../../icons/icon-arrow-left.vue";
 
 export interface ResponsiveConfig {
     autoplayDelay?: number
@@ -164,7 +164,7 @@ const slides = computed((): VNode[] => {
     const defaultSlot = slots.default?.()
     if (!defaultSlot) return []
 
-    return defaultSlot.filter(vnode =>
+    return defaultSlot.filter((vnode: any) =>
         vnode.type !== Comment &&
         (typeof vnode.type !== 'symbol' || vnode.children)
     )

@@ -30,6 +30,8 @@
             </div>
         </div>
     </nav>
+
+    {{ props.open }}
 </template>
 
 <script setup lang="ts">
