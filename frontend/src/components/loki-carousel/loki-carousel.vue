@@ -43,7 +43,7 @@
             </div>
 
             <!-- navigation arrows -->
-            <button v-if="config.arrows" @click="previousSlide(true)"
+            <button v-if="config.arrows" @click="previousSlide()"
                     :disabled="isNavigationDisabled.previous"
                     :class="['btn-arrow', 'btn-arrow-left', { 'btn-disabled': isNavigationDisabled.previous }]"
             >
@@ -51,7 +51,7 @@
             </button>
 
             <button v-if="config.arrows"
-                    @click="nextSlide(true)"
+                    @click="nextSlide()"
                     :disabled="isNavigationDisabled.next"
                     :class="['btn-arrow', 'btn-arrow-right', { 'btn-disabled': isNavigationDisabled.next }]"
             >
@@ -531,6 +531,7 @@ const handleDragMove = (e: TouchEvent | MouseEvent) => {
     dragCurrentX.value = 'touches' in e ? e.touches[0].clientX : e.clientX
 }
 
+// @ts-ignore
 const handleDragEnd = (e: TouchEvent | MouseEvent) => {
     if (!isDragging.value) return
 
