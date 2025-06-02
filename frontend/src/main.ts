@@ -6,8 +6,10 @@ import router from "./router"
 import i18n from "./i18n";
 import axios from './axios';
 
-const BASE_URL_DEV = '';
-const BASE_URL_PROD = '';
+console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+
+const BASE_URL_DEV = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const BASE_URL_PROD = '/api';
 
 // Font Awesome
 import { library } from '@fortawesome/fontawesome-svg-core';

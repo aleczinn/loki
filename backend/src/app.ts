@@ -7,6 +7,11 @@ import undefinedRouteHandler from "./middleware/undefined-route-handler";
 import dotenv from "dotenv";
 import path from "path";
 import mariadb from "mariadb";
+import * as process from "node:process";
+import console from "console";
+import * as test from "node:test";
+
+import testRoute from "./routes/test";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -20,13 +25,18 @@ export const database = mariadb.createPool({
 
 const app: Express = express();
 
-app.use(cors());
+app.use(cors({
+    origin: process.env.NODE_ENV === 'production'
+        ? false  // In Production handled by Nginx
+        : ['http://localhost:5173', 'http://localhost:3000'],
+    credentials: true
+}));
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
 /* Routes */
-
+app.use(testRoute);
 
 app.use(undefinedRouteHandler);
 app.use(errorHandler);

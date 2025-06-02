@@ -11,8 +11,10 @@ export default {
         app.config.globalProperties.$axios = axios.create({
             baseURL: options.baseUrl,
             headers: {
+                'Content-Type': 'application/json',
                 Authorization: options.token ? `Bearer ${options.token}` : '',
-            }
+            },
+            timeout: 10000 // 10-second timeout
         })
     }
 }

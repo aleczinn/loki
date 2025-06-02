@@ -1,15 +1,50 @@
-FROM node:19.9.0-alpine
+# Backend Production Dockerfile
+FROM node:18-alpine AS builder
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
-COPY ./backend/package*.json .
+# Kopiere package files vom Backend Ordner
+COPY backend/package*.json ./
 
-RUN npm install
+# Installiere alle Dependencies
+RUN npm ci
 
-COPY ./backend/ .
+# Kopiere Source Code
+COPY backend/ ./
 
+# Build TypeScript
 RUN npm run build
 
+# Production Stage
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Installiere dumb-init für besseres Signal Handling
+RUN apk add --no-cache dumb-init
+
+# Erstelle non-root user
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Kopiere package files
+COPY backend/package*.json ./
+
+# Installiere nur Production Dependencies
+RUN npm ci --only=production && \
+    npm cache clean --force
+
+# Kopiere gebaute Anwendung vom Builder
+COPY --chown=nodejs:nodejs --from=builder /app/dist ./dist
+
+# Wechsle zu non-root user
+USER nodejs
+
+# Exponiere Port
 EXPOSE 3000
 
-CMD npm start
+# Verwende dumb-init um Prozesse korrekt zu verwalten
+ENTRYPOINT ["dumb-init", "--"]
+
+# Starte die Anwendung (angepasst für TypeScript Build)
+CMD ["node", "dist/app.js"]
