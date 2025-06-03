@@ -9,7 +9,6 @@ import path from "path";
 import mariadb from "mariadb";
 import * as process from "node:process";
 import console from "console";
-import * as test from "node:test";
 
 import testRoute from "./routes/test";
 
@@ -27,9 +26,11 @@ const app: Express = express();
 
 app.use(cors({
     origin: process.env.NODE_ENV === 'production'
-        ? false  // In Production handled by Nginx
-        : ['http://localhost:5173', 'http://localhost:3000'],
-    credentials: true
+        ? false                     // nginx handles production
+        : 'http://localhost:5173',  // development frontend server
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(bodyParser.json());
