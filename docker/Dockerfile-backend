@@ -3,48 +3,48 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Kopiere package files vom Backend Ordner
+# copy package files from backend directory
 COPY backend/package*.json ./
 
-# Installiere alle Dependencies
+# install all dependencies
 RUN npm ci
 
-# Kopiere Source Code
+# copy source code
 COPY backend/ ./
 
-# Build TypeScript
+# build application
 RUN npm run build
 
-# Production Stage
+# production stage
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Installiere dumb-init für besseres Signal Handling
+# install dumb-init for better signal handling
 RUN apk add --no-cache dumb-init
 
-# Erstelle non-root user
+# create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
 
-# Kopiere package files
+# copy package files
 COPY backend/package*.json ./
 
-# Installiere nur Production Dependencies
+# install production dependencies only
 RUN npm ci --only=production && \
     npm cache clean --force
 
-# Kopiere gebaute Anwendung vom Builder
+# copy built application from builder
 COPY --chown=nodejs:nodejs --from=builder /app/dist ./dist
 
-# Wechsle zu non-root user
+# switch to non-root user
 USER nodejs
 
-# Exponiere Port
+# expose port
 EXPOSE 3000
 
-# Verwende dumb-init um Prozesse korrekt zu verwalten
+# use dumb-init to handle processes correctly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Starte die Anwendung (angepasst für TypeScript Build)
+# start the application
 CMD ["node", "dist/app.js"]

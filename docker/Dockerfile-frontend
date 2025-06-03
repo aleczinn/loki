@@ -3,42 +3,42 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Build-Argument für API URL
+# build-Argument for API URL
 ARG VITE_API_URL=/api
 
-# Kopiere package files vom frontend Ordner
+# copy package files vom frontend directory
 COPY frontend/package*.json ./
 
-# Installiere Dependencies
+# install deendencies
 RUN npm ci
 
-# Kopiere Source Code
+# copy source code
 COPY frontend/ ./
 
-# Setze Umgebungsvariable für Build
+# set enviroment variables for build
 ENV VITE_API_URL=$VITE_API_URL
 
-# Baue die Vue.js Anwendung
+# build application
 RUN npm run build
 
-# Production Stage mit Nginx
+# production Stage with Nginx
 FROM nginx:alpine
 
-# Installiere Tools für Health Check
+# install tools for health check
 RUN apk add --no-cache curl
 
-# Kopiere gebaute Anwendung vom Builder
+# copy built application from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Kopiere Nginx Konfiguration aus docker Ordner
+# copy nginx config from docker folder
 COPY docker/nginx.conf /etc/nginx/nginx.conf
 
-# Exponiere Ports
+# expose ports
 EXPOSE 80 443
 
-# Health Check
+# health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD curl -f http://localhost/ || exit 1
 
-# Starte Nginx
+# start nginx
 CMD ["nginx", "-g", "daemon off;"]
