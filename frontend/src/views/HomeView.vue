@@ -28,13 +28,18 @@ const axios = inject<AxiosInstance>('axios');
 const da = ref<any>();
 
 const fetchData = async () => {
-    const data = await axios?.get('/test');
+    try {
+        const response = await axios?.get('/test');
 
-    console.log(`fetch data: ${data}`);
-    da.value = data;
+        console.log('Response: ', response?.data);
+        da.value = response?.data;
+    } catch (error) {
+        console.error('Error fetching data: ', error);
+    }
 }
 
 onMounted(() => {
+    console.log('Axios base URL:', axios?.defaults.baseURL);
     fetchData();
 })
 </script>

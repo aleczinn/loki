@@ -27,7 +27,7 @@ export default ({ mode }: ConfigEnv) => {
         build: {
             rollupOptions: {
                 output: {
-                    manualChunks:{
+                    manualChunks: {
                         'vue-vendor': ['vue', 'vue-router'],
                         'i18n': ['vue-i18n']
                     }
