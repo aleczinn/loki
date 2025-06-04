@@ -15,7 +15,7 @@ services:
         networks:
             - loki-network
         volumes:
-            - ./data/database:/var/lib/mysql
+            - ./loki/database:/var/lib/mysql
             - ./database/scripts:/docker-entrypoint-initdb.d
 
     backend:
@@ -27,7 +27,13 @@ services:
         ports:
             - "3000:3000"
         environment:
-            - NODE_ENV=production
+            MEDIA_PATH: /media
+            TRANSCODE_PATH: /loki/transcode
+            CACHE_DIR: /loki/cache
+            METADATA_PATH: /loki/metadata
+            FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
+            NVIDIA_VISIBLE_DEVICES: all
+            NVIDIA_DRIVER_CAPABILITIES: all
         env_file:
             - .env
         networks:
@@ -38,6 +44,24 @@ services:
             timeout: 10s
             retries: 3
             start_period: 40s
+        volumes:
+            - ./loki/transcode:/loki/transcode:rw
+            - ./loki/cache:/loki/cache:rw
+            - ./loki/metadata:/loki/metadata:rw
+            - ${MEDIA_PATH}:/media:rw
+            # Hardware acceleration (intel/amd gpus)
+            - /dev/dri:/dev/dri
+        # GPU Support
+        devices:
+            - /dev/dri:/dev/dri
+        # NVIDIA GPU Support
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        -   driver: nvidia
+                            count: all
+                            capabilities: [ gpu, video, compute, utility ]
 
     frontend:
         build:

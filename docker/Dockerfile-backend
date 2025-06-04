@@ -20,12 +20,25 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# install dumb-init for better signal handling
-RUN apk add --no-cache dumb-init
+# install dumb-init for better signal handling and FFmpeg with hardware acceleration support
+RUN apk add --no-cache \
+    dumb-init \
+    ffmpeg \
+    ffmpeg-libs \
+    # Hardware acceleration drivers
+    intel-media-driver \
+    mesa-va-drivers \
+    mesa-vdpau-drivers \
+    # Additional tools that might be needed
+    mediainfo
 
 # create non-root user
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001
+
+# create directories for transcoding and cache
+RUN mkdir -p /loki/transcode /loki/cache /loki/metadata && \
+    chown -R nodejs:nodejs /loki
 
 # copy package files
 COPY backend/package*.json ./
