@@ -22,9 +22,9 @@ const routes = [
         component: () => import('../views/IdeaViewTwo.vue'),
     },
     {
-        path: "/test3",
-        name: "Test3",
-        component: () => import('../views/IdeaViewThree.vue'),
+        path: "/sandbox",
+        name: "Sandbox",
+        component: () => import('../views/SandboxView.vue'),
     },
     {
         path: "/:pathMatch(.*)*",
