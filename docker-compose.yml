@@ -1,23 +1,6 @@
 version: '3.8'
 
 services:
-    database:
-        image: mariadb
-        container_name: loki-database
-        restart: unless-stopped
-        environment:
-            MYSQL_DATABASE: ${DATABASE_NAME}
-            MYSQL_USER: ${DATABASE_USER}
-            MYSQL_PASSWORD: ${DATABASE_PASSWORD}
-            MYSQL_RANDOM_ROOT_PASSWORD: yes
-        ports:
-            - '3306:3306'
-        networks:
-            - loki-network
-        volumes:
-            - ./loki/database:/var/lib/mysql
-            - ./database/scripts:/docker-entrypoint-initdb.d
-
     backend:
         build:
             context: .
@@ -45,10 +28,10 @@ services:
             retries: 3
             start_period: 40s
         volumes:
+            - ${MEDIA_PATH}:/media:rw
             - ./loki/transcode:/loki/transcode:rw
             - ./loki/cache:/loki/cache:rw
             - ./loki/metadata:/loki/metadata:rw
-            - ${MEDIA_PATH}:/media:rw
             # Hardware acceleration (intel/amd gpus)
             - /dev/dri:/dev/dri
         # GPU Support
@@ -62,6 +45,23 @@ services:
                         -   driver: nvidia
                             count: all
                             capabilities: [ gpu, video, compute, utility ]
+
+    database:
+        image: mariadb
+        container_name: loki-database
+        restart: unless-stopped
+        environment:
+            MYSQL_DATABASE: ${DATABASE_NAME}
+            MYSQL_USER: ${DATABASE_USER}
+            MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+            MYSQL_RANDOM_ROOT_PASSWORD: yes
+        ports:
+            - '3306:3306'
+        networks:
+            - loki-network
+        volumes:
+            - ./loki/database:/var/lib/mysql
+            - ./database/scripts:/docker-entrypoint-initdb.d
 
     frontend:
         build:
