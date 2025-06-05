@@ -22,6 +22,11 @@ const routes = [
         component: () => import('../views/IdeaViewTwo.vue'),
     },
     {
+        path: "/player",
+        name: "Player",
+        component: () => import('../views/PlayerView.vue'),
+    },
+    {
         path: "/sandbox",
         name: "Sandbox",
         component: () => import('../views/SandboxView.vue'),

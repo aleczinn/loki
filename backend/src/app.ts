@@ -10,9 +10,10 @@ import mariadb from "mariadb";
 import * as process from "node:process";
 import console from "console";
 
-import testRoute from "./routes/test";
-
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
+
+import testRoute from "./routes/test";
+import mediaRoutes from "./routes/media";
 
 export const database = mariadb.createPool({
     host: process.env.DATABASE_HOST,
@@ -38,6 +39,7 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 /* Routes */
 app.use(testRoute);
+app.use(mediaRoutes);
 
 app.use(undefinedRouteHandler);
 app.use(errorHandler);

@@ -7,8 +7,26 @@
         <main class="flex-1 py-8">
             <div class="mx-auto max-w-[87rem]">
                 <!-- ADD CONTENT HERE -->
-                <p class="">asdas</p>
-                <p>Data: {{ da }}</p>
+                <h3 class="">Media Files</h3>
+
+                <div class="flex flex-col">
+                    <a v-for="media in mediaFiles" :key="media.id" @click="selectMedia(media)" class="hover:cursor-pointer">
+                        {{ media.name }}
+                    </a>
+                </div>
+
+
+                <hr class="my-8">
+                <p v-if="selectedMedia">Selected: {{ selectedMedia.name }}</p>
+                <hr>
+                <div class="w-full max-w-4xl mx-auto">
+                    <video
+                        ref="videoRef"
+                        class="w-full rounded shadow-lg"
+                        controls
+                        autoplay
+                    ></video>
+                </div>
             </div>
         </main>
 
@@ -19,33 +37,75 @@
 </template>
 
 <script setup lang="ts">
-import { inject, onMounted, ref } from "vue";
+import { computed, inject, onMounted, ref } from "vue";
 import { LokiHeader } from "../components/loki-header";
 import type { AxiosInstance } from "axios";
+import Hls from "hls.js";
 
 const axios = inject<AxiosInstance>('axios');
 
-const da = ref<any>();
+interface MediaFile {
+    id: string;
+    name: string;
+    path: string;
+    size: number;
+}
 
-const fetchData = async () => {
+const isLoading = ref(true);
+const hls = ref<Hls | null>(null)
+const mediaFiles = ref<MediaFile[]>([]);
+const selectedMedia = ref<MediaFile | null>(null);
+const videoRef = ref<HTMLVideoElement | null>(null)
+
+const loadMediaFiles = async () => {
+    isLoading.value = true;
+
     try {
-        const response = await axios?.get('/test');
+        const response = await axios?.get<MediaFile[]>('/media');
+        mediaFiles.value = response?.data || [];
+    } catch (err) {
+        console.error('Failed to load media files:', err);
+    } finally {
+        isLoading.value = false;
+    }
+}
 
-        console.log('Response: ', response?.data);
-        da.value = response?.data;
-    } catch (error) {
-        console.error('Error fetching data: ', error);
+const selectMedia = (media: MediaFile) => {
+    selectedMedia.value = media;
+    initHls(streamUrl());
+}
+
+const streamUrl = () => {
+    if (!selectedMedia.value) return '';
+    return `/api/media/${selectedMedia.value.id}/stream`;
+};
+
+function initHls(url: string) {
+    if (hls.value) {
+        hls.value.destroy()
+        hls.value = null
+    }
+
+    if (videoRef.value) {
+        if (Hls.isSupported()) {
+            hls.value = new Hls()
+            hls.value.loadSource(url)
+            hls.value.attachMedia(videoRef.value)
+            hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+                videoRef.value!.play()
+            })
+        } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
+            videoRef.value.src = url
+            videoRef.value.play()
+        }
     }
 }
 
 onMounted(() => {
-    console.log('Axios base URL:', axios?.defaults.baseURL);
-    fetchData();
+    loadMediaFiles();
 })
 </script>
 
 <style scoped lang="postcss">
-.container {
-    @apply w-full h-full flex justify-center items-center;
-}
+
 </style>
