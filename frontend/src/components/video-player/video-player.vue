@@ -52,15 +52,23 @@ const initializePlayer = () => {
 
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
             loading.value = false;
-            videoElement.value?.play();
         });
 
         hls.on(Hls.Events.ERROR, (_, data) => {
-            if (data.fatal) {
+            console.error('HLS Error:', data);
+
+            if (data.details === 'manifestLoadError' || data.details === 'manifestLoadTimeOut') {
+                // Retry loading manifest after a short delay
+                setTimeout(() => {
+                    hls?.loadSource(props.playlistUrl);
+                }, 2000);
+            } else if (data.fatal) {
                 switch (data.type) {
                     case Hls.ErrorTypes.NETWORK_ERROR:
                         console.error('Fatal network error encountered, try to recover');
-                        hls?.startLoad();
+                        setTimeout(() => {
+                            hls?.startLoad();
+                        }, 1000);
                         break;
                     case Hls.ErrorTypes.MEDIA_ERROR:
                         console.error('Fatal media error encountered, try to recover');
@@ -68,7 +76,7 @@ const initializePlayer = () => {
                         break;
                     default:
                         console.error('Fatal error, cannot recover');
-                        hls?.destroy();
+                        loading.value = false;
                         break;
                 }
             }

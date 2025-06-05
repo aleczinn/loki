@@ -8,22 +8,20 @@
 
                 <!-- Media Grid -->
                 <div v-if="!selectedMedia" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    <div
-                        v-for="media in mediaFiles"
-                        :key="media.id"
-                        @click="selectMedia(media)"
-                        class="media-card"
-                    >
-                        <div class="aspect-video bg-background-darker rounded-lg flex items-center justify-center">
-                            <font-awesome-icon :icon="getMediaIcon(media.extension)" class="text-4xl text-gray-darker"/>
+                    <div v-for="media in mediaFiles" :key="media.id"
+                         class="aspect-[16/9] flex flex-col cursor-pointer transition-transform duration-200 hover:scale-105"
+                         @click="selectMedia(media)">
+
+                        <div class="flex items-center justify-center bg-background-lightest rounded-lg w-full h-full">
+                            <font-awesome-icon :icon="getMediaIcon(media.extension)" class="w-8 h-8 text-gray-darker"/>
                         </div>
                         <p class="mt-2 text-white text-sm truncate">{{ media.name }}</p>
-                        <p class="text-xs text-gray">{{ formatFileSize(media.size) }}</p>
+                        <p class="text-xs text-gray">{{ formatFileSize(media.size) }} | {{media.extension}}</p>
                     </div>
                 </div>
 
                 <!-- Video Player -->
-                <div v-else class="player-container">
+                <div v-else class="w-full">
                     <div class="flex items-center mb-4">
                         <button @click="closePlayer" class="text-white hover:text-primary mr-4">
                             <font-awesome-icon icon="arrow-left" class="text-xl"/>
@@ -110,11 +108,5 @@ onMounted(() => {
 </script>
 
 <style scoped lang="postcss">
-.media-card {
-    @apply cursor-pointer transition-transform duration-200 hover:scale-105;
-}
 
-.player-container {
-    @apply w-full;
-}
 </style>

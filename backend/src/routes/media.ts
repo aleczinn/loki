@@ -38,11 +38,6 @@ router.post('/api/stream/start', async (req: Request, res: Response, next: NextF
 
         const session = await streamingService.createStreamSession(fullPath);
 
-        // Start transcoding in background
-        streamingService.startTranscoding(session).catch(err => {
-            console.error('Transcoding error:', err);
-        });
-
         res.json({
             sessionId: session.id,
             playlistUrl: `/api/stream/${session.id}/playlist.m3u8`
@@ -92,8 +87,13 @@ router.get('/api/stream/:sessionId/:segment', async (req: Request, res: Response
 });
 
 // Cleanup old sessions periodically
-// setInterval(() => {
-//     streamingService.cleanupOldSessions();
-// }, 60 * 60 * 1000); // Run every hour
+setInterval(() => {
+    streamingService.cleanupOldSessions();
+}, 60 * 60 * 1000); // Run every hour
+
+// Health check endpoint
+router.get('/health', (req: Request, res: Response) => {
+    res.status(200).send('OK');
+});
 
 export default router;

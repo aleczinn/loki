@@ -15,8 +15,12 @@ services:
             CACHE_DIR: /loki/cache
             METADATA_PATH: /loki/metadata
             FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
+            # NVIDIA specific
             NVIDIA_VISIBLE_DEVICES: all
             NVIDIA_DRIVER_CAPABILITIES: all
+            # Wichtig für CUDA
+            CUDA_VISIBLE_DEVICES: 0
+            LD_LIBRARY_PATH: /usr/local/cuda/lib64:${LD_LIBRARY_PATH}
         env_file:
             - .env
         networks:
@@ -32,19 +36,25 @@ services:
             - ./loki/transcode:/loki/transcode:rw
             - ./loki/cache:/loki/cache:rw
             - ./loki/metadata:/loki/metadata:rw
-            # Hardware acceleration (intel/amd gpus)
+            # Hardware acceleration devices
             - /dev/dri:/dev/dri
-        # GPU Support
+            # NVIDIA devices
+            - /dev/nvidia0:/dev/nvidia0
+            - /dev/nvidiactl:/dev/nvidiactl
+            - /dev/nvidia-modeset:/dev/nvidia-modeset
+            - /dev/nvidia-uvm:/dev/nvidia-uvm
+            - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+        # Devices for Hardware-Acceleration
         devices:
             - /dev/dri:/dev/dri
-        # NVIDIA GPU Support
+        # GPU Support for Docker Compose 3.x
         deploy:
             resources:
                 reservations:
                     devices:
-                        -   driver: nvidia
-                            count: all
-                            capabilities: [ gpu, video, compute, utility ]
+                        - driver: nvidia
+                          count: all
+                          capabilities: [gpu, video, compute, utility]
 
     database:
         image: mariadb
