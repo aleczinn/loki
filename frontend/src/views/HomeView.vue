@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, onMounted, ref } from "vue";
+import { inject, onMounted, ref } from "vue";
 import { LokiHeader } from "../components/loki-header";
 import type { AxiosInstance } from "axios";
 import Hls from "hls.js";
