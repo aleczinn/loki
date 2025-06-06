@@ -51,13 +51,17 @@ router.post('/api/stream/start', async (req: Request, res: Response, next: NextF
 router.get('/api/stream/:sessionId/playlist.m3u8', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { sessionId } = req.params;
-        const playlist = await streamingService.getPlaylist(sessionId);
+        let playlist = await streamingService.getPlaylist(sessionId);
 
         if (!playlist) {
             return next(createHttpError(404, 'Playlist not found'));
         }
 
+        // Fix segment URLs to include full path
+        playlist = playlist.replace(/segment_(\d+)\.ts/g, `/api/stream/${sessionId}/segment_$1.ts`);
+
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'no-cache');
         res.send(playlist);
     } catch (error) {
         next(createHttpError(500, 'Failed to get playlist'));
@@ -65,23 +69,24 @@ router.get('/api/stream/:sessionId/playlist.m3u8', async (req: Request, res: Res
 });
 
 // Get HLS segment
-router.get('/api/stream/:sessionId/:segment', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/api/stream/:sessionId/segment_:segmentId.ts', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { sessionId, segment } = req.params;
+        const { sessionId, segmentId } = req.params;
+        const segmentName = `segment_${segmentId}.ts`;
 
-        if (!segment.endsWith('.ts')) {
-            return next(createHttpError(400, 'Invalid segment format'));
-        }
+        console.log(`Requesting segment: ${segmentName} for session: ${sessionId}`);
 
-        const segmentData = await streamingService.getSegment(sessionId, segment);
+        const segmentData = await streamingService.getSegment(sessionId, segmentName);
 
         if (!segmentData) {
             return next(createHttpError(404, 'Segment not found'));
         }
 
         res.setHeader('Content-Type', 'video/mp2t');
+        res.setHeader('Cache-Control', 'max-age=3600');
         res.send(segmentData);
     } catch (error) {
+        console.error('Error serving segment:', error);
         next(createHttpError(500, 'Failed to get segment'));
     }
 });

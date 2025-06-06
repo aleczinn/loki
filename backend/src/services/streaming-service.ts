@@ -3,12 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { promisify } from 'util';
+import { EventEmitter } from 'events';
 
 const mkdir = promisify(fs.mkdir);
 const access = promisify(fs.access);
 const readFile = promisify(fs.readFile);
-const writeFile = promisify(fs.writeFile);
-const unlink = promisify(fs.unlink);
+const readdir = promisify(fs.readdir);
 
 export interface StreamSession {
     id: string;
@@ -17,22 +17,23 @@ export interface StreamSession {
     playlist: string;
     createdAt: Date;
     duration?: number;
-    segmentDuration: number;
-    isTranscoding: Map<number, boolean>;
+    isTranscoding: boolean;
+    isReady: boolean;
+    segmentCount: number;
 }
 
-export class StreamingService {
+export class StreamingService extends EventEmitter {
     private readonly transcodePath: string;
     private readonly cacheDuration: number;
     private sessions: Map<string, StreamSession> = new Map();
     private readonly hwAccel: string;
 
     constructor(transcodePath: string = '/loki/transcode', cacheDuration: number = 24) {
+        super();
         this.transcodePath = transcodePath;
         this.cacheDuration = cacheDuration;
         this.hwAccel = process.env.FFMPEG_HWACCEL || 'auto';
 
-        // Log available encoders on startup
         this.logAvailableEncoders();
     }
 
@@ -47,66 +48,72 @@ export class StreamingService {
         });
     }
 
-    private getFFmpegCommand(inputPath: string): ffmpeg.FfmpegCommand {
+    private getFFmpegCommand(inputPath: string, outputPath: string): ffmpeg.FfmpegCommand {
         const command = ffmpeg(inputPath);
+        const playlistPath = path.join(outputPath, 'playlist.m3u8');
+        const segmentPath = path.join(outputPath, 'segment_%03d.ts');
 
-        // Hardware acceleration based on environment
+        // Input options for better seeking
+        command.inputOptions([
+            '-analyzeduration', '100000000',
+            '-probesize', '100000000'
+        ]);
+
+        // Try hardware acceleration
+        let videoCodec = 'libx264';
+        let videoOptions = ['-preset', 'veryfast'];
+
         if (this.hwAccel === 'nvenc' || this.hwAccel === 'auto') {
-            // Try NVIDIA first
-            command
-                .inputOptions([
+            try {
+                command.inputOptions([
                     '-hwaccel', 'cuda',
                     '-hwaccel_output_format', 'cuda'
-                ])
-                .videoCodec('h264_nvenc')
-                .outputOptions([
+                ]);
+                videoCodec = 'h264_nvenc';
+                videoOptions = [
                     '-preset', 'p4',
                     '-tune', 'll',
-                    '-rc', 'vbr',
-                    '-b:v', '2M',
-                    '-maxrate', '3M',
-                    '-bufsize', '6M'
-                ]);
+                    '-rc', 'vbr'
+                ];
+                console.log('Using NVIDIA hardware acceleration');
+            } catch (error) {
+                console.log('NVIDIA not available, using software encoding');
+            }
         } else if (this.hwAccel === 'qsv') {
-            // Intel QuickSync
-            command
-                .inputOptions([
+            try {
+                command.inputOptions([
                     '-hwaccel', 'qsv',
-                    '-hwaccel_device', '/dev/dri/renderD128',
-                    '-hwaccel_output_format', 'qsv'
-                ])
-                .videoCodec('h264_qsv')
-                .outputOptions([
-                    '-preset', 'faster',
-                    '-b:v', '2M',
-                    '-maxrate', '3M',
-                    '-bufsize', '6M'
+                    '-hwaccel_device', '/dev/dri/renderD128'
                 ]);
-        } else {
-            // Software encoding
-            command
-                .videoCodec('libx264')
-                .outputOptions([
-                    '-preset', 'veryfast',
-                    '-b:v', '2M',
-                    '-maxrate', '3M',
-                    '-bufsize', '6M'
-                ]);
+                videoCodec = 'h264_qsv';
+                videoOptions = ['-preset', 'faster'];
+                console.log('Using Intel QuickSync');
+            } catch (error) {
+                console.log('QuickSync not available, using software encoding');
+            }
         }
 
-        // Common options
         command
+            .videoCodec(videoCodec)
             .audioCodec('aac')
-            .audioBitrate('128k')
-            .audioChannels(2)
             .outputOptions([
+                ...videoOptions,
+                '-b:v', '2M',
+                '-maxrate', '3M',
+                '-bufsize', '6M',
+                '-b:a', '128k',
+                '-ac', '2',
                 '-pix_fmt', 'yuv420p',
                 '-profile:v', 'baseline',
                 '-level', '3.0',
-                '-movflags', '+faststart',
-                '-g', '30',
-                '-sc_threshold', '0'
-            ]);
+                '-start_number', '0',
+                '-hls_time', '10',
+                '-hls_list_size', '0',
+                '-hls_segment_filename', segmentPath,
+                '-hls_playlist_type', 'vod',
+                '-f', 'hls'
+            ])
+            .output(playlistPath);
 
         return command;
     }
@@ -124,14 +131,22 @@ export class StreamingService {
     }
 
     async createStreamSession(filePath: string): Promise<StreamSession> {
-        const sessionId = crypto.createHash('md5').update(filePath + Date.now()).digest('hex');
+        // Check if we already have a session for this file
+        const existingSession = Array.from(this.sessions.values())
+            .find(s => s.filePath === filePath && s.isReady);
+
+        if (existingSession) {
+            console.log('Reusing existing session:', existingSession.id);
+            return existingSession;
+        }
+
+        const sessionId = crypto.createHash('md5').update(filePath).digest('hex');
         const outputPath = path.join(this.transcodePath, sessionId);
         const playlistPath = path.join(outputPath, 'playlist.m3u8');
 
         await mkdir(outputPath, { recursive: true });
 
         const duration = await this.getVideoDuration(filePath);
-        console.log(`Video duration: ${duration} seconds`);
 
         const session: StreamSession = {
             id: sessionId,
@@ -140,156 +155,152 @@ export class StreamingService {
             playlist: playlistPath,
             createdAt: new Date(),
             duration,
-            segmentDuration: 10,
-            isTranscoding: new Map()
+            isTranscoding: false,
+            isReady: false,
+            segmentCount: 0
         };
 
         this.sessions.set(sessionId, session);
 
-        // Generate master playlist
-        await this.generatePlaylist(session);
-
-        // Start transcoding first few segments
-        this.preTranscodeSegments(session, 3);
+        // Start transcoding in background
+        this.startTranscoding(session);
 
         return session;
     }
 
-    private async generatePlaylist(session: StreamSession): Promise<void> {
-        if (!session.duration) return;
+    private async startTranscoding(session: StreamSession): Promise<void> {
+        if (session.isTranscoding) return;
 
-        const segmentCount = Math.ceil(session.duration / session.segmentDuration);
-        let playlist = '#EXTM3U\n';
-        playlist += '#EXT-X-VERSION:3\n';
-        playlist += '#EXT-X-TARGETDURATION:' + session.segmentDuration + '\n';
-        playlist += '#EXT-X-MEDIA-SEQUENCE:0\n';
+        session.isTranscoding = true;
+        console.log(`Starting full transcoding for session ${session.id}`);
 
-        for (let i = 0; i < segmentCount; i++) {
-            const segmentDuration = Math.min(
-                session.segmentDuration,
-                session.duration - (i * session.segmentDuration)
-            );
-            playlist += `#EXTINF:${segmentDuration.toFixed(6)},\n`;
-            playlist += `segment_${i.toString().padStart(3, '0')}.ts\n`;
-        }
+        const command = this.getFFmpegCommand(session.filePath, session.outputPath);
 
-        playlist += '#EXT-X-ENDLIST\n';
+        command
+            .on('start', (cmd) => {
+                console.log('FFmpeg started with command:', cmd);
+            })
+            .on('progress', (progress) => {
+                if (progress.percent) {
+                    console.log(`Transcoding progress: ${progress.percent.toFixed(1)}%`);
 
-        await writeFile(session.playlist, playlist);
-        console.log(`Playlist generated with ${segmentCount} segments`);
-    }
+                    // Check for new segments
+                    this.updateSegmentCount(session);
+                }
+            })
+            .on('error', (err) => {
+                console.error('FFmpeg error:', err.message);
+                session.isTranscoding = false;
+                session.isReady = false;
+            })
+            .on('end', async () => {
+                console.log('Transcoding completed');
+                session.isTranscoding = false;
+                session.isReady = true;
 
-    private async preTranscodeSegments(session: StreamSession, count: number): Promise<void> {
-        for (let i = 0; i < count; i++) {
-            this.transcodeSegment(session.id, i).catch(err => {
-                console.error(`Failed to pre-transcode segment ${i}:`, err);
+                // Final segment count update
+                await this.updateSegmentCount(session);
             });
-        }
+
+        command.run();
     }
 
-    async transcodeSegment(sessionId: string, segmentIndex: number): Promise<void> {
-        const session = this.sessions.get(sessionId);
-        if (!session) throw new Error('Session not found');
-
-        const segmentPath = path.join(session.outputPath, `segment_${segmentIndex.toString().padStart(3, '0')}.ts`);
-
-        // Check if already transcoding
-        if (session.isTranscoding.get(segmentIndex)) {
-            console.log(`Segment ${segmentIndex} is already being transcoded`);
-            return;
-        }
-
-        // Check if segment already exists
+    private async updateSegmentCount(session: StreamSession): Promise<void> {
         try {
-            await access(segmentPath);
-            console.log(`Segment ${segmentIndex} already exists`);
-            return;
+            const files = await readdir(session.outputPath);
+            const segments = files.filter(f => f.match(/segment_\d+\.ts/));
+            const newCount = segments.length;
+
+            if (newCount > session.segmentCount) {
+                session.segmentCount = newCount;
+                console.log(`Session ${session.id}: ${newCount} segments available`);
+                this.emit('segmentsReady', session.id, newCount);
+            }
         } catch (error) {
-            // Segment doesn't exist, transcode it
+            // Directory might not exist yet
         }
-
-        session.isTranscoding.set(segmentIndex, true);
-
-        const startTime = segmentIndex * session.segmentDuration;
-        const duration = Math.min(session.segmentDuration, (session.duration || 0) - startTime);
-
-        console.log(`Transcoding segment ${segmentIndex} (start: ${startTime}s, duration: ${duration}s)`);
-
-        return new Promise((resolve, reject) => {
-            const command = this.getFFmpegCommand(session.filePath);
-
-            command
-                .seekInput(startTime)
-                .duration(duration)
-                .format('mpegts')
-                .on('start', (cmd) => {
-                    console.log('Started ffmpeg:', cmd);
-                })
-                .on('progress', (progress) => {
-                    console.log(`Segment ${segmentIndex}: ${progress.percent?.toFixed(1)}%`);
-                })
-                .on('error', (err) => {
-                    session.isTranscoding.set(segmentIndex, false);
-                    console.error(`Error transcoding segment ${segmentIndex}:`, err);
-                    reject(err);
-                })
-                .on('end', () => {
-                    session.isTranscoding.set(segmentIndex, false);
-                    console.log(`Segment ${segmentIndex} transcoded successfully`);
-
-                    // Pre-transcode next segment
-                    const nextIndex = segmentIndex + 3;
-                    if (session.duration && nextIndex * session.segmentDuration < session.duration) {
-                        this.transcodeSegment(sessionId, nextIndex).catch(console.error);
-                    }
-
-                    resolve();
-                })
-                .save(segmentPath);
-        });
     }
 
     async getPlaylist(sessionId: string): Promise<string | null> {
         const session = this.sessions.get(sessionId);
         if (!session) return null;
 
+        // Wait a bit for initial segments to be ready
+        if (!session.isReady && session.segmentCount < 3) {
+            console.log('Waiting for initial segments...');
+            let attempts = 0;
+            while (session.segmentCount < 3 && attempts < 30) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await this.updateSegmentCount(session);
+                attempts++;
+            }
+        }
+
         try {
-            return await readFile(session.playlist, 'utf8');
+            const playlist = await readFile(session.playlist, 'utf8');
+
+            // If playlist exists but is incomplete, generate a partial one
+            if (!playlist.includes('#EXT-X-ENDLIST') && session.segmentCount > 0) {
+                return this.generatePartialPlaylist(session);
+            }
+
+            return playlist;
         } catch (error) {
-            console.error('Error reading playlist:', error);
+            // If no playlist yet, generate one based on available segments
+            if (session.segmentCount > 0) {
+                return this.generatePartialPlaylist(session);
+            }
             return null;
         }
     }
 
+    private async generatePartialPlaylist(session: StreamSession): Promise<string> {
+        let playlist = '#EXTM3U\n';
+        playlist += '#EXT-X-VERSION:3\n';
+        playlist += '#EXT-X-TARGETDURATION:10\n';
+        playlist += '#EXT-X-MEDIA-SEQUENCE:0\n';
+
+        for (let i = 0; i < session.segmentCount; i++) {
+            playlist += `#EXTINF:10.0,\n`;
+            playlist += `segment_${i.toString().padStart(3, '0')}.ts\n`;
+        }
+
+        // Only add ENDLIST if transcoding is complete
+        if (session.isReady && !session.isTranscoding) {
+            playlist += '#EXT-X-ENDLIST\n';
+        }
+
+        return playlist;
+    }
+
     async getSegment(sessionId: string, segmentName: string): Promise<Buffer | null> {
         const session = this.sessions.get(sessionId);
-        if (!session) return null;
+        if (!session) {
+            console.error(`Session ${sessionId} not found`);
+            return null;
+        }
 
-        const match = segmentName.match(/segment_(\d+)\.ts/);
-        if (!match) return null;
-
-        const segmentIndex = parseInt(match[1], 10);
         const segmentPath = path.join(session.outputPath, segmentName);
 
-        // Wait for segment if it's being transcoded
-        let attempts = 0;
-        while (session.isTranscoding.get(segmentIndex) && attempts < 30) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            attempts++;
-        }
-
-        // Try to transcode if not exists
         try {
-            await access(segmentPath);
+            const buffer = await readFile(segmentPath);
+            console.log(`Serving segment ${segmentName} (${buffer.length} bytes)`);
+            return buffer;
         } catch (error) {
-            console.log(`Segment ${segmentIndex} not found, transcoding on demand`);
-            await this.transcodeSegment(sessionId, segmentIndex);
-        }
+            console.error(`Segment ${segmentName} not found`);
 
-        try {
-            return await readFile(segmentPath);
-        } catch (error) {
-            console.error('Error reading segment:', error);
+            // Wait a bit if segment is being transcoded
+            if (session.isTranscoding) {
+                console.log('Waiting for segment to be transcoded...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                try {
+                    return await readFile(segmentPath);
+                } catch (error) {
+                    return null;
+                }
+            }
+
             return null;
         }
     }
@@ -302,6 +313,7 @@ export class StreamingService {
             if (now.getTime() - session.createdAt.getTime() > maxAge) {
                 fs.rmSync(session.outputPath, { recursive: true, force: true });
                 this.sessions.delete(id);
+                console.log(`Cleaned up session ${id}`);
             }
         });
     }
