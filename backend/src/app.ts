@@ -34,6 +34,18 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+// Zusätzliche CORS Headers für Streaming
+app.use((req, res, next) => {
+    // CORS Headers für HLS Streaming
+    if (req.path.includes('/api/stream/')) {
+        res.header('Access-Control-Allow-Origin', '*');
+        res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.header('Access-Control-Allow-Headers', 'Range');
+        res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+    }
+    next();
+});
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 

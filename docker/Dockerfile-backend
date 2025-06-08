@@ -1,62 +1,59 @@
-# Backend Production Dockerfile
-FROM node:18-alpine AS builder
+# Backend Production Dockerfile with NVIDIA Support
+FROM nvidia/cuda:12.9.0-runtime-ubuntu22.04 AS base
 
-WORKDIR /app
-
-# copy package files from backend directory
-COPY backend/package*.json ./
-
-# install all dependencies
-RUN npm ci
-
-# copy source code
-COPY backend/ ./
-
-# build application
-RUN npm run build
-
-# production stage
-FROM node:18-alpine
-
-WORKDIR /app
-
-# install dumb-init for better signal handling and FFmpeg with hardware acceleration support
-RUN apk add --no-cache \
+# Install Node.js and system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
     dumb-init \
+    ca-certificates \
+    build-essential \
+    mediainfo \
+    # FFmpeg with GPU support
     ffmpeg \
-    ffmpeg-libs \
-    # hardware acceleration drivers
-    intel-media-driver \
-    mesa-va-gallium \
-    # additional tools that might be needed
-    mediainfo
+    # Intel QuickSync für moderne GPUs (i9-13900K)
+    intel-media-va-driver-non-free \
+    vainfo \
+    && rm -rf /var/lib/apt/lists/*
 
-# create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001
+# Install Node.js 18
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
 
-# create directories for transcoding and cache
+# Create app directory
+WORKDIR /app
+
+# Create non-root user
+RUN groupadd -g 1001 nodejs && \
+    useradd -u 1001 -g nodejs -s /bin/bash -m nodejs
+
+# Create directories for transcoding and cache
 RUN mkdir -p /loki/transcode /loki/cache /loki/metadata && \
     chown -R nodejs:nodejs /loki
 
-# copy package files
+# Copy package files
 COPY backend/package*.json ./
 
-# install production dependencies only
+# Install dependencies
 RUN npm ci --only=production && \
     npm cache clean --force
 
-# copy built application from builder
-COPY --chown=nodejs:nodejs --from=builder /app/dist ./dist
+# Copy application files
+COPY --chown=nodejs:nodejs backend/ ./
 
-# switch to non-root user
+# Build TypeScript
+RUN npm ci && \
+    npm run build && \
+    npm prune --production
+
+# Switch to non-root user
 USER nodejs
 
-# expose port
+# Expose port
 EXPOSE 3000
 
-# use dumb-init to handle processes correctly
+# Use dumb-init to handle processes correctly
 ENTRYPOINT ["dumb-init", "--"]
 
-# start the application
+# Start the application
 CMD ["node", "dist/app.js"]
