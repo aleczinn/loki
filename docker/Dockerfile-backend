@@ -1,5 +1,5 @@
 # Backend Production Dockerfile with NVIDIA Support
-FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04 AS base
+FROM nvidia/cuda:12.9.0-runtime-ubuntu22.04 AS base
 
 # Install Node.js and system dependencies
 RUN apt-get update && apt-get install -y \
@@ -8,10 +8,10 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     build-essential \
     mediainfo \
-    # FFmpeg with NVIDIA support
+    # FFmpeg with GPU support
     ffmpeg \
-    # Intel QuickSync support
-    intel-media-va-driver \
+    # Intel QuickSync für moderne GPUs (i9-13900K)
+    intel-media-va-driver-non-free \
     vainfo \
     && rm -rf /var/lib/apt/lists/*
 

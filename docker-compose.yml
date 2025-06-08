@@ -6,21 +6,8 @@ services:
             context: .
             dockerfile: ./docker/Dockerfile-backend
         container_name: loki-backend
-        restart: unless-stopped
         ports:
             - "3000:3000"
-        environment:
-            MEDIA_PATH: /media
-            TRANSCODE_PATH: /loki/transcode
-            CACHE_DIR: /loki/cache
-            METADATA_PATH: /loki/metadata
-            FFMPEG_HWACCEL: ${FFMPEG_HWACCEL:-auto}
-            # NVIDIA specific
-            NVIDIA_VISIBLE_DEVICES: all
-            NVIDIA_DRIVER_CAPABILITIES: all
-            # Wichtig für CUDA
-            CUDA_VISIBLE_DEVICES: 0
-            LD_LIBRARY_PATH: /usr/local/cuda/lib64:${LD_LIBRARY_PATH}
         env_file:
             - .env
         networks:
@@ -36,25 +23,30 @@ services:
             - ./loki/transcode:/loki/transcode:rw
             - ./loki/cache:/loki/cache:rw
             - ./loki/metadata:/loki/metadata:rw
-            # Hardware acceleration devices
-            - /dev/dri:/dev/dri
-            # NVIDIA devices
-            - /dev/nvidia0:/dev/nvidia0
-            - /dev/nvidiactl:/dev/nvidiactl
-            - /dev/nvidia-modeset:/dev/nvidia-modeset
-            - /dev/nvidia-uvm:/dev/nvidia-uvm
-            - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
-        # Devices for Hardware-Acceleration
-        devices:
-            - /dev/dri:/dev/dri
-        # GPU Support for Docker Compose 3.x
+        environment:
+            - NODE_ENV=production
+            - FFMPEG_HWACCEL=${FFMPEG_HWACCEL:-auto}
+            # NVIDIA GPU Support
+            - NVIDIA_VISIBLE_DEVICES=all
+            - NVIDIA_DRIVER_CAPABILITIES=video,compute,utility
+            # Intel QuickSync Support
+            - INTEL_MEDIA_RUNTIME=1
+        # User für Berechtigungen
+        user: "1001:1001"
+        # GPU Support für Docker Compose 3.8+
         deploy:
             resources:
                 reservations:
                     devices:
-                        - driver: nvidia
-                          count: all
-                          capabilities: [gpu, video, compute, utility]
+                        -   driver: nvidia
+                            count: 1
+                            capabilities: [ gpu ]
+        # Hardware Device Mappings für Intel QuickSync
+        devices:
+            - /dev/dri:/dev/dri
+        # Alternative: Privileged für GPU-Zugriff (falls nötig)
+        # privileged: true
+        restart: unless-stopped
 
     database:
         image: mariadb

@@ -26,7 +26,7 @@ export class StreamingService extends EventEmitter {
     private readonly transcodePath: string;
     private readonly cacheDuration: number;
     private sessions: Map<string, StreamSession> = new Map();
-    private readonly hwAccel: string;
+    private hwAccel: string;
 
     constructor(transcodePath: string = '/loki/transcode', cacheDuration: number = 24) {
         super();
@@ -35,6 +35,14 @@ export class StreamingService extends EventEmitter {
         this.hwAccel = process.env.FFMPEG_HWACCEL || 'auto';
 
         this.logAvailableEncoders();
+
+        // Auto-detect wenn 'auto' gesetzt ist
+        if (this.hwAccel === 'auto') {
+            this.detectHardwareAcceleration().then(detected => {
+                this.hwAccel = detected;
+                console.log(`Auto-detected hardware acceleration: ${detected}`);
+            });
+        }
     }
 
     private async logAvailableEncoders(): Promise<void> {
@@ -46,6 +54,42 @@ export class StreamingService extends EventEmitter {
                 });
             }
         });
+    }
+
+    private async detectHardwareAcceleration(): Promise<string> {
+        const { exec } = require('child_process');
+        const { promisify } = require('util');
+        const execAsync = promisify(exec);
+
+        // Test NVIDIA
+        try {
+            await execAsync('ffmpeg -f lavfi -i testsrc=duration=1:size=320x240 -c:v h264_nvenc -f null - 2>&1');
+            console.log('NVIDIA NVENC detected and working');
+            return 'nvenc';
+        } catch (error) {
+            console.log('NVIDIA NVENC not available');
+        }
+
+        // Test Intel QSV
+        try {
+            await execAsync('ffmpeg -init_hw_device qsv=hw -filter_hw_device hw -f lavfi -i testsrc=duration=1:size=320x240 -vf hwupload=extra_hw_frames=64,format=qsv -c:v h264_qsv -f null - 2>&1');
+            console.log('Intel QSV detected and working');
+            return 'qsv';
+        } catch (error) {
+            console.log('Intel QSV not available');
+        }
+
+        // Test VAAPI
+        try {
+            await execAsync('ffmpeg -vaapi_device /dev/dri/renderD128 -f lavfi -i testsrc=duration=1:size=320x240 -vf format=nv12,hwupload -c:v h264_vaapi -f null - 2>&1');
+            console.log('VAAPI detected and working');
+            return 'vaapi';
+        } catch (error) {
+            console.log('VAAPI not available');
+        }
+
+        console.log('No hardware acceleration available, using CPU');
+        return 'none';
     }
 
     private getFFmpegCommand(inputPath: string, outputPath: string): ffmpeg.FfmpegCommand {
@@ -140,7 +184,7 @@ export class StreamingService extends EventEmitter {
             return existingSession;
         }
 
-        const sessionId = crypto.createHash('md5').update(filePath).digest('hex');
+        const sessionId = crypto.createHash('md5').update(filePath + Date.now()).digest('hex');
         const outputPath = path.join(this.transcodePath, sessionId);
         const playlistPath = path.join(outputPath, 'playlist.m3u8');
 
