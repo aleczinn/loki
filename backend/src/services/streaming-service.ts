@@ -105,7 +105,7 @@ export class StreamingService extends EventEmitter {
 
         // Try hardware acceleration
         let videoCodec = 'libx264';
-        let videoOptions = ['-preset', 'veryfast'];
+        let videoOptions = ['-preset', 'medium'];
 
         if (this.hwAccel === 'nvenc' || this.hwAccel === 'auto') {
             try {
@@ -142,9 +142,9 @@ export class StreamingService extends EventEmitter {
             .audioCodec('aac')
             .outputOptions([
                 ...videoOptions,
-                '-b:v', '2M',
-                '-maxrate', '3M',
-                '-bufsize', '6M',
+                '-b:v', '6000k',
+                '-maxrate', '10000k',
+                '-bufsize', '20000k',
                 '-b:a', '128k',
                 '-ac', '2',
                 '-pix_fmt', 'yuv420p',

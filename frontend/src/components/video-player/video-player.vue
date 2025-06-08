@@ -6,6 +6,7 @@
             controls
             @loadedmetadata="onLoadedMetadata"
             @error="onError"
+            autoplay
         ></video>
         <div v-if="loading" class="loading-overlay">
             <div class="spinner"></div>

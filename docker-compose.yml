@@ -24,6 +24,10 @@ services:
             - ./loki/cache:/loki/cache:rw
             - ./loki/metadata:/loki/metadata:rw
         environment:
+            - MEDIA_PATH=/media
+            - TRANSCODE_PATH=/loki/transcode
+            - CACHE_DIR=/loki/cache
+            - METADATA_PATH=/loki/metadata
             - NODE_ENV=production
             - FFMPEG_HWACCEL=${FFMPEG_HWACCEL:-auto}
             # NVIDIA GPU Support

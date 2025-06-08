@@ -36,6 +36,7 @@
                             :playlist-url="streamSession.playlistUrl"
                         />
                     </div>
+                    <span>Session: {{ streamSession?.sessionId }} | URL: {{ streamSession?.playlistUrl }}</span>
                 </div>
             </div>
         </main>
@@ -59,6 +60,7 @@ const fetchMediaFiles = async () => {
     try {
         const response = await axios?.get('/media');
         mediaFiles.value = response?.data || [];
+        console.log(response);
     } catch (error) {
         console.error('Failed to fetch media files:', error);
     }
