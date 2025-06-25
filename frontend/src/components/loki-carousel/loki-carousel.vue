@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick, type VNode } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, type VNode, Fragment } from 'vue'
 import IconArrowRight from "../../icons/icon-arrow-right.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
 
@@ -164,10 +164,20 @@ const slides = computed((): VNode[] => {
     const defaultSlot = slots.default?.()
     if (!defaultSlot) return []
 
-    return defaultSlot.filter((vnode: any) =>
-        vnode.type !== Comment &&
-        (typeof vnode.type !== 'symbol' || vnode.children)
-    )
+    const flattenVNodes = (vnodes: any[]): any[] => {
+        const result: any[] = []
+        for (const vnode of vnodes) {
+            if (vnode.type === Fragment && Array.isArray(vnode.children)) {
+                // Fragment mit Kindern (z.B. v-for) auseinanderfalten
+                result.push(...flattenVNodes(vnode.children))
+            } else if (vnode.type !== Comment && (typeof vnode.type !== 'symbol' || vnode.children)) {
+                result.push(vnode)
+            }
+        }
+        return result
+    }
+
+    return flattenVNodes(defaultSlot)
 })
 
 // Computed: Current breakpoint
@@ -676,7 +686,7 @@ defineExpose({
 
 <style scoped lang="postcss">
 .carousel {
-    @apply relative w-full overflow-hidden;
+    @apply relative w-full overflow-x-clip;
 
     .carousel-container {
         @apply relative w-full h-full;
