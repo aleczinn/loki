@@ -10,17 +10,16 @@
                 <h3 class="font-bold mb-2">Media Files</h3>
 
 
-                <div class="flex flex-col">
+                <div class="flex flex-col mb-4">
                     <a v-for="media in mediaFiles" :key="media.id" @click="selectMedia(media)"
                        class="transition-all duration-200 hover:cursor-pointer hover:ml-4">
                         > {{ media.name }} <span class="text-gray-500">({{ formatFileSize(media.size) }})</span>
                     </a>
                 </div>
 
-                <hr class="my-8">
-                <p v-if="selectedMedia">Selected: {{ selectedMedia.name }}</p>
-                <hr>
-                <div class="w-full max-w-4xl mx-auto">
+                <p class="font-bold mb-4">Selected: <span class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span></p>
+
+                <div class="w-full">
                     <video
                         ref="videoRef"
                         class="w-full rounded shadow-lg"
@@ -65,7 +64,6 @@ const loadMediaFiles = async () => {
     try {
         const response = await axios?.get<MediaFile[]>('/media');
         mediaFiles.value = response?.data || [];
-        console.log(response);
     } catch (err) {
         console.error('Failed to load media files:', err);
     } finally {
@@ -114,7 +112,7 @@ function formatFileSize(bytes: number): string {
         unitIndex++;
     }
 
-    return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`;
+    return `${size?.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`;
 }
 
 onMounted(() => {
