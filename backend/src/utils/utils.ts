@@ -73,8 +73,6 @@ export async function scanMediaDirectory(dir: string): Promise<MediaFile[]> {
                 if (SUPPORTED_FORMATS.includes(ext)) {
                     const metaData = await getCombinedMetadata(fullPath)
 
-                    console.log(fullPath)
-
                     files.push({
                         name: item,
                         path: fullPath,
