@@ -1,20 +1,21 @@
 <template>
     <div class="flex flex-col h-screen">
-<!--        <img src="/images/the-purge-anarchy-bg.jpg" alt="" class="aspect-w-16 aspect-h-9">-->
+        <!--        <img src="/images/the-purge-anarchy-bg.jpg" alt="" class="aspect-w-16 aspect-h-9">-->
 
         <loki-header></loki-header>
 
         <main class="flex-1 py-8">
             <div class="mx-auto max-w-[87rem]">
                 <!-- ADD CONTENT HERE -->
-                <h3 class="">Media Files</h3>
+                <h3 class="font-bold mb-2">Media Files</h3>
+
 
                 <div class="flex flex-col">
-                    <a v-for="media in mediaFiles" :key="media.id" @click="selectMedia(media)" class="hover:cursor-pointer">
-                        {{ media.name }}
+                    <a v-for="media in mediaFiles" :key="media.id" @click="selectMedia(media)"
+                       class="transition-all duration-200 hover:cursor-pointer hover:ml-4">
+                        > {{ media.name }} <span class="text-gray-500">({{ formatFileSize(media.size) }})</span>
                     </a>
                 </div>
-
 
                 <hr class="my-8">
                 <p v-if="selectedMedia">Selected: {{ selectedMedia.name }}</p>
@@ -49,6 +50,7 @@ interface MediaFile {
     name: string;
     path: string;
     size: number;
+    modified: Date;
 }
 
 const isLoading = ref(true);
@@ -63,6 +65,7 @@ const loadMediaFiles = async () => {
     try {
         const response = await axios?.get<MediaFile[]>('/media');
         mediaFiles.value = response?.data || [];
+        console.log(response);
     } catch (err) {
         console.error('Failed to load media files:', err);
     } finally {
@@ -99,6 +102,19 @@ function initHls(url: string) {
             videoRef.value.play()
         }
     }
+}
+
+function formatFileSize(bytes: number): string {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex++;
+    }
+
+    return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`;
 }
 
 onMounted(() => {
