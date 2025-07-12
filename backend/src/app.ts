@@ -7,7 +7,7 @@ import undefinedRouteHandler from "./middleware/undefined-route-handler";
 import dotenv from "dotenv";
 import mariadb from "mariadb";
 import * as path from 'path';
-import routes from "./routes/routes";
+import routes from "./routes/media-routes";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
