@@ -112,7 +112,7 @@ function formatFileSize(bytes: number): string {
         unitIndex++;
     }
 
-    return `${size?.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`;
+    return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`;
 }
 
 onMounted(() => {
