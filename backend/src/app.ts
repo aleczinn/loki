@@ -7,7 +7,9 @@ import undefinedRouteHandler from "./middleware/undefined-route-handler";
 import dotenv from "dotenv";
 import mariadb from "mariadb";
 import * as path from 'path';
-import routes from "./routes/media-routes";
+import mediaRoutes from "./routes/media-routes";
+import streamingRoutes from "./routes/streaming-routes";
+import mediaService from "./services/media-service";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -59,7 +61,15 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.use(routes)
+app.use(mediaRoutes)
+app.use(streamingRoutes)
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('Shutting down gracefully...');
+    await mediaService.shutdown();
+    process.exit(0);
+});
 
 app.use(undefinedRouteHandler);
 app.use(errorHandler);

@@ -1,6 +1,11 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
 import { MediaFile } from "../types/media-file";
+import { getCombinedMetadata } from "./media-utils";
+import { GeneralTrack } from "../types/general-track";
+import { VideoTrack } from "../types/video-track";
+import { AudioTrack } from "mediainfo.js";
+import { SubtitleTrack } from "../types/subtitle-track";
 
 const SUPPORTED_FORMATS = ['.mp4', '.mkv', '.avi', '.mov', '.webm'];
 
@@ -66,10 +71,16 @@ export async function scanMediaDirectory(dir: string): Promise<MediaFile[]> {
             } else if (stats.isFile()) {
                 const ext = path.extname(item).toLowerCase();
                 if (SUPPORTED_FORMATS.includes(ext)) {
+                    const metaData = await getCombinedMetadata(fullPath)
+
+                    console.log(fullPath)
+
                     files.push({
                         name: item,
                         path: fullPath,
                         size: stats.size,
+                        extension: path.extname(fullPath).toLowerCase(),
+                        metadata: metaData,
                         modified: stats.mtime
                     });
                 }
