@@ -21,7 +21,8 @@
         "fs-extra": "^11.3.0",
         "http-errors": "^2.0.0",
         "mariadb": "^3.4.0",
-        "path": "^0.12.7"
+        "path": "^0.12.7",
+        "mediainfo.js": "^0.3.5"
     },
     "devDependencies": {
         "@types/cors": "^2.8.17",
