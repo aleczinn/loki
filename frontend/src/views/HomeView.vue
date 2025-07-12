@@ -17,7 +17,7 @@
                     </a>
                 </div>
 
-                <p class="font-bold mb-4">Selected: <span class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span></p>
+                <p class="font-bold mb-4">Selected: <span class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia" class="text-red-300 font-normal hover:cursor-pointer" @click="cancelStream">(X)</a></p>
 
                 <div class="w-full">
                     <video
@@ -101,6 +101,17 @@ function initHls(url: string) {
             videoRef.value.src = url
             videoRef.value.play()
         }
+    }
+}
+
+function cancelStream(): void {
+    selectedMedia.value = null;
+    if (hls.value) {
+        hls.value.destroy()
+        hls.value = null
+    }
+    if (videoRef.value) {
+        videoRef.value.src = ''
     }
 }
 
