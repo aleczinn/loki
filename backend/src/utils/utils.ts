@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs-extra';
+import * as crypto from 'crypto';
 import { MediaFile } from "../types/media-file";
 import { getCombinedMetadata } from "./media-utils";
 import { GeneralTrack } from "../types/general-track";
@@ -74,6 +75,7 @@ export async function scanMediaDirectory(dir: string): Promise<MediaFile[]> {
                     const metaData = await getCombinedMetadata(fullPath)
 
                     files.push({
+                        id: getHashFromPath(fullPath),
                         name: item,
                         path: fullPath,
                         size: stats.size,
@@ -88,4 +90,8 @@ export async function scanMediaDirectory(dir: string): Promise<MediaFile[]> {
 
     await scanRecursive(dir);
     return files;
+}
+
+export function getHashFromPath(filePath: string): string {
+    return crypto.createHash('md5').update(filePath).digest('hex');
 }

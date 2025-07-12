@@ -1,6 +1,7 @@
 import { MediaMetadata } from "./media-metadata";
 
 export interface MediaFile {
+    id: string;
     name: string;
     path: string;
     size: number;
