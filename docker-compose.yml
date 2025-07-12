@@ -48,8 +48,7 @@ services:
         # Hardware Device Mappings für Intel QuickSync
         devices:
             - /dev/dri:/dev/dri
-        # Alternative: Privileged für GPU-Zugriff (falls nötig)
-        # privileged: true
+        privileged: true
         restart: unless-stopped
 
     database:
