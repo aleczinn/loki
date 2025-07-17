@@ -9,7 +9,6 @@ import mariadb from "mariadb";
 import * as path from 'path';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
-import mediaService from "./services/media-service";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -19,13 +18,14 @@ export const CACHE_DIR = process.env.CACHE_DIR || './cache';
 export const METADATA_PATH = process.env.METADATA_PATH || './metadata';
 export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'auto';
 
-export const database = mariadb.createPool({
-    host: process.env.DATABASE_HOST,
-    port: Number(process.env.DATABASE_PORT),
-    user: process.env.DATABASE_USER,
-    password: process.env.DATABASE_PASSWORD,
-    database: process.env.DATABASE_NAME
-});
+// TODO : WIP - implement later
+// export const database = mariadb.createPool({
+//     host: process.env.DATABASE_HOST,
+//     port: Number(process.env.DATABASE_PORT),
+//     user: process.env.DATABASE_USER,
+//     password: process.env.DATABASE_PASSWORD,
+//     database: process.env.DATABASE_NAME
+// });
 
 const app: Express = express();
 
@@ -67,7 +67,7 @@ app.use(streamingRoutes)
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('Shutting down gracefully...');
-    await mediaService.shutdown();
+    // SHUTDOWN Services here
     process.exit(0);
 });
 
