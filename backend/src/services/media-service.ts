@@ -6,6 +6,5 @@ import { TRANSCODE_PATH } from "../app";
 import { getCombinedMetadata } from "../utils/media-utils";
 
 const sessions = new Map();
-const SEGMENT_DURATION = 10; // Sekunden pro Segment
-const BUFFER_SEGMENTS = 3; // 30 Sekunden Puffer (3 * 10s)
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 Minuten
+const SEGMENT_DURATION = 10; // seconds per segment
+const BUFFER_SEGMENTS = 3; // x times segment_duration for extra buffer
