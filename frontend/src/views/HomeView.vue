@@ -19,15 +19,14 @@
                     </a>
                 </div>
 
-                <p class="font-bold mb-4">Selected: <span
-                    class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia"
+                <p class="font-bold mb-4">Selected: <span class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia"
                                                                                                  class="text-red-300 font-normal hover:cursor-pointer"
                                                                                                  @click="cancelStream">(X)</a>
                 </p>
 
-                <p>Sessions: {{ getSessions() }}</p>
+                <p class="font-normal mb-4">Sessions: {{ getSessions() }}</p>
 
-                <div class="w-full">
+                <div class="w-full bg-black/30 rounded-xl">
                     <video
                         ref="videoRef"
                         class="w-full rounded shadow-lg"
