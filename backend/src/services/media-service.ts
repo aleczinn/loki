@@ -3,7 +3,6 @@ import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import ffmpeg from 'fluent-ffmpeg';
 import { TRANSCODE_PATH } from "../app";
-import { StreamSession } from "../types/types";
 import { getCombinedMetadata } from "../utils/media-utils";
 
 const sessions = new Map();
