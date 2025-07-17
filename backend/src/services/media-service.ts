@@ -56,6 +56,10 @@ class MediaService {
         return null;
     }
 
+    getSessions(): StreamingSession[] {
+        return Array.from(this.sessions.entries()).map(([_, session]) => session)
+    }
+
     /**
      * Shutdown media service
      */

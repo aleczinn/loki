@@ -42,8 +42,8 @@ router.get('/api/media/:id/stream', async (req: Request, res: Response) => {
  */
 router.get('/api/stream/sessions', async (req: Request, res: Response) => {
     try {
-        // const activeSessions = getActiveSessions();
-        res.status(200).json({});
+        const sessions = mediaService.getSessions();
+        res.status(200).json(sessions);
     } catch (error) {
         console.error('Error getting active sessions:', error);
         res.status(500).json({ error: 'Failed to get active sessions' });

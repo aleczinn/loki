@@ -13,11 +13,19 @@
                 <div class="flex flex-col mb-4">
                     <a v-for="media in mediaFiles" :key="media.name" @click="selectMedia(media)"
                        class="transition-all duration-200 hover:cursor-pointer hover:ml-4">
-                        > {{ media.name }} <span class="text-gray-500">({{ formatFileSize(media.size) }}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
+                        > {{ media.name }} <span class="text-gray-500">({{
+                            formatFileSize(media.size)
+                        }}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
                     </a>
                 </div>
 
-                <p class="font-bold mb-4">Selected: <span class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia" class="text-red-300 font-normal hover:cursor-pointer" @click="cancelStream">(X)</a></p>
+                <p class="font-bold mb-4">Selected: <span
+                    class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia"
+                                                                                                 class="text-red-300 font-normal hover:cursor-pointer"
+                                                                                                 @click="cancelStream">(X)</a>
+                </p>
+
+                <p>Sessions: {{ getSessions() }}</p>
 
                 <div class="w-full">
                     <video
@@ -64,6 +72,7 @@ interface MediaFile {
 const isLoading = ref(true);
 const hls = ref<Hls | null>(null)
 const mediaFiles = ref<MediaFile[]>([]);
+const sessions = ref<any[]>([]);
 const selectedMedia = ref<MediaFile | null>(null);
 const videoRef = ref<HTMLVideoElement | null>(null)
 
@@ -80,9 +89,21 @@ const loadMediaFiles = async () => {
     }
 }
 
+const loadSessions = async () => {
+    try {
+        const response = await axios?.get<any[]>('/stream/sessions');
+        sessions.value = response?.data || [];
+    } catch (err) {
+        console.error('Failed to load media files:', err);
+    } finally {
+        isLoading.value = false;
+    }
+}
+
 const selectMedia = (media: MediaFile) => {
     selectedMedia.value = media;
     initHls(streamUrl());
+    loadSessions()
 }
 
 const streamUrl = () => {
@@ -109,6 +130,10 @@ function initHls(url: string) {
             videoRef.value.play()
         }
     }
+}
+
+function getSessions() {
+    return sessions.value;
 }
 
 function cancelStream(): void {
@@ -247,6 +272,7 @@ function getMainAudioTrack(media: MediaFile): string {
 
 onMounted(() => {
     loadMediaFiles();
+    loadSessions();
 })
 </script>
 
