@@ -25,6 +25,13 @@
                         class="w-full rounded shadow-lg"
                         controls
                         autoplay
+                        @timeupdate="onTimeUpdate"
+                        @seeked="onSeeked"
+                        @seeking="onSeeking"
+                        @loadedmetadata="onLoadedMetadata"
+                        @waiting="onWaiting"
+                        @playing="onPlaying"
+                        @error="onError"
                     ></video>
                 </div>
             </div>
@@ -113,6 +120,34 @@ function cancelStream(): void {
     if (videoRef.value) {
         videoRef.value.src = ''
     }
+}
+
+function onTimeUpdate(): void {
+
+}
+
+function onSeeked(): void {
+
+}
+
+function onSeeking(): void {
+
+}
+
+function onLoadedMetadata(): void {
+
+}
+
+function onWaiting(): void {
+
+}
+
+function onPlaying(): void {
+
+}
+
+function onError(): void {
+
 }
 
 function formatFileSize(bytes: number): string {
