@@ -43,6 +43,9 @@ class MediaService {
         }
     }
 
+    async generatePlaylist(session: StreamingSession, time: number): Promise<string> {
+        return '';
+    }
 
     getSession(sessionId: string): StreamingSession | null {
         const session = this.sessions.get(sessionId);

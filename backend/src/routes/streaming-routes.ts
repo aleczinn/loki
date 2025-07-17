@@ -3,12 +3,16 @@ import * as fs from 'fs-extra';
 import { MediaFile } from "../types/media-file";
 import { MEDIA_PATH } from "../app";
 import { scanMediaDirectory } from "../utils/utils";
+import mediaService from "../services/media-service";
 
 const router = Router();
 
 router.get('/api/media/:id/stream', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const { t } = req.query; // timestamp for seek position
+
+        const seekTime = t ? parseFloat(t as string) : 0;
 
         const file = await findMediaFileById(id)
         if (!file) {
@@ -19,7 +23,14 @@ router.get('/api/media/:id/stream', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Media file does not exist on disk' });
         }
 
-        res.status(200).json({});
+        const session = await mediaService.startSession(file);
+
+        const playlist = await mediaService.generatePlaylist(session, seekTime);
+
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.send(playlist);
     } catch (error) {
         console.error('Error creating stream:', error);
         res.status(500).json({ error: 'Failed to create stream' });
