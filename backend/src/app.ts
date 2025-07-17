@@ -9,6 +9,7 @@ import mariadb from "mariadb";
 import * as path from 'path';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
+import mediaService from "./services/media-service";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -67,7 +68,7 @@ app.use(streamingRoutes)
 // Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('Shutting down gracefully...');
-    // SHUTDOWN Services here
+    await mediaService.shutdown();
     process.exit(0);
 });
 

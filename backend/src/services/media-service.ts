@@ -8,11 +8,31 @@ import { getCombinedMetadata } from "../utils/media-utils";
 const SEGMENT_DURATION = 10; // seconds per segment
 const BUFFER_SEGMENTS = 3; // x times segment_duration for extra buffer
 
+interface StreamingSession {
+    id: string;
+}
+
 class MediaService {
-    private sessions: Map<string, any> = new Map();
+    private sessions: Map<string, StreamingSession> = new Map();
+
+    getSession(sessionId: string): StreamingSession | null {
+        const session = this.sessions.get(sessionId);
+        if (session) {
+            return session;
+        }
+        return null;
+    }
+
+    /**
+     * Shutdown media service
+     */
+    async shutdown(): Promise<void> {
+        console.log('Shutting down MediaService...');
+        console.log('MediaService shutdown complete');
+    }
 }
 
 const mediaService = new MediaService();
 
 export default mediaService;
-export { MediaService };
+export { MediaService, StreamingSession };
