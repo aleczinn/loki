@@ -14,9 +14,9 @@ import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-export const MEDIA_PATH = process.env.MEDIA_PATH ||  path.join(__dirname, '../loki/media');
-export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../loki/transcode');
-export const METADATA_PATH = process.env.METADATA_PATH ||  path.join(__dirname, '../loki/metadata');
+export const MEDIA_PATH = process.env.MEDIA_PATH ||  path.join(__dirname, '../../loki/media');
+export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../loki/transcode');
+export const METADATA_PATH = process.env.METADATA_PATH ||  path.join(__dirname, '../../loki/metadata');
 export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'auto';
 
 // TODO : WIP - implement later
@@ -85,6 +85,9 @@ const server = app.listen(3000, () => {
         const port: number = address.port;
 
         console.log(`Listening on http://${host}:${port}`);
+        console.log(`Media path: ${MEDIA_PATH}`);
+        console.log(`Transcode path: ${TRANSCODE_PATH}`);
+        console.log(`Metadata path: ${METADATA_PATH}`);
     }
 });
 
