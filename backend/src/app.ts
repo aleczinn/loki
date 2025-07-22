@@ -10,7 +10,7 @@ import * as path from 'path';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import mediaService from "./services/media-service";
-import { loggerHandler } from "./middleware/logger";
+import { loggerHandler } from "./middleware/loggerHandler";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
