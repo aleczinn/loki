@@ -10,6 +10,7 @@ import * as path from 'path';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import mediaService from "./services/media-service";
+import { loggerHandler } from "./middleware/logger";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -53,6 +54,7 @@ app.use((req, res, next) => {
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(loggerHandler)
 
 app.get('/health', (req, res) => {
     res.json({
