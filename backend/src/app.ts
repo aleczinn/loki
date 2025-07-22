@@ -3,7 +3,6 @@ import cors from 'cors';
 import bodyParser from "body-parser";
 import { AddressInfo } from 'net';
 import errorHandler from "./middleware/error-handler";
-import undefinedRouteHandler from "./middleware/undefined-route-handler";
 import dotenv from "dotenv";
 import mariadb from "mariadb";
 import * as path from 'path';
@@ -11,6 +10,7 @@ import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import mediaService from "./services/media-service";
 import { loggerHandler } from "./middleware/loggerHandler";
+import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
