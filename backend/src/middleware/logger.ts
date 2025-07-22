@@ -20,9 +20,18 @@ export function loggerHandler(req: Request, res: Response, next: NextFunction): 
 
     res.on('finish', () => {
         const duration = performance.now() - start;
+        const statusColor = getStatusColor(statusCode);
 
-        console.log(`[${traceId}] - ${method} - ${originalUrl} - ${statusCode} - ${duration.toFixed(2)}ms`);
+        console.log(`[${traceId}] - ${method} - ${originalUrl} - ${statusColor}${statusCode}\x1b[0m - ${duration.toFixed(2)}ms`);
     });
 
     next();
+}
+
+function getStatusColor(statusCode: number): string {
+    if (statusCode >= 500) return '\x1b[31m'; // Rot für 5xx
+    if (statusCode >= 400) return '\x1b[33m'; // Gelb für 4xx
+    if (statusCode >= 300) return '\x1b[36m'; // Cyan für 3xx
+    if (statusCode >= 200) return '\x1b[32m'; // Grün für 2xx
+    return '\x1b[37m'; // Weiß für andere
 }
