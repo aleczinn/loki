@@ -16,7 +16,6 @@ dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 export const MEDIA_PATH = process.env.MEDIA_PATH || '/media';
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || './transcode';
-export const CACHE_DIR = process.env.CACHE_DIR || './cache';
 export const METADATA_PATH = process.env.METADATA_PATH || './metadata';
 export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'auto';
 
