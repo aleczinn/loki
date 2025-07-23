@@ -6,6 +6,7 @@ import errorHandler from "./middleware/error-handler";
 import dotenv from "dotenv";
 import mariadb from "mariadb";
 import * as path from 'path';
+import * as fs from 'fs-extra';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import mediaService from "./services/media-service";
@@ -42,7 +43,7 @@ app.use(cors({
 // Zusätzliche CORS Headers für Streaming
 app.use((req, res, next) => {
     // CORS Headers für HLS Streaming
-    if (req.path.includes('/api/stream/')) {
+    if (req.path.includes('/api/media/')) {
         res.header('Access-Control-Allow-Origin', '*');
         res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Range');
@@ -88,6 +89,9 @@ const server = app.listen(3000, () => {
         console.log(`Media path: ${MEDIA_PATH}`);
         console.log(`Transcode path: ${TRANSCODE_PATH}`);
         console.log(`Metadata path: ${METADATA_PATH}`);
+
+        fs.ensureDirSync(MEDIA_PATH);
+        fs.ensureDirSync(TRANSCODE_PATH);
     }
 });
 

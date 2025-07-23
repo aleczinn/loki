@@ -107,7 +107,7 @@ const selectMedia = (media: MediaFile) => {
 
 const streamUrl = () => {
     if (!selectedMedia.value) return '';
-    return `/api/media/${selectedMedia.value.id}/stream`;
+    return `/api/media/${selectedMedia.value.id}/playlist.m3u8`;
 };
 
 function initHls(url: string) {
