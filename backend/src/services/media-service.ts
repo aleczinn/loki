@@ -5,43 +5,21 @@ import ffmpeg from 'fluent-ffmpeg';
 import { TRANSCODE_PATH } from "../app";
 import { getCombinedMetadata } from "../utils/media-utils";
 import { MediaFile } from "../types/media-file";
+import * as console from "node:console";
 
-const SEGMENT_DURATION = 10; // seconds per segment
-const BUFFER_SEGMENTS = 3; // x times segment_duration for extra buffer
+const SEGMENT_DURATION = 4; // seconds per segment
 
-interface StreamingSession {
-    id: string;
-    lastAccessed: number;
+interface StreamSession {
+    process: ffmpeg.FfmpegCommand;
+    startSegment: number;
+    latestSegment: number;
+    file: MediaFile;
+    outputDir: string;
+    cleanupTimer: NodeJS.Timeout | null;
 }
 
 class MediaService {
-    // private sessions: Map<string, StreamingSession> = new Map();
-    //
-    // async startSession(file: MediaFile): Promise<StreamingSession> {
-    //     const sessionId = file.id;
-    //
-    //     const existingSession = this.sessions.get(sessionId);
-    //     if (existingSession) {
-    //         existingSession.lastAccessed = Date.now();
-    //         return existingSession;
-    //     }
-    //
-    //     const session = await this.createSession(file);
-    //     this.sessions.set(file.id, session);
-    //     return session;
-    // }
-    //
-    // private async createSession(file: MediaFile): Promise<StreamingSession> {
-    //     const sessionId = file.id;
-    //
-    //     const transcodingDir = path.join(TRANSCODE_PATH, file.id);
-    //     await fs.ensureDir(transcodingDir);
-    //
-    //     return {
-    //         id: sessionId,
-    //         lastAccessed: Date.now()
-    //     }
-    // }
+    private sessions: Map<string, StreamSession> = new Map();
 
     async generatePlaylist(file: MediaFile, time?: number): Promise<{ id: string; playlistPath: string }> {
         const id = file.id;
@@ -59,8 +37,6 @@ class MediaService {
             throw new Error('duration must be greater than 0');
         }
         const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
-
-        console.log(`TOTAL SEGMENTS: ${totalSegments}`);
 
         let playlist = '#EXTM3U\n';
         playlist += '#EXT-X-VERSION:3\n';
@@ -84,119 +60,102 @@ class MediaService {
         return { id, playlistPath };
     }
 
-    async transcodeSegment(file: MediaFile, segmentIndex: number): Promise<string> {
-        const id = file.id;
-        const dir = path.join(TRANSCODE_PATH, id);
-        const segmentPath  = path.join(dir, `segment${segmentIndex}.ts`);
+    async startTranscode(file: MediaFile, segment: number): Promise<void> {
+        return new Promise((resolve) => {
+            const id = file.id;
+            const dir = path.join(TRANSCODE_PATH, id);
+            const playlistPath  = path.join(dir, 'playlist.m3u8');
+            const segmentPath  = path.join(dir, 'segment%d.ts');
+            const seekTime = segment * SEGMENT_DURATION;
 
-        if (await fs.pathExists(segmentPath)) {
-            return segmentPath;
-        }
+            fs.ensureDirSync(dir);
 
-        const sourcePath = file.path;
-        if (!sourcePath) {
-            throw new Error('Source file not found');
-        }
+            const framerate = file.metadata?.video[0]?.FrameRate || -1;
+            const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
 
-        const startTime = segmentIndex * SEGMENT_DURATION;
+            console.log(`GOP SIZE: ${gopSize}`);
 
-        await this.performTranscode(sourcePath, segmentPath, startTime);
-
-        // Transcode next 3 segments in background
-        this.transcodeBufferSegments(file, segmentIndex).catch(console.error);
-
-        return segmentPath;
-    }
-
-    private performTranscode(inputPath: string, outputPath: string, startTime: number): Promise<void> {
-        return new Promise((resolve, reject) => {
-            ffmpeg(inputPath)
-                .seekInput(startTime)
-                .duration(SEGMENT_DURATION)
+            const command = ffmpeg(file.path)
+                .inputOptions([
+                    '-copyts',
+                    '-ss', `${seekTime}`,
+                    '-threads 0',
+                ])
                 .videoCodec('libx264')
                 .audioCodec('aac')
                 .outputOptions([
-                    // PERFORMANCE OPTIMIZATIONS
-                    '-preset', 'veryfast',  // Changed from 'medium' to 'veryfast'
-                    '-crf', '26',          // Slightly higher CRF for faster encoding
-                    '-tune', 'fastdecode', // Optimize for fast decoding
-
-                    // Threading
-                    '-threads', '0',       // Use all available threads
-
-                    // Video settings
-                    '-vf', 'scale=-2:1080:flags=fast_bilinear', // Faster scaling algorithm
+                    '-copyts',
                     '-pix_fmt', 'yuv420p',
-
-                    // Audio settings (simple and fast)
-                    '-b:a', '128k',
-                    '-ac', '2',
-                    '-ar', '44100',
-
-                    // Format settings
-                    '-f', 'mpegts',
-                    '-muxdelay', '0',
-                    '-muxpreload', '0',
-                    '-movflags', '+faststart',
-                    '-avoid_negative_ts', 'make_zero',
+                    '-map', '0',
+                    `-g ${gopSize}`,
+                    '-sc_threshold', '0',
+                    '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
+                    '-preset veryfast',
+                    '-crf', '24',
+                    '-f', 'hls',
+                    `-hls_time ${SEGMENT_DURATION}`,
+                    '-hls_list_size 0',
+                    '-hls_playlist_type vod',
+                    '-hls_flags', 'independent_segments',
+                    `-start_number ${segment}`,
+                    `-hls_segment_filename ${segmentPath}`,
+                    '-b:a', '128k'
                 ])
-                .on('start', (cmd) => {
-                    console.log(`Transcoding segment ${outputPath}`);
-                })
+                .output(playlistPath)
                 .on('progress', (progress) => {
-                    // console.log(`>>> process ${progress.percent}% [${outputPath}]`);
+                    const time = parseFloat(String(progress.timemark.split(':').reduce((acc, val, i) => acc + parseFloat(val) * Math.pow(60, 2 - i), 0)));
+                    const currentSegment = segment + Math.floor(time / SEGMENT_DURATION);
+
+                    const transcode = this.sessions.get(id);
+                    if (transcode) transcode.latestSegment = currentSegment;
                 })
-                .on('error', reject)
                 .on('end', () => {
-                    resolve()
+                    console.log(`Transcoding for ${id} finished.`);
+                    this.sessions.delete(id);
                 })
-                .save(outputPath);
+                .on('error', (err) => {
+                    console.error(`FFmpeg error for ${id}:`, err.message);
+                    this.sessions.delete(id);
+                });
+
+            command.run();
+
+            const session: StreamSession = {
+                process: command,
+                startSegment: segment,
+                latestSegment: segment,
+                file: file,
+                outputDir: dir,
+                cleanupTimer: null
+            };
+
+            this.sessions.set(id, session);
+            resolve();
         });
     }
 
-    private async transcodeBufferSegments(file: MediaFile, currentIndex: number): Promise<void> {
-        const id = file.id;
-        const streamDir = path.join(TRANSCODE_PATH, id);
-        const sourcePath = file.path;
-        const duration = file.metadata?.general.Duration || -1;
 
-        if (duration === -1) {
-            throw new Error('duration must be greater than 0');
-        }
 
-        const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
-
-        // @ts-ignore
-        if (BUFFER_SEGMENTS === -1) {
-            return;
-        }
-
-        for (let i = 1; i <= BUFFER_SEGMENTS; i++) {
-            const nextIndex = currentIndex + i;
-            if (nextIndex >= totalSegments) break;
-
-            const segmentPath = path.join(streamDir, `segment${nextIndex}.ts`);
-
-            if (await fs.pathExists(segmentPath)) continue;
-
-            const startTime = nextIndex * SEGMENT_DURATION;
-            this.performTranscode(sourcePath, segmentPath, startTime).catch(console.error);
-        }
+    secondsToTimemark(seconds: number): string {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `00:${String(minutes).padStart(2, '0')}:${remainingSeconds.toFixed(2).padStart(5, '0')}`;
     }
 
-
-    getSession(sessionId: string): StreamingSession | null {
-        // const session = this.sessions.get(sessionId);
-        // if (session) {
-        //     session.lastAccessed = Date.now();
-        //     return session;
-        // }
+    getSession(sessionId: string): StreamSession | null {
+        const session = this.sessions.get(sessionId);
+        if (session) {
+            return session;
+        }
         return null;
     }
 
-    getSessions(): StreamingSession[] {
-        // return Array.from(this.sessions.entries()).map(([_, session]) => session)
-        return [];
+    getSessions(): Map<string, StreamSession> {
+        return this.sessions;
+    }
+
+    getSessionsFlat(): StreamSession[] {
+        return Array.from(this.sessions.entries()).map(([_, session]) => session)
     }
 
     /**
@@ -211,4 +170,4 @@ class MediaService {
 const mediaService = new MediaService();
 
 export default mediaService;
-export { MediaService, StreamingSession };
+export { MediaService, StreamSession };
