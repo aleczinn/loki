@@ -7,7 +7,7 @@ import { getCombinedMetadata } from "../utils/media-utils";
 import { MediaFile } from "../types/media-file";
 import * as console from "node:console";
 
-const SEGMENT_DURATION = 4; // seconds per segment
+export const SEGMENT_DURATION = 4; // seconds per segment
 
 interface StreamSession {
     process: ffmpeg.FfmpegCommand;
@@ -21,7 +21,7 @@ interface StreamSession {
 class MediaService {
     private sessions: Map<string, StreamSession> = new Map();
 
-    async generatePlaylist(file: MediaFile, time?: number): Promise<{ id: string; playlistPath: string }> {
+    async generatePlaylist(file: MediaFile): Promise<{ id: string; playlistPath: string }> {
         const id = file.id;
         const dir = path.join(TRANSCODE_PATH, id);
         const playlistPath = path.join(dir, 'playlist.m3u8');
@@ -72,8 +72,6 @@ class MediaService {
 
             const framerate = file.metadata?.video[0]?.FrameRate || -1;
             const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
-
-            console.log(`GOP SIZE: ${gopSize}`);
 
             const command = ffmpeg(file.path)
                 .inputOptions([

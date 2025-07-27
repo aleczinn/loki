@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import { MediaFile } from "../types/media-file";
 import { MEDIA_PATH, TRANSCODE_PATH } from "../app";
 import { scanMediaDirectory } from "../utils/utils";
-import mediaService from "../services/media-service";
+import mediaService, { SEGMENT_DURATION } from "../services/media-service";
 
 const router = Router();
 
@@ -16,9 +16,9 @@ const router = Router();
 router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { t } = req.query; // timestamp for seek position
 
-        const seekTime = t ? parseFloat(t as string) : 0;
+        const t = parseFloat(req.query.t as string) || 0;
+        const seekSegment = Math.floor(t / SEGMENT_DURATION);
 
         const file = await findMediaFileById(id)
         if (!file) {
@@ -27,6 +27,11 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
 
         if (!await fs.pathExists(file.path)) {
             return res.status(404).json({ error: 'Media file does not exist on disk' });
+        }
+
+        if (!mediaService.getSessions().has(id)) {
+            console.log(`Start transcode at segment ${seekSegment} due to ?t=${t}`);
+            await mediaService.startTranscode(file, seekSegment);
         }
 
         // Generate playlist if it doesn't exist
@@ -49,9 +54,9 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
 router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response) => {
     try {
         const { id, index } = req.params;
-        const segmentIndex = parseInt(index);
+        const segment = parseInt(index);
 
-        if (isNaN(segmentIndex) || segmentIndex < 0) {
+        if (isNaN(segment) || segment < 0) {
             return res.status(400).json({ error: 'Invalid segment index' });
         }
 
@@ -64,22 +69,22 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
             return res.status(404).json({ error: 'Media file does not exist on disk' });
         }
 
-        const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segmentIndex}.ts`);
+        const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segment}.ts`);
 
         if (!fs.existsSync(segmentPath)) {
             if (!mediaService.getSessions().has(id)) {
-                console.log(`Starting transcode for ${id} at segment ${segmentIndex}`);
-                await mediaService.startTranscode(file, segmentIndex);
+                console.log(`Starting transcode for ${id} at segment ${segment}`);
+                await mediaService.startTranscode(file, segment);
             } else {
                 const session = mediaService.getSessions().get(id);
                 if (session) {
-                    if (segmentIndex < session.latestSegment + 3) {
+                    if (segment < session.latestSegment + 3) {
                         // Wait and check again
                         return setTimeout(() => res.redirect(req.originalUrl), 1000);
                     } else {
-                        console.log(`Killing current transcode for seek to ${segmentIndex}`);
+                        console.log(`Killing current transcode for seek to ${segment}`);
                         session.process.kill('SIGKILL');
-                        await mediaService.startTranscode(file, segmentIndex);
+                        await mediaService.startTranscode(file, segment);
                     }
                 }
             }
