@@ -12,6 +12,7 @@ import streamingRoutes from "./routes/streaming-routes";
 import mediaService from "./services/media-service";
 import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
+import { logger } from "./logger";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -69,7 +70,7 @@ app.use(streamingRoutes)
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-    console.log('Shutting down gracefully...');
+    logger.INFO('Shutting down gracefully...');
     await mediaService.shutdown();
     process.exit(0);
 });
@@ -86,12 +87,13 @@ const server = app.listen(3000, () => {
         const port: number = address.port;
 
         console.log(`Listening on http://${host}:${port}`);
-        console.log(`Media path: ${MEDIA_PATH}`);
-        console.log(`Transcode path: ${TRANSCODE_PATH}`);
-        console.log(`Metadata path: ${METADATA_PATH}`);
+        logger.DEBUG(`Media path: ${MEDIA_PATH}`);
+        logger.DEBUG(`Transcode path: ${TRANSCODE_PATH}`);
+        logger.DEBUG(`Metadata path: ${METADATA_PATH}`);
 
         fs.ensureDirSync(MEDIA_PATH);
         fs.ensureDirSync(TRANSCODE_PATH);
+        fs.ensureDirSync(METADATA_PATH);
     }
 });
 

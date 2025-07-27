@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { performance } from 'node:perf_hooks'
 import { NextFunction, Request, Response } from "express";
+import { logger } from "../logger";
 
 declare global {
     namespace Express {
@@ -22,13 +23,13 @@ export function loggerHandler(req: Request, res: Response, next: NextFunction): 
         const { statusCode } = res;
         const statusColor = getStatusColor(statusCode);
 
-        console.log(`[${traceId}] -> ${method} - ${originalUrl} - ${statusColor}${statusCode}\x1b[0m - ${duration.toFixed(2)}ms`);
+        logger.INFO(`[${traceId}] -> ${method} - ${originalUrl} - ${statusColor}${statusCode}\x1b[0m - ${duration.toFixed(2)}ms`);
     });
 
     res.on('close', () => {
         if (!res.headersSent) {
             const duration = performance.now() - start;
-            console.log(`[${traceId}] ! ${method} ${originalUrl} \x1b[31mCONNECTION_CLOSED\x1b[0m - ${duration.toFixed(2)}ms`);
+            logger.WARNING(`[${traceId}] ! ${method} ${originalUrl} \x1b[31mCONNECTION_CLOSED\x1b[0m - ${duration.toFixed(2)}ms`);
         }
     });
 

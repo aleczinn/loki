@@ -5,7 +5,8 @@ import * as crypto from 'crypto';
 import { MediaFile } from "../types/media-file";
 import { MEDIA_PATH, TRANSCODE_PATH } from "../app";
 import { scanMediaDirectory } from "../utils/utils";
-import mediaService from "../services/media-service";
+import mediaService, { SEGMENT_DURATION } from "../services/media-service";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -16,9 +17,9 @@ const router = Router();
 router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { t } = req.query; // timestamp for seek position
 
-        const seekTime = t ? parseFloat(t as string) : 0;
+        const t = parseFloat(req.query.t as string) || 0;
+        const seekSegment = Math.floor(t / SEGMENT_DURATION);
 
         const file = await findMediaFileById(id)
         if (!file) {
@@ -29,21 +30,20 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
             return res.status(404).json({ error: 'Media file does not exist on disk' });
         }
 
-        const streamDir = path.join(TRANSCODE_PATH, id);
-        const playlistPath = path.join(streamDir, 'playlist.m3u8');
+        if (!mediaService.getSessions().has(id)) {
+            logger.DEBUG(`Start transcode at segment ${seekSegment} due to ?t=${t}`);
+            await mediaService.startTranscode(file, seekSegment);
+        }
 
         // Generate playlist if it doesn't exist
-        if (!await fs.pathExists(playlistPath)) {
-            await mediaService.generatePlaylist(file);
-        }
+        const { playlistPath } = await mediaService.generatePlaylist(file)
 
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'no-cache');
 
-        const playlist = await fs.readFile(playlistPath);
-        res.send(playlist);
+        res.sendFile(playlistPath);
     } catch (error) {
-        console.error('Error creating stream:', error);
+        logger.ERROR(`Error creating stream: ${error}`);
         res.status(500).json({ error: 'Failed to create stream' });
     }
 })
@@ -55,9 +55,9 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
 router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response) => {
     try {
         const { id, index } = req.params;
-        const segmentIndex = parseInt(index);
+        const segment = parseInt(index);
 
-        if (isNaN(segmentIndex) || segmentIndex < 0) {
+        if (isNaN(segment) || segment < 0) {
             return res.status(400).json({ error: 'Invalid segment index' });
         }
 
@@ -70,24 +70,35 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
             return res.status(404).json({ error: 'Media file does not exist on disk' });
         }
 
-        // Generate the segment if needed (mediaService needs the filePath stored)
-        const segmentPath = await mediaService.transcodeSegment(file, segmentIndex);
+        const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segment}.ts`);
 
-        // Stream the segment
-        res.setHeader('Content-Type', 'video/mp2t');
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-
-        const stream = fs.createReadStream(segmentPath);
-        stream.pipe(res);
-
-        stream.on('error', (error) => {
-            console.error('Segment streaming error:', error);
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'Failed to stream segment' });
+        if (!fs.existsSync(segmentPath)) {
+            if (!mediaService.getSessions().has(id)) {
+                logger.DEBUG(`Starting transcode for ${id} at segment ${segment}`);
+                await mediaService.startTranscode(file, segment);
+            } else {
+                const session = mediaService.getSessions().get(id);
+                if (session) {
+                    if (segment < session.latestSegment + 3) {
+                        // Wait and check again
+                        return setTimeout(() => res.redirect(req.originalUrl), 1000);
+                    } else {
+                        logger.DEBUG(`Killing current transcode for seek to ${segment}`);
+                        session.process.kill('SIGKILL');
+                        await mediaService.startTranscode(file, segment);
+                    }
+                }
             }
-        });
+        }
+
+        if (fs.existsSync(segmentPath)) {
+            res.setHeader('Content-Type', 'video/mp2t');
+            res.sendFile(segmentPath);
+        } else {
+            res.status(404).json({ error: 'Segment not ready' });
+        }
     } catch (error) {
-        console.error('Error creating stream:', error);
+        logger.ERROR(`Error creating stream: ${error}`);
         res.status(500).json({ error: 'Failed to create stream' });
     }
 })
@@ -97,10 +108,10 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
  */
 router.get('/api/stream/sessions', async (req: Request, res: Response) => {
     try {
-        const sessions = mediaService.getSessions();
+        const sessions = mediaService.getSessionsFlat();
         res.status(200).json(sessions);
     } catch (error) {
-        console.error('Error getting active sessions:', error);
+        logger.ERROR(`Error getting active sessions: ${error}`);
         res.status(500).json({ error: 'Failed to get active sessions' });
     }
 });
@@ -110,7 +121,7 @@ async function findMediaFileById(id: string): Promise<MediaFile | null> {
         const mediaFiles = await scanMediaDirectory(MEDIA_PATH);
         return mediaFiles.find(file => file.id === id) || null;
     } catch (error) {
-        console.error('Error finding media file:', error);
+        logger.ERROR(`Error finding media file: ${error}`);
         return null;
     }
 }
