@@ -6,6 +6,7 @@ import { MediaFile } from "../types/media-file";
 import { MEDIA_PATH, TRANSCODE_PATH } from "../app";
 import { scanMediaDirectory } from "../utils/utils";
 import mediaService, { SEGMENT_DURATION } from "../services/media-service";
+import { logger } from "../logger";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
         }
 
         if (!mediaService.getSessions().has(id)) {
-            console.log(`Start transcode at segment ${seekSegment} due to ?t=${t}`);
+            logger.DEBUG(`Start transcode at segment ${seekSegment} due to ?t=${t}`);
             await mediaService.startTranscode(file, seekSegment);
         }
 
@@ -42,7 +43,7 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
 
         res.sendFile(playlistPath);
     } catch (error) {
-        console.error('Error creating stream:', error);
+        logger.ERROR(`Error creating stream: ${error}`);
         res.status(500).json({ error: 'Failed to create stream' });
     }
 })
@@ -73,7 +74,7 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
 
         if (!fs.existsSync(segmentPath)) {
             if (!mediaService.getSessions().has(id)) {
-                console.log(`Starting transcode for ${id} at segment ${segment}`);
+                logger.DEBUG(`Starting transcode for ${id} at segment ${segment}`);
                 await mediaService.startTranscode(file, segment);
             } else {
                 const session = mediaService.getSessions().get(id);
@@ -82,7 +83,7 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
                         // Wait and check again
                         return setTimeout(() => res.redirect(req.originalUrl), 1000);
                     } else {
-                        console.log(`Killing current transcode for seek to ${segment}`);
+                        logger.DEBUG(`Killing current transcode for seek to ${segment}`);
                         session.process.kill('SIGKILL');
                         await mediaService.startTranscode(file, segment);
                     }
@@ -97,7 +98,7 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
             res.status(404).json({ error: 'Segment not ready' });
         }
     } catch (error) {
-        console.error('Error creating stream:', error);
+        logger.ERROR(`Error creating stream: ${error}`);
         res.status(500).json({ error: 'Failed to create stream' });
     }
 })
@@ -110,7 +111,7 @@ router.get('/api/stream/sessions', async (req: Request, res: Response) => {
         const sessions = mediaService.getSessionsFlat();
         res.status(200).json(sessions);
     } catch (error) {
-        console.error('Error getting active sessions:', error);
+        logger.ERROR(`Error getting active sessions: ${error}`);
         res.status(500).json({ error: 'Failed to get active sessions' });
     }
 });
@@ -120,7 +121,7 @@ async function findMediaFileById(id: string): Promise<MediaFile | null> {
         const mediaFiles = await scanMediaDirectory(MEDIA_PATH);
         return mediaFiles.find(file => file.id === id) || null;
     } catch (error) {
-        console.error('Error finding media file:', error);
+        logger.ERROR(`Error finding media file: ${error}`);
         return null;
     }
 }

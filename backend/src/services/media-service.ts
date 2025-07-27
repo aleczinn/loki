@@ -6,6 +6,7 @@ import { TRANSCODE_PATH } from "../app";
 import { getCombinedMetadata } from "../utils/media-utils";
 import { MediaFile } from "../types/media-file";
 import * as console from "node:console";
+import { logger } from "../logger";
 
 export const SEGMENT_DURATION = 4; // seconds per segment
 
@@ -64,8 +65,8 @@ class MediaService {
         return new Promise((resolve) => {
             const id = file.id;
             const dir = path.join(TRANSCODE_PATH, id);
-            const playlistPath  = path.join(dir, 'playlist.m3u8');
-            const segmentPath  = path.join(dir, 'segment%d.ts');
+            const playlistPath = path.join(dir, 'playlist.m3u8');
+            const segmentPath = path.join(dir, 'segment%d.ts');
             const seekTime = segment * SEGMENT_DURATION;
 
             fs.ensureDirSync(dir);
@@ -108,11 +109,11 @@ class MediaService {
                     if (transcode) transcode.latestSegment = currentSegment;
                 })
                 .on('end', () => {
-                    console.log(`Transcoding for ${id} finished.`);
+                    logger.DEBUG(`Transcoding for ${id} finished.`);
                     this.sessions.delete(id);
                 })
                 .on('error', (err) => {
-                    console.error(`FFmpeg error for ${id}:`, err.message);
+                    logger.ERROR(`FFmpeg error for ${id}: ${err.message}`);
                     this.sessions.delete(id);
                 });
 
@@ -132,22 +133,6 @@ class MediaService {
         });
     }
 
-
-
-    secondsToTimemark(seconds: number): string {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
-        return `00:${String(minutes).padStart(2, '0')}:${remainingSeconds.toFixed(2).padStart(5, '0')}`;
-    }
-
-    getSession(sessionId: string): StreamSession | null {
-        const session = this.sessions.get(sessionId);
-        if (session) {
-            return session;
-        }
-        return null;
-    }
-
     getSessions(): Map<string, StreamSession> {
         return this.sessions;
     }
@@ -160,8 +145,8 @@ class MediaService {
      * Shutdown media service
      */
     async shutdown(): Promise<void> {
-        console.log('Shutting down MediaService...');
-        console.log('MediaService shutdown complete');
+        logger.INFO('Shutting down MediaService...');
+        logger.INFO('MediaService shutdown complete');
     }
 }
 
