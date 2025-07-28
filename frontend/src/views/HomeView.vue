@@ -24,7 +24,10 @@
                                                                                                  @click="cancelStream">(X)</a>
                 </p>
 
-                <p class="font-normal mb-4">Sessions: {{ getSessions() }}</p>
+                <h3 class="font-bold mb-2">Sessions</h3>
+                <ul class="flex mb-4">
+                    <li v-for="session in getSessions()">- {{ session.id }} [{{ session.file.name }}] [segments: /]</li>
+                </ul>
 
                 <div class="w-full bg-black/30 rounded-xl">
                     <video
@@ -51,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, onMounted, ref } from "vue";
+import { inject, onMounted, onUnmounted, ref } from "vue";
 import { LokiHeader } from "../components/loki-header";
 import type { AxiosInstance } from "axios";
 import Hls from "hls.js";
@@ -68,12 +71,19 @@ interface MediaFile {
     modified: Date;
 }
 
+interface StreamSession {
+    id: string;
+    file: MediaFile;
+}
+
 const isLoading = ref(true);
 const hls = ref<Hls | null>(null)
 const mediaFiles = ref<MediaFile[]>([]);
-const sessions = ref<any[]>([]);
 const selectedMedia = ref<MediaFile | null>(null);
 const videoRef = ref<HTMLVideoElement | null>(null)
+
+let sessionInterval: number | undefined;
+const sessions = ref<StreamSession[]>([]);
 
 const loadMediaFiles = async () => {
     isLoading.value = true;
@@ -90,7 +100,7 @@ const loadMediaFiles = async () => {
 
 const loadSessions = async () => {
     try {
-        const response = await axios?.get<any[]>('/stream/sessions');
+        const response = await axios?.get<any[]>('/sessions');
         sessions.value = response?.data || [];
     } catch (err) {
         console.error('Failed to load media files:', err);
@@ -102,12 +112,11 @@ const loadSessions = async () => {
 const selectMedia = (media: MediaFile) => {
     selectedMedia.value = media;
     initHls(streamUrl());
-    loadSessions()
 }
 
 const streamUrl = () => {
     if (!selectedMedia.value) return '';
-    return `/api/media/${selectedMedia.value.id}/playlist.m3u8`;
+    return `/api/streaming/${selectedMedia.value.id}/playlist.m3u8`;
 };
 
 function initHls(url: string) {
@@ -271,7 +280,16 @@ function getMainAudioTrack(media: MediaFile): string {
 
 onMounted(() => {
     loadMediaFiles();
-    loadSessions();
+
+    sessionInterval = window.setInterval(() => {
+        loadSessions();
+    }, 3000)
+})
+
+onUnmounted(() => {
+    if (sessionInterval) {
+        clearInterval(sessionInterval)
+    }
 })
 </script>
 
