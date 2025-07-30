@@ -43,7 +43,7 @@ app.use(cors({
 // Zusätzliche CORS Headers für Streaming
 app.use((req, res, next) => {
     // CORS Headers für HLS Streaming
-    if (req.path.includes('/api/media/')) {
+    if (req.path.includes('/api/streaming/')) {
         res.header('Access-Control-Allow-Origin', '*');
         res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
         res.header('Access-Control-Allow-Headers', 'Range');
@@ -90,12 +90,7 @@ const server = app.listen(3000, () => {
 
         console.log(`Listening on http://${host}:${port}`);
         logger.DEBUG(`Media path: ${MEDIA_PATH}`);
-        logger.DEBUG(`Transcode path: ${TRANSCODE_PATH}`);
-        logger.DEBUG(`Metadata path: ${METADATA_PATH}`);
-
         fs.ensureDirSync(MEDIA_PATH);
-        fs.ensureDirSync(TRANSCODE_PATH);
-        fs.ensureDirSync(METADATA_PATH);
     }
 });
 

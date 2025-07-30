@@ -3,10 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import { MediaFile } from "../types/media-file";
-import { MEDIA_PATH, TRANSCODE_PATH } from "../app";
+import { MEDIA_PATH } from "../app";
 import { scanMediaDirectory } from "../utils/utils";
-import mediaService, { SEGMENT_DURATION } from "../services/media-service";
+import mediaService, { FAST_START_SEGMENTS, SEGMENT_DURATION, TRANSCODE_PATH } from "../services/streaming-service";
 import { logger } from "../logger";
+import { findMediaFileById } from "../utils/media-utils";
 
 const router = Router();
 
@@ -14,7 +15,7 @@ const router = Router();
  * Get HLS playlist
  * GET /api/media/:id/playlist.m3u8
  */
-router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) => {
+router.get('/api/streaming/:id/playlist.m3u8', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
 
@@ -28,6 +29,12 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
 
         if (!await fs.pathExists(file.path)) {
             return res.status(404).json({ error: 'Media file does not exist on disk' });
+        }
+
+        // Start fast transcode if no session exists
+        if (!mediaService.getSessions().has(id)) {
+            logger.DEBUG(`Starting fast transcode at segment ${seekSegment}`);
+            await mediaService.startTranscode(file, seekSegment, 'fast');
         }
 
         if (!mediaService.getSessions().has(id)) {
@@ -52,7 +59,7 @@ router.get('/api/media/:id/playlist.m3u8', async (req: Request, res: Response) =
  * Get/generate HLS segment
  * GET /api/media/:id/segment:index.ts
  */
-router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response) => {
+router.get('/api/streaming/:id/segment:index.ts', async (req: Request, res: Response) => {
     try {
         const { id, index } = req.params;
         const segment = parseInt(index);
@@ -84,7 +91,7 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
                         return setTimeout(() => res.redirect(req.originalUrl), 1000);
                     } else {
                         logger.DEBUG(`Killing current transcode for seek to ${segment}`);
-                        session.process.kill('SIGKILL');
+                        await mediaService.killSession(session.id);
                         await mediaService.startTranscode(file, segment);
                     }
                 }
@@ -102,28 +109,5 @@ router.get('/api/media/:id/segment:index.ts', async (req: Request, res: Response
         res.status(500).json({ error: 'Failed to create stream' });
     }
 })
-
-/**
- * Return all active sessions
- */
-router.get('/api/stream/sessions', async (req: Request, res: Response) => {
-    try {
-        const sessions = mediaService.getSessionsFlat();
-        res.status(200).json(sessions);
-    } catch (error) {
-        logger.ERROR(`Error getting active sessions: ${error}`);
-        res.status(500).json({ error: 'Failed to get active sessions' });
-    }
-});
-
-async function findMediaFileById(id: string): Promise<MediaFile | null> {
-    try {
-        const mediaFiles = await scanMediaDirectory(MEDIA_PATH);
-        return mediaFiles.find(file => file.id === id) || null;
-    } catch (error) {
-        logger.ERROR(`Error finding media file: ${error}`);
-        return null;
-    }
-}
 
 export default router;

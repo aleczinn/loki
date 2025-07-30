@@ -8,6 +8,20 @@ import { VideoTrack } from "../types/video-track";
 import { SubtitleTrack } from "../types/subtitle-track";
 import { BaseTrack } from "../types/base-track";
 import { AudioTrack } from "../types/audio-track";
+import { MediaFile } from "../types/media-file";
+import { scanMediaDirectory } from "./utils";
+import { MEDIA_PATH } from "../app";
+import { logger } from "../logger";
+
+export async function findMediaFileById(id: string): Promise<MediaFile | null> {
+    try {
+        const mediaFiles = await scanMediaDirectory(MEDIA_PATH);
+        return mediaFiles.find(file => file.id === id) || null;
+    } catch (error) {
+        logger.ERROR(`Error finding media file: ${error}`);
+        return null;
+    }
+}
 
 export async function getMetaDataMediaInfo(path: string) {
     const factory = await mediaInfoFactory({
