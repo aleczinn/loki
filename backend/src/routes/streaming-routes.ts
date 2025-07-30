@@ -5,7 +5,7 @@ import * as crypto from 'crypto';
 import { MediaFile } from "../types/media-file";
 import { MEDIA_PATH } from "../app";
 import { scanMediaDirectory } from "../utils/utils";
-import mediaService, { FAST_START_SEGMENTS, SEGMENT_DURATION, TRANSCODE_PATH } from "../services/streaming-service";
+import streamingService, { SEGMENT_DURATION, TRANSCODE_PATH } from "../services/streaming-service";
 import { logger } from "../logger";
 import { findMediaFileById } from "../utils/media-utils";
 
@@ -32,18 +32,18 @@ router.get('/api/streaming/:id/playlist.m3u8', async (req: Request, res: Respons
         }
 
         // Start fast transcode if no session exists
-        if (!mediaService.getSessions().has(id)) {
+        if (!streamingService.getSessions().has(id)) {
             logger.DEBUG(`Starting fast transcode at segment ${seekSegment}`);
-            await mediaService.startTranscode(file, seekSegment, 'fast');
+            await streamingService.startTranscode(file, seekSegment, 'fast');
         }
 
-        if (!mediaService.getSessions().has(id)) {
+        if (!streamingService.getSessions().has(id)) {
             logger.DEBUG(`Start transcode at segment ${seekSegment} due to ?t=${t}`);
-            await mediaService.startTranscode(file, seekSegment);
+            await streamingService.startTranscode(file, seekSegment);
         }
 
         // Generate playlist if it doesn't exist
-        const { playlistPath } = await mediaService.generatePlaylist(file)
+        const { playlistPath } = await streamingService.generatePlaylist(file)
 
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'no-cache');
@@ -80,19 +80,19 @@ router.get('/api/streaming/:id/segment:index.ts', async (req: Request, res: Resp
         const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segment}.ts`);
 
         if (!fs.existsSync(segmentPath)) {
-            if (!mediaService.getSessions().has(id)) {
+            if (!streamingService.getSessions().has(id)) {
                 logger.DEBUG(`Starting transcode for ${id} at segment ${segment}`);
-                await mediaService.startTranscode(file, segment);
+                await streamingService.startTranscode(file, segment);
             } else {
-                const session = mediaService.getSessions().get(id);
+                const session = streamingService.getSessions().get(id);
                 if (session) {
                     if (segment < session.latestSegment + 3) {
                         // Wait and check again
                         return setTimeout(() => res.redirect(req.originalUrl), 1000);
                     } else {
                         logger.DEBUG(`Killing current transcode for seek to ${segment}`);
-                        await mediaService.killSession(session.id);
-                        await mediaService.startTranscode(file, segment);
+                        await streamingService.killSession(session.id) ;
+                        await streamingService.startTranscode(file, segment);
                     }
                 }
             }

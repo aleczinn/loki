@@ -287,7 +287,7 @@ class StreamingService {
     }
 }
 
-const mediaService = new StreamingService();
+const streamingService = new StreamingService();
 
-export default mediaService;
+export default streamingService;
 export { StreamingService, StreamSession };
