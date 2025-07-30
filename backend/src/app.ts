@@ -10,6 +10,7 @@ import * as fs from 'fs-extra';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import mediaService from "./services/media-service";
+import sessionRoutes from "./routes/session-routes";
 import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
@@ -67,6 +68,7 @@ app.use(userAgentMiddleware)
 
 app.use(mediaRoutes)
 app.use(streamingRoutes)
+app.use(sessionRoutes)
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
