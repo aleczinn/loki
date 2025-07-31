@@ -274,8 +274,38 @@ class StreamingService {
         }));
     }
 
-    async generateThumbnail(file: MediaFile, outputPath: string): Promise<void> {
+    /**
+     * Generate a thumbnail at the specified timestamp.
+     * @param file the media file
+     * @param outputPath the specified output path
+     * @param atSecond timestamp where to take a screenshot. -1 means at the half of the video.
+     */
+    async generateThumbnail(file: MediaFile, outputPath: string, atSecond: number = -1): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const folder = path.dirname(outputPath);
+            const filename = path.basename(outputPath);
 
+            let timestamp: number;
+            const duration = file.metadata?.video[0]?.Duration || 0;
+
+            if (atSecond === -1) {
+                if (!duration || isNaN(duration)) {
+                    return reject(new Error('No valid duration in metadata to calculate midpoint.'));
+                }
+                timestamp = duration / 2;
+            } else {
+                timestamp = atSecond;
+            }
+
+            ffmpeg(file.path)
+                .on('end', () => resolve())
+                .on('error', (err) => reject(err))
+                .screenshot({
+                    timestamps: [timestamp],
+                    filename,
+                    folder
+                })
+        });
     }
 
     /**
