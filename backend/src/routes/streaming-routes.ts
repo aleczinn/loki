@@ -19,10 +19,7 @@ router.get('/api/streaming/:id/playlist.m3u8', async (req: Request, res: Respons
     try {
         const { id } = req.params;
 
-        const t = parseFloat(req.query.t as string) || 0;
-        const seekSegment = Math.floor(t / SEGMENT_DURATION);
-
-        const file = await findMediaFileById(id)
+        const file = await findMediaFileById(id);
         if (!file) {
             return res.status(404).json({ error: 'Media file not found' });
         }
@@ -31,19 +28,8 @@ router.get('/api/streaming/:id/playlist.m3u8', async (req: Request, res: Respons
             return res.status(404).json({ error: 'Media file does not exist on disk' });
         }
 
-        // Start fast transcode if no session exists
-        if (!streamingService.getSessions().has(id)) {
-            logger.DEBUG(`Starting fast transcode at segment ${seekSegment}`);
-            await streamingService.startTranscode(file, seekSegment, 'fast');
-        }
-
-        if (!streamingService.getSessions().has(id)) {
-            logger.DEBUG(`Start transcode at segment ${seekSegment} due to ?t=${t}`);
-            await streamingService.startTranscode(file, seekSegment);
-        }
-
         // Generate playlist if it doesn't exist
-        const { playlistPath } = await streamingService.generatePlaylist(file)
+        const { playlistPath } = await streamingService.generatePlaylist(file);
 
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'no-cache');
@@ -53,7 +39,8 @@ router.get('/api/streaming/:id/playlist.m3u8', async (req: Request, res: Respons
         logger.ERROR(`Error creating stream: ${error}`);
         res.status(500).json({ error: 'Failed to create stream' });
     }
-})
+});
+
 
 /**
  * Get/generate HLS segment
@@ -68,7 +55,7 @@ router.get('/api/streaming/:id/segment:index.ts', async (req: Request, res: Resp
             return res.status(400).json({ error: 'Invalid segment index' });
         }
 
-        const file = await findMediaFileById(id)
+        const file = await findMediaFileById(id);
         if (!file) {
             return res.status(404).json({ error: 'Media file not found' });
         }
@@ -79,35 +66,22 @@ router.get('/api/streaming/:id/segment:index.ts', async (req: Request, res: Resp
 
         const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segment}.ts`);
 
-        if (!fs.existsSync(segmentPath)) {
-            if (!streamingService.getSessions().has(id)) {
-                logger.DEBUG(`Starting transcode for ${id} at segment ${segment}`);
-                await streamingService.startTranscode(file, segment);
-            } else {
-                const session = streamingService.getSessions().get(id);
-                if (session) {
-                    if (segment < session.latestSegment + 3) {
-                        // Wait and check again
-                        return setTimeout(() => res.redirect(req.originalUrl), 1000);
-                    } else {
-                        logger.DEBUG(`Killing current transcode for seek to ${segment}`);
-                        await streamingService.killSession(session.id) ;
-                        await streamingService.startTranscode(file, segment);
-                    }
-                }
-            }
+        // First check if segment already exists
+        if (await fs.pathExists(segmentPath)) {
+            res.setHeader('Content-Type', 'video/mp2t');
+            return res.sendFile(segmentPath);
         }
 
-        if (fs.existsSync(segmentPath)) {
-            res.setHeader('Content-Type', 'video/mp2t');
-            res.sendFile(segmentPath);
-        } else {
-            res.status(404).json({ error: 'Segment not ready' });
-        }
+        // Create segment here / start transcode?
+
+        // If still not ready, ask client to retry
+        res.setHeader('Retry-After', '1');
+        res.status(503).json({ error: 'Segment not ready, please retry' });
+
     } catch (error) {
-        logger.ERROR(`Error creating stream: ${error}`);
-        res.status(500).json({ error: 'Failed to create stream' });
+        logger.ERROR(`Error serving segment: ${error}`);
+        res.status(500).json({ error: 'Failed to serve segment' });
     }
-})
+});
 
 export default router;
