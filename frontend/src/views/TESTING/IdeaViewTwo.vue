@@ -124,8 +124,8 @@
 <script setup lang="ts">
 // import { inject } from "vue";
 import { ref } from "vue";
-import { LokiImage } from "../components/loki-image";
-import { LokiSidebar } from "../components/loki-sidebar";
+import { LokiImage } from "../../components/loki-image";
+import { LokiSidebar } from "../../components/loki-sidebar";
 // import type { AxiosInstance } from "axios";
 //
 // const axios = inject<AxiosInstance>('axios');

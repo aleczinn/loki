@@ -55,7 +55,7 @@
 
 <script setup lang="ts">
 import { inject, onMounted, onUnmounted, ref } from "vue";
-import { LokiHeader } from "../components/loki-header";
+import { LokiHeader } from "../../components/loki-header";
 import type { AxiosInstance } from "axios";
 import Hls from "hls.js";
 

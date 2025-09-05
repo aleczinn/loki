@@ -139,8 +139,8 @@
 
 <script setup lang="ts">
 // import { inject } from "vue";
-import { LokiHeader } from "../components/loki-header";
-import { LokiCarousel } from "../components/loki-carousel";
+import { LokiHeader } from "../../components/loki-header";
+import { LokiCarousel } from "../../components/loki-carousel";
 // import type { AxiosInstance } from "axios";
 //
 // const axios = inject<AxiosInstance>('axios');
