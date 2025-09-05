@@ -32,6 +32,11 @@ const routes = [
         component: () => import('../views/SandboxView.vue'),
     },
     {
+        path: "/styling",
+        name: "Styling",
+        component: () => import('../views/StylingView.vue'),
+    },
+    {
         path: "/:pathMatch(.*)*",
         component: () => import('../views/PageNotFoundView.vue'),
     }

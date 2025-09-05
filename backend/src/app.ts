@@ -89,7 +89,7 @@ const server = app.listen(3000, () => {
         const port: number = address.port;
 
         console.log(`Listening on http://${host}:${port}`);
-        logger.DEBUG(`Media path: ${MEDIA_PATH}`);
+        logger.INFO(`Media path: ${MEDIA_PATH}`);
         fs.ensureDirSync(MEDIA_PATH);
     }
 });

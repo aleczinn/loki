@@ -1,0 +1,59 @@
+@import "./fonts.css";
+@import "tailwindcss";
+
+@theme {
+    /* Colors */
+    --color-primary-light: #8FC5EA;
+    --color-primary: #53A7DD;
+    --color-primary-darker: #1e6fab;
+
+    --color-alert: #EB3F5E;
+    --color-success: #4CAF50;
+
+    --color-gray: #9CA4AB;
+
+    --color-black-700: #28262D;
+    --color-black-800: #0D0C0F;
+    --color-black-900: #08080A;
+
+    --color-white: #ffffff;
+    --color-transparent: transparent;
+
+    /* Breakpoints */
+    --breakpoint-3xl: 112rem;
+    --breakpoint-4xl: 128rem;
+
+    /* Max Width */
+    --max-width-loki: 120rem;
+
+    /* Font Sizes */
+    --font-size-4xs: 0.375rem;
+    --font-size-3xs: 0.5rem;
+    --font-size-2xs: 0.625rem;
+
+    /* Font Families */
+    --font-loki-main: "Inter", sans-serif;
+    --font-loki-sub: "Rubik", sans-serif;
+
+    /* Border Width */
+    --border-width-1: 1px;
+}
+
+@layer base {
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
+}

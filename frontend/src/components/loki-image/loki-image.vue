@@ -54,7 +54,7 @@ function loaded() {
 }
 </script>
 
-<style scoped lang="postcss">
+<style scoped lang="css">
 .image-container {
     @apply relative bg-background-darkest rounded-lg w-full h-full;
 

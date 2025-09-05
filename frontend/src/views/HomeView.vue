@@ -25,8 +25,8 @@
                 </p>
 
                 <h3 class="font-bold mb-2">Sessions</h3>
-                <ul class="flex mb-4">
-                    <li v-for="session in getSessions()">- {{ session.id }} [{{ session.file.name }}] [segments: /]</li>
+                <ul class="flex flex-col mb-4">
+                    <li v-for="session in getSessions()">- {{ session.id }} [{{ session.file.name }}]</li>
                 </ul>
 
                 <div class="w-full bg-black/30 rounded-xl">
@@ -282,7 +282,7 @@ onMounted(() => {
     loadMediaFiles();
 
     sessionInterval = window.setInterval(() => {
-        loadSessions();
+        // loadSessions();
     }, 3000)
 })
 
