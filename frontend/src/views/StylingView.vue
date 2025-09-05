@@ -29,9 +29,8 @@
 </template>
 
 <script setup lang="ts">
-
-import LokiButton from "../components/loki-button/loki-button.vue";
 import IconPlay from "../icons/icon-play.vue";
+import { LokiButton } from "../components/loki-button";
 </script>
 
 <style scoped lang="css">
