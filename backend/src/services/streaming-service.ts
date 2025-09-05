@@ -2,20 +2,20 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import ffmpeg from 'fluent-ffmpeg';
-import { findMediaFileById, getCombinedMetadata } from "../utils/media-utils";
 import { MediaFile } from "../types/media-file";
 import * as console from "node:console";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
+import { ClientInfo } from "../types/client-info";
 
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
 export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
 export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'auto';
 
 export const SEGMENT_DURATION = 4; // seconds per segment
-export const SEGMENT_PUFFER_COUNT = 10; // is the number how many segments could technically be created in one transcoding call
-export const SEGMENT_PUFFER_LOOK_AHEAD = 3; // defined the number where to check for future segments. (current segment + PUFFER_COUNT - x)
-export const SEGMENT_OVERLAP_THRESHOLD = 3; // segments distance to consider reusing a job
+export const SEGMENT_FAST_START_SEGMENTS = 30;
+
+export const THROTTLE_TRANSCODE = false;
 
 interface TranscodeJob {
     id: string;
@@ -27,16 +27,14 @@ interface TranscodeJob {
 }
 
 interface StreamSession {
-    id: string;
+    token: string;
     file: MediaFile;
-    jobs: Map<string, TranscodeJob>; // Multiple transcode jobs per session
-    pendingSegments: Set<number>;    // Segments currently being transcoded
-    completedSegments: Set<number>;  // Segments that are done
-    waitingClients: Map<number, ((exists: boolean) => void)[]>; // Clients waiting for segments
+    process: ffmpeg.FfmpegCommand | null;
+    completedSegments: Set<number>;
+    clientInfo: ClientInfo;
 }
 
 class StreamingService {
-
     private sessions: Map<string, StreamSession> = new Map();
     private lock = new AsyncLock();
 
@@ -48,56 +46,56 @@ class StreamingService {
         fs.ensureDirSync(METADATA_PATH);
 
         // Load existing sessions on startup
-        this.loadExistingSessions();
+        // this.loadExistingSessions();
     }
 
-    private async loadExistingSessions(): Promise<void> {
-        try {
-            if (!await fs.pathExists(TRANSCODE_PATH)) return;
-
-            const dirs = await fs.readdir(TRANSCODE_PATH);
-            for (const dir of dirs) {
-                const sessionPath = path.join(TRANSCODE_PATH, dir);
-                const stats = await fs.stat(sessionPath);
-
-                if (stats.isDirectory()) {
-                    // Check if segments exist
-                    const files = await fs.readdir(sessionPath);
-                    const segments = files.filter(f => f.match(/^segment\d+\.ts$/));
-
-                    if (segments.length > 0) {
-                        const id = dir;
-                        const file = await findMediaFileById(id);
-                        if (!file) continue;
-
-                        // Extract segment numbers from existing files
-                        const completedSegments = new Set<number>();
-                        segments.forEach(seg => {
-                            const match = seg.match(/segment(\d+)\.ts/);
-                            if (match) {
-                                completedSegments.add(parseInt(match[1]));
-                            }
-                        });
-
-                        logger.DEBUG(`Found existing session ${dir} with ${completedSegments.values()} segments`);
-
-                        const session: StreamSession = {
-                            id: id,
-                            file: file,
-                            jobs: new Map(),
-                            pendingSegments: new Set(),
-                            completedSegments: completedSegments,
-                            waitingClients: new Map()
-                        };
-
-                        this.sessions.set(id, session);
-                    }
-                }
-            }
-        } catch (error) {
-            logger.ERROR(`Error loading existing sessions: ${error}`);
-        }
-    }
+    // private async loadExistingSessions(): Promise<void> {
+    //     try {
+    //         if (!await fs.pathExists(TRANSCODE_PATH)) return;
+    //
+    //         const dirs = await fs.readdir(TRANSCODE_PATH);
+    //         for (const dir of dirs) {
+    //             const sessionPath = path.join(TRANSCODE_PATH, dir);
+    //             const stats = await fs.stat(sessionPath);
+    //
+    //             if (stats.isDirectory()) {
+    //                 // Check if segments exist
+    //                 const files = await fs.readdir(sessionPath);
+    //                 const segments = files.filter(f => f.match(/^segment\d+\.ts$/));
+    //
+    //                 if (segments.length > 0) {
+    //                     const id = dir;
+    //                     const file = await findMediaFileById(id);
+    //                     if (!file) continue;
+    //
+    //                     // Extract segment numbers from existing files
+    //                     const completedSegments = new Set<number>();
+    //                     segments.forEach(seg => {
+    //                         const match = seg.match(/segment(\d+)\.ts/);
+    //                         if (match) {
+    //                             completedSegments.add(parseInt(match[1]));
+    //                         }
+    //                     });
+    //
+    //                     logger.DEBUG(`Found existing session ${dir} with ${completedSegments.values()} segments`);
+    //
+    //                     const session: StreamSession = {
+    //                         id: id,
+    //                         file: file,
+    //                         jobs: new Map(),
+    //                         pendingSegments: new Set(),
+    //                         completedSegments: completedSegments,
+    //                         waitingClients: new Map()
+    //                     };
+    //
+    //                     this.sessions.set(id, session);
+    //                 }
+    //             }
+    //         }
+    //     } catch (error) {
+    //         logger.ERROR(`Error loading existing sessions: ${error}`);
+    //     }
+    // }
 
     async generatePlaylist(file: MediaFile): Promise<{ id: string; playlistPath: string }> {
         const id = file.id;
@@ -138,266 +136,12 @@ class StreamingService {
         return { id, playlistPath };
     }
 
-    // private findSuitableJob(session: StreamSession, segmentIndex: number): TranscodeJob | null {
-    //     // Find a job that can handle this segment
-    //     for (const job of session.jobs.values()) {
-    //         // Check if segment is within job's range or close enough to extend
-    //         if (segmentIndex >= job.startSegment && segmentIndex <= job.targetSegment) {
-    //             return job;
-    //         }
-    //
-    //         // Check if we can extend this job
-    //         if (job.mode === 'slow' &&
-    //             segmentIndex > job.targetSegment &&
-    //             segmentIndex <= job.targetSegment + SEGMENT_OVERLAP_THRESHOLD) {
-    //             return job;
-    //         }
-    //     }
-    //     return null;
-    // }
-
-    // async waitForSegment(id: string, segmentIndex: number, timeout: number = 30000): Promise<boolean> {
-    //     // @ts-ignore
-    //     return this.lock.acquire(`segment-${id}-${segmentIndex}`, async () => {
-    //         const session = this.sessions.get(id);
-    //         if (!session) return false;
-    //
-    //         // Check if segment already exists
-    //         const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segmentIndex}.ts`);
-    //         if (await fs.pathExists(segmentPath)) {
-    //             return true;
-    //         }
-    //
-    //         // Check if segment is already completed in memory
-    //         if (session.completedSegments.has(segmentIndex)) {
-    //             return true;
-    //         }
-    //
-    //         // If segment is being transcoded, wait for it
-    //         if (session.pendingSegments.has(segmentIndex)) {
-    //             return new Promise((resolve) => {
-    //                 const timer = setTimeout(() => {
-    //                     const waiting = session.waitingClients.get(segmentIndex);
-    //                     if (waiting) {
-    //                         const idx = waiting.indexOf(resolve);
-    //                         if (idx > -1) waiting.splice(idx, 1);
-    //                     }
-    //                     resolve(false);
-    //                 }, timeout);
-    //
-    //                 if (!session.waitingClients.has(segmentIndex)) {
-    //                     session.waitingClients.set(segmentIndex, []);
-    //                 }
-    //                 session.waitingClients.get(segmentIndex)!.push((exists) => {
-    //                     clearTimeout(timer);
-    //                     resolve(exists);
-    //                 });
-    //             });
-    //         }
-    //
-    //         return false;
-    //     });
-    // }
-
-    // async getOrCreateSegment(file: MediaFile, segmentIndex: number): Promise<string | null> {
-    //     const id = file.id;
-    //     const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segmentIndex}.ts`);
-    //
-    //     // Use lock to prevent race conditions
-    //     return this.lock.acquire(`media-${id}`, async () => {
-    //         // Check if segment already exists
-    //         if (await fs.pathExists(segmentPath)) {
-    //             return segmentPath;
-    //         }
-    //
-    //         let session = this.sessions.get(id);
-    //
-    //         // If no session exists, create one
-    //         if (!session) {
-    //             logger.DEBUG(`Creating new session for ${id}`);
-    //             session = {
-    //                 id: id,
-    //                 file: file,
-    //                 jobs: new Map(),
-    //                 pendingSegments: new Set(),
-    //                 completedSegments: new Set(),
-    //                 waitingClients: new Map()
-    //             };
-    //             this.sessions.set(id, session);
-    //         }
-    //
-    //         // Check if segment is already being transcoded
-    //         if (session.pendingSegments.has(segmentIndex)) {
-    //             return null; // Client should wait
-    //         }
-    //
-    //         // Find suitable job or create new one
-    //         const suitableJob = this.findSuitableJob(session, segmentIndex);
-    //
-    //         if (!suitableJob) {
-    //             // Need to create new transcode job
-    //             logger.DEBUG(`Starting new transcode job for ${id} at segment ${segmentIndex}`);
-    //             await this.startTranscodeJob(session, segmentIndex, 'fast');
-    //         }
-    //
-    //         return null; // Client should retry
-    //     });
-    // }
 
     private async startTranscode(session: StreamSession, startSegment: number): Promise<void> {
-        const file = session.file;
-        const jobId = `${session.id}-${startSegment}-${Date.now()}`;
 
-        const dir = path.join(TRANSCODE_PATH, session.id);
-        const playlistPath = path.join(dir, `playlist-${jobId}.m3u8`);
-        const segmentPath = path.join(dir, 'segment%d.ts');
-        const seekTime = startSegment * SEGMENT_DURATION;
-
-        await fs.ensureDir(dir);
-
-        const framerate = file.metadata?.video[0]?.FrameRate || -1;
-        const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
-
-        // Calculate target segments based on mode
-        let inputOptions = [
-            '-copyts',
-            '-ss', `${seekTime}`,
-            '-threads 0',
-        ];
-
-        const command = ffmpeg(file.path)
-            .inputOptions(inputOptions)
-            .videoCodec('libx264')
-            .audioCodec('aac')
-            .outputOptions([
-                // GENERAL
-                '-copyts',
-                '-map', '0',
-                '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
-
-                // VIDEO
-                '-pix_fmt', 'yuv420p',
-                '-preset veryfast',
-                '-crf', '24',
-                `-g ${gopSize}`,
-                '-sc_threshold', '0',
-
-                // AUDIO
-                '-b:a', '192k',
-                '-ac', '2',
-
-                // HLS
-                '-f', 'hls',
-                `-hls_time ${SEGMENT_DURATION}`,
-                '-hls_list_size 0',
-                '-hls_playlist_type vod',
-                '-hls_flags', 'independent_segments',
-                `-start_number ${startSegment}`,
-                `-hls_segment_filename ${segmentPath}`,
-
-                '-to', String(targetDuration) // Limit duration
-            ])
-            .output(playlistPath);
-
-        const job: TranscodeJob = {
-            id: jobId,
-            process: command,
-            startSegment: startSegment,
-            latestSegment: startSegment - 1,
-            targetSegment: startSegment + targetSegments - 1,
-            mode: mode,
-            createdAt: new Date()
-        };
-
-        // Mark target segments as pending
-        for (let i = startSegment; i <= job.targetSegment; i++) {
-            session.pendingSegments.add(i);
-        }
-
-        command.on('progress', (progress) => {
-            const time = parseFloat(String(progress.timemark.split(':').reduce((acc, val, i) => acc + parseFloat(val) * Math.pow(60, 2 - i), 0)));
-            const currentSegment = startSegment + Math.floor(time / SEGMENT_DURATION);
-
-            // Update completed segments
-            for (let i = job.latestSegment + 1; i <= currentSegment; i++) {
-                session.pendingSegments.delete(i);
-                session.completedSegments.add(i);
-
-                // Notify waiting clients
-                const waiting = session.waitingClients.get(i);
-                if (waiting) {
-                    waiting.forEach(callback => callback(true));
-                    session.waitingClients.delete(i);
-                }
-            }
-
-            job.latestSegment = currentSegment;
-        })
-            .on('end', () => {
-                logger.DEBUG(`Job ${jobId} finished (mode: ${mode})`);
-
-                // Mark all remaining segments as completed
-                for (let i = job.startSegment; i <= job.targetSegment; i++) {
-                    if (session.pendingSegments.has(i)) {
-                        session.pendingSegments.delete(i);
-                        session.completedSegments.add(i);
-                        const waiting = session.waitingClients.get(i);
-                        if (waiting) {
-                            waiting.forEach(callback => callback(true));
-                            session.waitingClients.delete(i);
-                        }
-                    }
-                }
-
-                // Remove job from session
-                session.jobs.delete(jobId);
-
-                // Clean up temporary playlist
-                fs.unlink(playlistPath);
-
-                // Start slow transcode if this was fast mode and we need more segments
-                const duration = file.metadata?.video[0].Duration || 0;
-                if (mode === 'fast' && job.targetSegment < Math.ceil(duration / SEGMENT_DURATION) - 1) {
-                    const nextSegment = job.targetSegment + 1;
-                    // Check if another job is already handling these segments
-                    const existingJob = this.findSuitableJob(session, nextSegment);
-                    if (!existingJob) {
-                        logger.DEBUG(`Starting follow-up slow transcode from segment ${nextSegment}`);
-                        this.startTranscodeJob(session, nextSegment, 'slow');
-                    }
-                }
-            })
-            .on('error', (err) => {
-                logger.ERROR(`Job ${jobId} error: ${err.message}`);
-
-                // Clean up pending segments
-                for (let i = job.startSegment; i <= job.targetSegment; i++) {
-                    if (session.pendingSegments.has(i)) {
-                        session.pendingSegments.delete(i);
-                    }
-                }
-
-                // Notify waiting clients
-                for (let i = job.startSegment; i <= job.targetSegment; i++) {
-                    const waiting = session.waitingClients.get(i);
-                    if (waiting) {
-                        waiting.forEach(callback => callback(false));
-                        session.waitingClients.delete(i);
-                    }
-                }
-
-                // Remove job
-                session.jobs.delete(jobId);
-
-                // Clean up temporary playlist
-                fs.unlink(playlistPath);
-            });
-
-        session.jobs.set(jobId, job);
-        command.run();
     }
 
-    async killSession(id: string): Promise<void> {
+    private async killSession(id: string): Promise<void> {
         return this.lock.acquire(`media-${id}`, async () => {
             const session = this.sessions.get(id);
             if (!session) return;
@@ -446,27 +190,6 @@ class StreamingService {
             session.waitingClients.clear();
             session.pendingSegments.clear();
         });
-    }
-
-    getSessionInfo() {
-        return Array.from(this.sessions.entries()).map(([id, session]) => ({
-            id,
-            fileName: session.file.name,
-            filePath: session.file.path,
-            isTranscoding: session.jobs.size > 0,
-            activeJobs: session.jobs.size,
-            jobs: Array.from(session.jobs.values()).map(job => ({
-                id: job.id,
-                mode: job.mode,
-                startSegment: job.startSegment,
-                latestSegment: job.latestSegment,
-                targetSegment: job.targetSegment,
-                age: Math.floor((Date.now() - job.createdAt.getTime()) / 1000)
-            })),
-            completedSegments: session.completedSegments.size,
-            pendingSegments: session.pendingSegments.size,
-            waitingClients: session.waitingClients.size
-        }));
     }
 
     getSessions(): Map<string, StreamSession> {

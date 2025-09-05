@@ -5,6 +5,8 @@ import { Firefox } from "../browser/firefox";
 import { Edge } from "../browser/edge";
 import { Safari } from "../browser/safari";
 import { DefaultBrowser } from "../browser/default-browser";
+import { ParsedUserAgent } from "../types/parsed-user-agent";
+import { ClientInfo } from "../types/client-info";
 
 declare global {
     namespace Express {
@@ -12,33 +14,6 @@ declare global {
             clientInfo?: ClientInfo;
         }
     }
-}
-
-export interface ParsedUserAgent {
-    raw: string;
-    browser: {
-        name: string;
-        version: string;
-        major: number;
-    };
-    os: {
-        name: string;
-        version: string;
-        platform: string;
-    };
-    device: {
-        type: 'desktop' | 'mobile' | 'tablet' | 'tv' | 'unknown';
-        model?: string;
-    };
-    engine: {
-        name: string;
-        version: string;
-    };
-}
-
-interface ClientInfo {
-    parsed: ParsedUserAgent;
-    browser: Browser;
 }
 
 export function userAgentMiddleware(req: Request, res: Response, next: NextFunction) {
