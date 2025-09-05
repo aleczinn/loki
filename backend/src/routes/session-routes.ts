@@ -4,7 +4,7 @@ import { logger } from "../logger";
 
 const router = Router();
 
-router.get('/api/user', async (req: Request, res: Response) => {
+router.get('/api/userinfo', async (req: Request, res: Response) => {
     try {
         const client = req.clientInfo;
 
