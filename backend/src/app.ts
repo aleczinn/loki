@@ -27,22 +27,22 @@ app.use(cors({
         : 'http://localhost:5173',  // development frontend server
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['X-Stream-Token', 'Content-Type', 'Authorization']
 }));
 
-// Zusätzliche CORS Headers für Streaming
-app.use((req, res, next) => {
-    // CORS Headers für HLS Streaming
-    if (req.path.includes('/api/streaming/')) {
-        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Range');
-        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
-    }
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'X-Stream-Token, Content-Type');
-    res.setHeader('Access-Control-Expose-Headers', 'X-Stream-Token');
-    next();
-});
+// // Zusätzliche CORS Headers für Streaming
+// app.use((req, res, next) => {
+//     // CORS Headers für HLS Streaming
+//     if (req.path.includes('/api/streaming/')) {
+//         res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+//         res.setHeader('Access-Control-Allow-Headers', 'Range');
+//         res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+//     }
+//     res.setHeader('Access-Control-Allow-Origin', '*');
+//     res.setHeader('Access-Control-Allow-Headers', 'X-Stream-Token, Content-Type');
+//     res.setHeader('Access-Control-Expose-Headers', 'X-Stream-Token');
+//     next();
+// });
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));

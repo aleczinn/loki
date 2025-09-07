@@ -19,6 +19,8 @@
                                                                                                  @click="cancelStream">(X)</a>
                 </p>
 
+                <button @click="testFetch">TESTFETCH</button>
+
                 <h3 class="text-white font-bold mb-2">Sessions</h3>
                 <ul class="text-white flex flex-col mb-4">
                     <li v-for="session in getSessions()">- {{ session.id }} [{{ session.file.name }}]</li>
@@ -113,6 +115,12 @@ const streamUrl = () => {
     return `/api/streaming/${selectedMedia.value.id}/${quality}/playlist.m3u8`;
 };
 
+const testFetch = async () => {
+    const response = await fetch('/api/streaming/06ac6c4df26e52dfc1f52f9e55548323/1080p_20mbps/playlist.m3u8');
+    const token = response.headers.get('X-Stream-Token');
+    console.log('Token:', token); // Sollte den Token zeigen
+}
+
 function initHls(url: string) {
     if (hls.value) {
         hls.value.destroy();
@@ -122,31 +130,62 @@ function initHls(url: string) {
     if (!videoRef.value) return;
 
     if (Hls.isSupported()) {
-        hls.value = new Hls({
-            xhrSetup: (xhr, url) => {
-                console.log(url);
+        // hls.value = new Hls({
+        //     xhrSetup: (xhr, url) => {
+        //         const token = localStorage.getItem('streamToken') || '';
+        //         xhr.setRequestHeader('X-Stream-Token', token);
+        //
+        //         // Store the original onreadystatechange handler
+        //         const originalHandler = xhr.onreadystatechange;
+        //
+        //         // Create our handler
+        //         xhr.onreadystatechange = function() {
+        //             // Extract token when response is ready
+        //             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
+        //                 const newToken = xhr.getResponseHeader('X-Stream-Token');
+        //
+        //                 if (newToken) {
+        //                     console.log('Received new stream token:', newToken);
+        //                     localStorage.setItem('streamToken', newToken);
+        //                 } else {
+        //                     console.warn('No stream token received from server');
+        //                 }
+        //             }
+        //
+        //             // Call the original handler if it exists
+        //             if (originalHandler) {
+        //                 originalHandler.apply(xhr, arguments as any);
+        //             }
+        //         };
+        //     }
+        // });
 
+        let tokenCaptured = false;
+
+        hls.value = new Hls({
+            xhrSetup: (xhr, _) => {
                 const token = localStorage.getItem('streamToken');
                 if (token) {
-                    // Token mitsenden
                     xhr.setRequestHeader('X-Stream-Token', token);
-                    console.log("send token");
                 }
+            }
+        });
 
-                // Token aus Response extrahieren
-                xhr.onreadystatechange = function (this: XMLHttpRequest, _: Event) {
-                    console.log(xhr.getResponseHeader("X-Stream-Token"));
+        hls.value.on(Hls.Events.MANIFEST_LOADED, () => {
+            if (!tokenCaptured) {
+                const token = localStorage.getItem('streamToken')
 
-                    if (xhr.readyState === 4) {
-                        const newToken = xhr.getResponseHeader('X-Stream-Token');
-                        if (newToken) {
-                            localStorage.setItem('streamToken', newToken);
-                            console.log("set new token", newToken);
-                        } else {
-                            console.log("no token received");
-                        }
+                fetch(url, {
+                    headers: token ? { 'X-Stream-Token': localStorage.getItem('streamToken')! } : {}
+                }).then(response => {
+                    const newToken = response.headers.get('X-Stream-Token');
+
+                    if (newToken) {
+                        console.log('SET TOKEN', newToken);
+                        localStorage.setItem('streamToken', newToken);
+                        tokenCaptured = true;
                     }
-                };
+                });
             }
         });
 
