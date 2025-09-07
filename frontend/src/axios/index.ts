@@ -33,7 +33,7 @@ export default {
         }
 
         axiosInstance.interceptors.request.use(config => {
-            const token = localStorage.getItem('streamToken');
+            const token = sessionStorage.getItem('streamToken');
             if (token) {
                 config.headers['X-Stream-Token'] = token;
             }
@@ -43,7 +43,7 @@ export default {
         axiosInstance.interceptors.response.use(response => {
             const token = response.headers['X-Stream-Token'];
             if (token) {
-                localStorage.setItem('streamToken', token);
+                sessionStorage.setItem('streamToken', token);
             }
             return response;
         });

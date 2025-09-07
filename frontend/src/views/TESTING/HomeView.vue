@@ -130,62 +130,25 @@ function initHls(url: string) {
     if (!videoRef.value) return;
 
     if (Hls.isSupported()) {
-        // hls.value = new Hls({
-        //     xhrSetup: (xhr, url) => {
-        //         const token = localStorage.getItem('streamToken') || '';
-        //         xhr.setRequestHeader('X-Stream-Token', token);
-        //
-        //         // Store the original onreadystatechange handler
-        //         const originalHandler = xhr.onreadystatechange;
-        //
-        //         // Create our handler
-        //         xhr.onreadystatechange = function() {
-        //             // Extract token when response is ready
-        //             if (xhr.readyState === XMLHttpRequest.DONE && xhr.status === 200) {
-        //                 const newToken = xhr.getResponseHeader('X-Stream-Token');
-        //
-        //                 if (newToken) {
-        //                     console.log('Received new stream token:', newToken);
-        //                     localStorage.setItem('streamToken', newToken);
-        //                 } else {
-        //                     console.warn('No stream token received from server');
-        //                 }
-        //             }
-        //
-        //             // Call the original handler if it exists
-        //             if (originalHandler) {
-        //                 originalHandler.apply(xhr, arguments as any);
-        //             }
-        //         };
-        //     }
-        // });
-
         let tokenCaptured = false;
 
         hls.value = new Hls({
-            xhrSetup: (xhr, _) => {
-                const token = localStorage.getItem('streamToken');
+            xhrSetup: (xhr: XMLHttpRequest, requestUrl: string) => {
+                const token = sessionStorage.getItem('streamToken');
                 if (token) {
                     xhr.setRequestHeader('X-Stream-Token', token);
                 }
-            }
-        });
 
-        hls.value.on(Hls.Events.MANIFEST_LOADED, () => {
-            if (!tokenCaptured) {
-                const token = localStorage.getItem('streamToken')
+                if (!tokenCaptured && requestUrl.includes('playlist.m3u8')) {
+                    xhr.addEventListener('load', function() {
+                        const newToken = xhr.getResponseHeader('X-Stream-Token');
 
-                fetch(url, {
-                    headers: token ? { 'X-Stream-Token': localStorage.getItem('streamToken')! } : {}
-                }).then(response => {
-                    const newToken = response.headers.get('X-Stream-Token');
-
-                    if (newToken) {
-                        console.log('SET TOKEN', newToken);
-                        localStorage.setItem('streamToken', newToken);
-                        tokenCaptured = true;
-                    }
-                });
+                        if (newToken && newToken !== token) {
+                            sessionStorage.setItem('streamToken', newToken);
+                            tokenCaptured = true;
+                        }
+                    });
+                }
             }
         });
 
