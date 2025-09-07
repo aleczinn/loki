@@ -1,48 +1,42 @@
 <template>
     <div class="flex flex-col h-screen">
-        <!--        <img src="/images/the-purge-anarchy-bg.jpg" alt="" class="aspect-w-16 aspect-h-9">-->
-
-        <loki-header></loki-header>
-
         <main class="flex-1 py-8">
             <div class="mx-auto max-w-[87rem]">
                 <!-- ADD CONTENT HERE -->
-                <h3 class="font-bold mb-2">Media Files</h3>
-
-
+                <h3 class="text-white font-bold mb-2">Media Files</h3>
                 <div class="flex flex-col mb-4">
                     <a v-for="media in mediaFiles" :key="media.name" @click="selectMedia(media)"
-                       class="transition-all duration-200 hover:cursor-pointer hover:ml-4">
+                       class="text-white  transition-all duration-200 hover:cursor-pointer hover:ml-4">
                         > {{ media.name }} <span class="text-gray-500">({{
                             formatFileSize(media.size)
                         }}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
                     </a>
                 </div>
 
-                <p class="font-bold mb-4">Selected: <span class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia"
+                <p class="text-white font-bold mb-4">Selected: <span
+                    class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia"
                                                                                                  class="text-red-300 font-normal hover:cursor-pointer"
                                                                                                  @click="cancelStream">(X)</a>
                 </p>
 
-                <h3 class="font-bold mb-2">Sessions</h3>
-                <ul class="flex flex-col mb-4">
+                <h3 class="text-white font-bold mb-2">Sessions</h3>
+                <ul class="text-white flex flex-col mb-4">
                     <li v-for="session in getSessions()">- {{ session.id }} [{{ session.file.name }}]</li>
                 </ul>
 
                 <div class="w-full bg-black/30 rounded-xl">
-                    <video
-                        ref="videoRef"
-                        class="w-full rounded shadow-lg"
-                        controls
-                        autoplay
-                        @timeupdate="onTimeUpdate"
-                        @seeked="onSeeked"
-                        @seeking="onSeeking"
-                        @loadedmetadata="onLoadedMetadata"
-                        @waiting="onWaiting"
-                        @playing="onPlaying"
-                        @error="onError"
-                    ></video>
+                    <video ref="videoRef"
+                           class="w-full rounded shadow-lg"
+                           controls
+                           autoplay
+                           @timeupdate="onTimeUpdate"
+                           @seeked="onSeeked"
+                           @seeking="onSeeking"
+                           @loadedmetadata="onLoadedMetadata"
+                           @waiting="onWaiting"
+                           @playing="onPlaying"
+                           @error="onError">
+                    </video>
                 </div>
             </div>
         </main>
@@ -55,7 +49,6 @@
 
 <script setup lang="ts">
 import { inject, onMounted, onUnmounted, ref } from "vue";
-import { LokiHeader } from "../../components/loki-header";
 import type { AxiosInstance } from "axios";
 import Hls from "hls.js";
 
@@ -116,27 +109,55 @@ const selectMedia = (media: MediaFile) => {
 
 const streamUrl = () => {
     if (!selectedMedia.value) return '';
-    return `/api/streaming/${selectedMedia.value.id}/playlist.m3u8`;
+    const quality = "1080p_20mpbs";
+    return `/api/streaming/${selectedMedia.value.id}/${quality}/playlist.m3u8`;
 };
 
 function initHls(url: string) {
     if (hls.value) {
-        hls.value.destroy()
-        hls.value = null
+        hls.value.destroy();
+        hls.value = null;
     }
 
-    if (videoRef.value) {
-        if (Hls.isSupported()) {
-            hls.value = new Hls()
-            hls.value.loadSource(url)
-            hls.value.attachMedia(videoRef.value)
-            hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-                videoRef.value!.play()
-            })
-        } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
-            videoRef.value.src = url
-            videoRef.value.play()
-        }
+    if (!videoRef.value) return;
+
+    if (Hls.isSupported()) {
+        hls.value = new Hls({
+            xhrSetup: (xhr, url) => {
+                console.log(url);
+
+                const token = localStorage.getItem('streamToken');
+                if (token) {
+                    // Token mitsenden
+                    xhr.setRequestHeader('X-Stream-Token', token);
+                    console.log("send token");
+                }
+
+                // Token aus Response extrahieren
+                xhr.onreadystatechange = function (this: XMLHttpRequest, _: Event) {
+                    console.log(xhr.getResponseHeader("X-Stream-Token"));
+
+                    if (xhr.readyState === 4) {
+                        const newToken = xhr.getResponseHeader('X-Stream-Token');
+                        if (newToken) {
+                            localStorage.setItem('streamToken', newToken);
+                            console.log("set new token", newToken);
+                        } else {
+                            console.log("no token received");
+                        }
+                    }
+                };
+            }
+        });
+
+        hls.value.loadSource(url);
+        hls.value.attachMedia(videoRef.value);
+        hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+            videoRef.value!.play();
+        });
+    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
+        videoRef.value.src = url;
+        videoRef.value.play();
     }
 }
 

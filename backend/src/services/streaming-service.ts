@@ -1,12 +1,11 @@
 import * as path from 'path';
-import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import ffmpeg from 'fluent-ffmpeg';
-import { findMediaFileById, getCombinedMetadata } from "../utils/media-utils";
 import { MediaFile } from "../types/media-file";
-import * as console from "node:console";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
+import { ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
+import fs from "fs";
 
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
 export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
@@ -21,98 +20,98 @@ interface TranscodeJob {
     id: string;
     process: ffmpeg.FfmpegCommand;
     startSegment: number;
-    targetSegment: number;
     latestSegment: number;
     createdAt: Date;
 }
 
 interface StreamSession {
     id: string;
+    token: string;
     file: MediaFile;
-    jobs: Map<string, TranscodeJob>; // Multiple transcode jobs per session
-    pendingSegments: Set<number>;    // Segments currently being transcoded
-    completedSegments: Set<number>;  // Segments that are done
-    waitingClients: Map<number, ((exists: boolean) => void)[]>; // Clients waiting for segments
+    quality: string;
+    createdAt: Date;
+    lastAccessed: Date;
 }
 
 class StreamingService {
 
     private sessions: Map<string, StreamSession> = new Map();
+    private activeJobs: Map<string, TranscodeJob> = new Map();
+
     private lock = new AsyncLock();
 
     constructor() {
         logger.INFO(`Transcode path: ${TRANSCODE_PATH}`);
         logger.INFO(`Metadata path: ${METADATA_PATH}`);
 
-        fs.ensureDirSync(TRANSCODE_PATH);
-        fs.ensureDirSync(METADATA_PATH);
-
-        // Load existing sessions on startup
-        this.loadExistingSessions();
+        ensureDirSync(TRANSCODE_PATH);
+        ensureDirSync(METADATA_PATH);
     }
 
-    private async loadExistingSessions(): Promise<void> {
-        try {
-            if (!await fs.pathExists(TRANSCODE_PATH)) return;
+    /**
+     * Generate or retrieve token for a client
+     */
+    private generateToken(): string {
+        // Generate hash-based token
+        const timestamp = Date.now().toString();
+        const random = crypto.randomBytes(16).toString('hex');
+        return crypto
+            .createHash('sha256')
+            .update(`${timestamp}-${random}`)
+            .digest('hex')
+            .substring(0, 32); // Use first 32 chars for shorter tokens
+    }
 
-            const dirs = await fs.readdir(TRANSCODE_PATH);
-            for (const dir of dirs) {
-                const sessionPath = path.join(TRANSCODE_PATH, dir);
-                const stats = await fs.stat(sessionPath);
+    async getOrCreateSession(file: MediaFile, quality: string, token?: string): Promise<StreamSession> {
+        const sessionToken = token || this.generateToken();
+        const sessionId = `${sessionToken}-${file.id}-${quality}`;
 
-                if (stats.isDirectory()) {
-                    // Check if segments exist
-                    const files = await fs.readdir(sessionPath);
-                    const segments = files.filter(f => f.match(/^segment\d+\.ts$/));
-
-                    if (segments.length > 0) {
-                        const id = dir;
-                        const file = await findMediaFileById(id);
-                        if (!file) continue;
-
-                        // Extract segment numbers from existing files
-                        const completedSegments = new Set<number>();
-                        segments.forEach(seg => {
-                            const match = seg.match(/segment(\d+)\.ts/);
-                            if (match) {
-                                completedSegments.add(parseInt(match[1]));
-                            }
-                        });
-
-                        logger.DEBUG(`Found existing session ${dir} with ${completedSegments.values()} segments`);
-
-                        const session: StreamSession = {
-                            id: id,
-                            file: file,
-                            jobs: new Map(),
-                            pendingSegments: new Set(),
-                            completedSegments: completedSegments,
-                            waitingClients: new Map()
-                        };
-
-                        this.sessions.set(id, session);
-                    }
-                }
+        return await this.lock.acquire(sessionId, async () => {
+            if (this.sessions.has(sessionId)) {
+                const session = this.sessions.get(sessionId)!;
+                session.lastAccessed = new Date();
+                return session;
             }
-        } catch (error) {
-            logger.ERROR(`Error loading existing sessions: ${error}`);
-        }
+
+            // Create new session
+            const session: StreamSession = {
+                id: sessionId,
+                token: sessionToken,
+                file,
+                quality,
+                createdAt: new Date(),
+                lastAccessed: new Date()
+            };
+
+            this.sessions.set(sessionId, session);
+            logger.INFO(`Created new session: ${sessionId}`);
+
+            return session;
+        });
     }
 
-    async generatePlaylist(file: MediaFile): Promise<{ id: string; playlistPath: string }> {
-        const id = file.id;
-        const dir = path.join(TRANSCODE_PATH, id);
+    async generatePlaylist(file: MediaFile, quality: string, token?: string): Promise<{ playlist: string; token: string }> {
+        const session = await this.getOrCreateSession(file, quality, token);
+
+        const dir = path.join(TRANSCODE_PATH, session.token, file.id, quality);
         const playlistPath = path.join(dir, 'playlist.m3u8');
 
-        await fs.ensureDir(dir);
+        await ensureDir(dir);
 
-        if (await fs.pathExists(playlistPath)) {
-            return { id, playlistPath };
+        if (await pathExists(playlistPath)) {
+            console.log("FILE ALREADY EXISTS");
+
+            const playlist = await readFile(playlistPath, "utf-8");
+
+            return {
+                playlist,
+                token: session.token
+            };
         }
 
         const duration = file.metadata?.general.Duration || -1;
         if (duration === -1) {
-            throw new Error('duration must be greater than 0');
+            throw new Error('Invalid media duration. Something is wrong with the metadata!');
         }
         const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
 
@@ -121,6 +120,9 @@ class StreamingService {
         playlist += `#EXT-X-TARGETDURATION:${SEGMENT_DURATION}\n`;
         playlist += '#EXT-X-MEDIA-SEQUENCE:0\n';
         playlist += '#EXT-X-PLAYLIST-TYPE:VOD\n\n';
+
+        // Add session token as custom tag for client
+        // playlist += `#EXT-X-SESSION-TOKEN:${session.token}\n\n`;
 
         for (let i = 0; i < totalSegments; i++) {
             const segmentDuration = Math.min(
@@ -133,116 +135,64 @@ class StreamingService {
 
         playlist += '#EXT-X-ENDLIST\n';
 
-        await fs.writeFile(playlistPath, playlist);
+        await writeFile(playlistPath, playlist);
+        logger.INFO(`Generated playlist for session ${session.id}`);
 
-        return { id, playlistPath };
+        return {
+            playlist,
+            token: session.token
+        };
     }
 
-    // private findSuitableJob(session: StreamSession, segmentIndex: number): TranscodeJob | null {
-    //     // Find a job that can handle this segment
-    //     for (const job of session.jobs.values()) {
-    //         // Check if segment is within job's range or close enough to extend
-    //         if (segmentIndex >= job.startSegment && segmentIndex <= job.targetSegment) {
-    //             return job;
-    //         }
-    //
-    //         // Check if we can extend this job
-    //         if (job.mode === 'slow' &&
-    //             segmentIndex > job.targetSegment &&
-    //             segmentIndex <= job.targetSegment + SEGMENT_OVERLAP_THRESHOLD) {
-    //             return job;
-    //         }
-    //     }
-    //     return null;
-    // }
 
-    // async waitForSegment(id: string, segmentIndex: number, timeout: number = 30000): Promise<boolean> {
-    //     // @ts-ignore
-    //     return this.lock.acquire(`segment-${id}-${segmentIndex}`, async () => {
-    //         const session = this.sessions.get(id);
-    //         if (!session) return false;
+    // private async loadExistingSessions(): Promise<void> {
+    //     try {
+    //         if (!await fs.pathExists(TRANSCODE_PATH)) return;
     //
-    //         // Check if segment already exists
-    //         const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segmentIndex}.ts`);
-    //         if (await fs.pathExists(segmentPath)) {
-    //             return true;
-    //         }
+    //         const dirs = await fs.readdir(TRANSCODE_PATH);
+    //         for (const dir of dirs) {
+    //             const sessionPath = path.join(TRANSCODE_PATH, dir);
+    //             const stats = await fs.stat(sessionPath);
     //
-    //         // Check if segment is already completed in memory
-    //         if (session.completedSegments.has(segmentIndex)) {
-    //             return true;
-    //         }
+    //             if (stats.isDirectory()) {
+    //                 // Check if segments exist
+    //                 const files = await fs.readdir(sessionPath);
+    //                 const segments = files.filter(f => f.match(/^segment\d+\.ts$/));
     //
-    //         // If segment is being transcoded, wait for it
-    //         if (session.pendingSegments.has(segmentIndex)) {
-    //             return new Promise((resolve) => {
-    //                 const timer = setTimeout(() => {
-    //                     const waiting = session.waitingClients.get(segmentIndex);
-    //                     if (waiting) {
-    //                         const idx = waiting.indexOf(resolve);
-    //                         if (idx > -1) waiting.splice(idx, 1);
-    //                     }
-    //                     resolve(false);
-    //                 }, timeout);
+    //                 if (segments.length > 0) {
+    //                     const id = dir;
+    //                     const file = await findMediaFileById(id);
+    //                     if (!file) continue;
     //
-    //                 if (!session.waitingClients.has(segmentIndex)) {
-    //                     session.waitingClients.set(segmentIndex, []);
+    //                     // Extract segment numbers from existing files
+    //                     const completedSegments = new Set<number>();
+    //                     segments.forEach(seg => {
+    //                         const match = seg.match(/segment(\d+)\.ts/);
+    //                         if (match) {
+    //                             completedSegments.add(parseInt(match[1]));
+    //                         }
+    //                     });
+    //
+    //                     logger.DEBUG(`Found existing session ${dir} with ${completedSegments.values()} segments`);
+    //
+    //                     const session: StreamSession = {
+    //                         id: id,
+    //                         file: file,
+    //                         jobs: new Map(),
+    //                         pendingSegments: new Set(),
+    //                         completedSegments: completedSegments,
+    //                         waitingClients: new Map()
+    //                     };
+    //
+    //                     this.sessions.set(id, session);
     //                 }
-    //                 session.waitingClients.get(segmentIndex)!.push((exists) => {
-    //                     clearTimeout(timer);
-    //                     resolve(exists);
-    //                 });
-    //             });
+    //             }
     //         }
-    //
-    //         return false;
-    //     });
+    //     } catch (error) {
+    //         logger.ERROR(`Error loading existing sessions: ${error}`);
+    //     }
     // }
 
-    // async getOrCreateSegment(file: MediaFile, segmentIndex: number): Promise<string | null> {
-    //     const id = file.id;
-    //     const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segmentIndex}.ts`);
-    //
-    //     // Use lock to prevent race conditions
-    //     return this.lock.acquire(`media-${id}`, async () => {
-    //         // Check if segment already exists
-    //         if (await fs.pathExists(segmentPath)) {
-    //             return segmentPath;
-    //         }
-    //
-    //         let session = this.sessions.get(id);
-    //
-    //         // If no session exists, create one
-    //         if (!session) {
-    //             logger.DEBUG(`Creating new session for ${id}`);
-    //             session = {
-    //                 id: id,
-    //                 file: file,
-    //                 jobs: new Map(),
-    //                 pendingSegments: new Set(),
-    //                 completedSegments: new Set(),
-    //                 waitingClients: new Map()
-    //             };
-    //             this.sessions.set(id, session);
-    //         }
-    //
-    //         // Check if segment is already being transcoded
-    //         if (session.pendingSegments.has(segmentIndex)) {
-    //             return null; // Client should wait
-    //         }
-    //
-    //         // Find suitable job or create new one
-    //         const suitableJob = this.findSuitableJob(session, segmentIndex);
-    //
-    //         if (!suitableJob) {
-    //             // Need to create new transcode job
-    //             logger.DEBUG(`Starting new transcode job for ${id} at segment ${segmentIndex}`);
-    //             await this.startTranscodeJob(session, segmentIndex, 'fast');
-    //         }
-    //
-    //         return null; // Client should retry
-    //     });
-    // }
 
     private async startTranscode(session: StreamSession, startSegment: number): Promise<void> {
         const file = session.file;
@@ -253,7 +203,7 @@ class StreamingService {
         const segmentPath = path.join(dir, 'segment%d.ts');
         const seekTime = startSegment * SEGMENT_DURATION;
 
-        await fs.ensureDir(dir);
+        await ensureDir(dir);
 
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
@@ -294,179 +244,178 @@ class StreamingService {
                 '-hls_flags', 'independent_segments',
                 `-start_number ${startSegment}`,
                 `-hls_segment_filename ${segmentPath}`,
-
-                '-to', String(targetDuration) // Limit duration
             ])
             .output(playlistPath);
 
-        const job: TranscodeJob = {
-            id: jobId,
-            process: command,
-            startSegment: startSegment,
-            latestSegment: startSegment - 1,
-            targetSegment: startSegment + targetSegments - 1,
-            mode: mode,
-            createdAt: new Date()
-        };
+        // const job: TranscodeJob = {
+        //     id: jobId,
+        //     process: command,
+        //     startSegment: startSegment,
+        //     latestSegment: startSegment - 1,
+        //     targetSegment: startSegment + targetSegments - 1,
+        //     mode: mode,
+        //     createdAt: new Date()
+        // };
 
         // Mark target segments as pending
-        for (let i = startSegment; i <= job.targetSegment; i++) {
-            session.pendingSegments.add(i);
-        }
+        // for (let i = startSegment; i <= job.targetSegment; i++) {
+        //     session.pendingSegments.add(i);
+        // }
 
-        command.on('progress', (progress) => {
-            const time = parseFloat(String(progress.timemark.split(':').reduce((acc, val, i) => acc + parseFloat(val) * Math.pow(60, 2 - i), 0)));
-            const currentSegment = startSegment + Math.floor(time / SEGMENT_DURATION);
+        // command.on('progress', (progress) => {
+        //     const time = parseFloat(String(progress.timemark.split(':').reduce((acc, val, i) => acc + parseFloat(val) * Math.pow(60, 2 - i), 0)));
+        //     const currentSegment = startSegment + Math.floor(time / SEGMENT_DURATION);
+        //
+        //     // Update completed segments
+        //     for (let i = job.latestSegment + 1; i <= currentSegment; i++) {
+        //         session.pendingSegments.delete(i);
+        //         session.completedSegments.add(i);
+        //
+        //         // Notify waiting clients
+        //         const waiting = session.waitingClients.get(i);
+        //         if (waiting) {
+        //             waiting.forEach(callback => callback(true));
+        //             session.waitingClients.delete(i);
+        //         }
+        //     }
+        //
+        //     job.latestSegment = currentSegment;
+        // })
+        //     .on('end', () => {
+        //         logger.DEBUG(`Job ${jobId} finished (mode: ${mode})`);
+        //
+        //         // Mark all remaining segments as completed
+        //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
+        //             if (session.pendingSegments.has(i)) {
+        //                 session.pendingSegments.delete(i);
+        //                 session.completedSegments.add(i);
+        //                 const waiting = session.waitingClients.get(i);
+        //                 if (waiting) {
+        //                     waiting.forEach(callback => callback(true));
+        //                     session.waitingClients.delete(i);
+        //                 }
+        //             }
+        //         }
+        //
+        //         // Remove job from session
+        //         session.jobs.delete(jobId);
+        //
+        //         // Clean up temporary playlist
+        //         fs.unlink(playlistPath);
+        //
+        //         // Start slow transcode if this was fast mode and we need more segments
+        //         const duration = file.metadata?.video[0].Duration || 0;
+        //         if (mode === 'fast' && job.targetSegment < Math.ceil(duration / SEGMENT_DURATION) - 1) {
+        //             const nextSegment = job.targetSegment + 1;
+        //             // Check if another job is already handling these segments
+        //             const existingJob = this.findSuitableJob(session, nextSegment);
+        //             if (!existingJob) {
+        //                 logger.DEBUG(`Starting follow-up slow transcode from segment ${nextSegment}`);
+        //                 this.startTranscodeJob(session, nextSegment, 'slow');
+        //             }
+        //         }
+        //     })
+        //     .on('error', (err) => {
+        //         logger.ERROR(`Job ${jobId} error: ${err.message}`);
+        //
+        //         // Clean up pending segments
+        //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
+        //             if (session.pendingSegments.has(i)) {
+        //                 session.pendingSegments.delete(i);
+        //             }
+        //         }
+        //
+        //         // Notify waiting clients
+        //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
+        //             const waiting = session.waitingClients.get(i);
+        //             if (waiting) {
+        //                 waiting.forEach(callback => callback(false));
+        //                 session.waitingClients.delete(i);
+        //             }
+        //         }
+        //
+        //         // Remove job
+        //         session.jobs.delete(jobId);
+        //
+        //         // Clean up temporary playlist
+        //         fs.unlink(playlistPath);
+        //     });
 
-            // Update completed segments
-            for (let i = job.latestSegment + 1; i <= currentSegment; i++) {
-                session.pendingSegments.delete(i);
-                session.completedSegments.add(i);
-
-                // Notify waiting clients
-                const waiting = session.waitingClients.get(i);
-                if (waiting) {
-                    waiting.forEach(callback => callback(true));
-                    session.waitingClients.delete(i);
-                }
-            }
-
-            job.latestSegment = currentSegment;
-        })
-            .on('end', () => {
-                logger.DEBUG(`Job ${jobId} finished (mode: ${mode})`);
-
-                // Mark all remaining segments as completed
-                for (let i = job.startSegment; i <= job.targetSegment; i++) {
-                    if (session.pendingSegments.has(i)) {
-                        session.pendingSegments.delete(i);
-                        session.completedSegments.add(i);
-                        const waiting = session.waitingClients.get(i);
-                        if (waiting) {
-                            waiting.forEach(callback => callback(true));
-                            session.waitingClients.delete(i);
-                        }
-                    }
-                }
-
-                // Remove job from session
-                session.jobs.delete(jobId);
-
-                // Clean up temporary playlist
-                fs.unlink(playlistPath);
-
-                // Start slow transcode if this was fast mode and we need more segments
-                const duration = file.metadata?.video[0].Duration || 0;
-                if (mode === 'fast' && job.targetSegment < Math.ceil(duration / SEGMENT_DURATION) - 1) {
-                    const nextSegment = job.targetSegment + 1;
-                    // Check if another job is already handling these segments
-                    const existingJob = this.findSuitableJob(session, nextSegment);
-                    if (!existingJob) {
-                        logger.DEBUG(`Starting follow-up slow transcode from segment ${nextSegment}`);
-                        this.startTranscodeJob(session, nextSegment, 'slow');
-                    }
-                }
-            })
-            .on('error', (err) => {
-                logger.ERROR(`Job ${jobId} error: ${err.message}`);
-
-                // Clean up pending segments
-                for (let i = job.startSegment; i <= job.targetSegment; i++) {
-                    if (session.pendingSegments.has(i)) {
-                        session.pendingSegments.delete(i);
-                    }
-                }
-
-                // Notify waiting clients
-                for (let i = job.startSegment; i <= job.targetSegment; i++) {
-                    const waiting = session.waitingClients.get(i);
-                    if (waiting) {
-                        waiting.forEach(callback => callback(false));
-                        session.waitingClients.delete(i);
-                    }
-                }
-
-                // Remove job
-                session.jobs.delete(jobId);
-
-                // Clean up temporary playlist
-                fs.unlink(playlistPath);
-            });
-
-        session.jobs.set(jobId, job);
-        command.run();
+        // session.jobs.set(jobId, job);
+        // command.run();
     }
 
     async killSession(id: string): Promise<void> {
-        return this.lock.acquire(`media-${id}`, async () => {
-            const session = this.sessions.get(id);
-            if (!session) return;
-
-            // Kill all jobs in the session
-            const killPromises = Array.from(session.jobs.values()).map(job => {
-                return new Promise<void>((resolve) => {
-                    const timeout = setTimeout(() => {
-                        logger.WARNING(`Force killing job ${job.id}`);
-                        try {
-                            job.process.kill('SIGKILL');
-                        } catch (e) {
-                            // Process might already be dead
-                        }
-                        resolve();
-                    }, 2000);
-
-                    job.process.on('error', () => {
-                        clearTimeout(timeout);
-                        resolve();
-                    });
-
-                    job.process.on('end', () => {
-                        clearTimeout(timeout);
-                        resolve();
-                    });
-
-                    try {
-                        job.process.kill('SIGTERM');
-                    } catch (e) {
-                        clearTimeout(timeout);
-                        resolve();
-                    }
-                });
-            });
-
-            await Promise.all(killPromises);
-
-            // Clear all jobs
-            session.jobs.clear();
-
-            // Notify all waiting clients
-            session.waitingClients.forEach((callbacks) => {
-                callbacks.forEach(callback => callback(false));
-            });
-            session.waitingClients.clear();
-            session.pendingSegments.clear();
-        });
+        // return this.lock.acquire(`media-${id}`, async () => {
+        //     const session = this.sessions.get(id);
+        //     if (!session) return;
+        //
+        //     // Kill all jobs in the session
+        //     const killPromises = Array.from(session.jobs.values()).map(job => {
+        //         return new Promise<void>((resolve) => {
+        //             const timeout = setTimeout(() => {
+        //                 logger.WARNING(`Force killing job ${job.id}`);
+        //                 try {
+        //                     job.process.kill('SIGKILL');
+        //                 } catch (e) {
+        //                     // Process might already be dead
+        //                 }
+        //                 resolve();
+        //             }, 2000);
+        //
+        //             job.process.on('error', () => {
+        //                 clearTimeout(timeout);
+        //                 resolve();
+        //             });
+        //
+        //             job.process.on('end', () => {
+        //                 clearTimeout(timeout);
+        //                 resolve();
+        //             });
+        //
+        //             try {
+        //                 job.process.kill('SIGTERM');
+        //             } catch (e) {
+        //                 clearTimeout(timeout);
+        //                 resolve();
+        //             }
+        //         });
+        //     });
+        //
+        //     await Promise.all(killPromises);
+        //
+        //     // Clear all jobs
+        //     session.jobs.clear();
+        //
+        //     // Notify all waiting clients
+        //     session.waitingClients.forEach((callbacks) => {
+        //         callbacks.forEach(callback => callback(false));
+        //     });
+        //     session.waitingClients.clear();
+        //     session.pendingSegments.clear();
+        // });
     }
 
     getSessionInfo() {
-        return Array.from(this.sessions.entries()).map(([id, session]) => ({
-            id,
-            fileName: session.file.name,
-            filePath: session.file.path,
-            isTranscoding: session.jobs.size > 0,
-            activeJobs: session.jobs.size,
-            jobs: Array.from(session.jobs.values()).map(job => ({
-                id: job.id,
-                mode: job.mode,
-                startSegment: job.startSegment,
-                latestSegment: job.latestSegment,
-                targetSegment: job.targetSegment,
-                age: Math.floor((Date.now() - job.createdAt.getTime()) / 1000)
-            })),
-            completedSegments: session.completedSegments.size,
-            pendingSegments: session.pendingSegments.size,
-            waitingClients: session.waitingClients.size
-        }));
+        // return Array.from(this.sessions.entries()).map(([id, session]) => ({
+        //     id,
+        //     fileName: session.file.name,
+        //     filePath: session.file.path,
+        //     isTranscoding: session.jobs.size > 0,
+        //     activeJobs: session.jobs.size,
+        //     // jobs: Array.from(session.jobs.values()).map(job => ({
+        //     //     id: job.id,
+        //     //     mode: job.mode,
+        //     //     startSegment: job.startSegment,
+        //     //     latestSegment: job.latestSegment,
+        //     //     targetSegment: job.targetSegment,
+        //     //     age: Math.floor((Date.now() - job.createdAt.getTime()) / 1000)
+        //     // })),
+        //     completedSegments: session.completedSegments.size,
+        //     pendingSegments: session.pendingSegments.size,
+        //     waitingClients: session.waitingClients.size
+        // }));
+        return '';
     }
 
     getSessions(): Map<string, StreamSession> {
@@ -518,11 +467,11 @@ class StreamingService {
         logger.INFO('Shutting down StreamingService...');
 
         // Kill all active sessions
-        for (const [id, session] of this.sessions) {
-            if (session.jobs.size > 0) {
-                await this.killSession(id);
-            }
-        }
+        // for (const [id, session] of this.sessions) {
+        //     if (session.jobs.size > 0) {
+        //         await this.killSession(id);
+        //     }
+        // }
 
         logger.INFO('StreamingService shutdown complete');
     }

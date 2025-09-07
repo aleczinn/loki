@@ -4,9 +4,7 @@ import bodyParser from "body-parser";
 import { AddressInfo } from 'net';
 import errorHandler from "./middleware/error-handler";
 import dotenv from "dotenv";
-import mariadb from "mariadb";
 import * as path from 'path';
-import * as fs from 'fs-extra';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import sessionRoutes from "./routes/session-routes";
@@ -15,19 +13,11 @@ import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
 import { userAgentMiddleware } from "./middleware/user-agent-handler";
+import { ensureDirSync } from "./utils/file-utils";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 export const MEDIA_PATH = process.env.MEDIA_PATH ||  path.join(__dirname, '../../loki/media');
-
-// TODO : WIP - implement later
-// export const database = mariadb.createPool({
-//     host: process.env.DATABASE_HOST,
-//     port: Number(process.env.DATABASE_PORT),
-//     user: process.env.DATABASE_USER,
-//     password: process.env.DATABASE_PASSWORD,
-//     database: process.env.DATABASE_NAME
-// });
 
 const app: Express = express();
 
@@ -44,11 +34,13 @@ app.use(cors({
 app.use((req, res, next) => {
     // CORS Headers für HLS Streaming
     if (req.path.includes('/api/streaming/')) {
-        res.header('Access-Control-Allow-Origin', '*');
-        res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
-        res.header('Access-Control-Allow-Headers', 'Range');
-        res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Range');
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
     }
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'X-Stream-Token, Content-Type');
+    res.setHeader('Access-Control-Expose-Headers', 'X-Stream-Token');
     next();
 });
 
@@ -90,7 +82,7 @@ const server = app.listen(3000, () => {
 
         console.log(`Listening on http://${host}:${port}`);
         logger.INFO(`Media path: ${MEDIA_PATH}`);
-        fs.ensureDirSync(MEDIA_PATH);
+        ensureDirSync(MEDIA_PATH);
     }
 });
 

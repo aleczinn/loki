@@ -1,12 +1,8 @@
 import * as path from 'path';
-import * as fs from 'fs-extra';
 import * as crypto from 'crypto';
 import { MediaFile } from "../types/media-file";
 import { getCombinedMetadata } from "./media-utils";
-import { GeneralTrack } from "../types/general-track";
-import { VideoTrack } from "../types/video-track";
-import { AudioTrack } from "mediainfo.js";
-import { SubtitleTrack } from "../types/subtitle-track";
+import { readdir, stat } from "./file-utils";
 
 const SUPPORTED_FORMATS = ['.mp4', '.mkv', '.avi', '.mov', '.webm'];
 
@@ -60,12 +56,12 @@ export async function scanMediaDirectory(dir: string): Promise<MediaFile[]> {
     const files: MediaFile[] = [];
 
     async function scanRecursive(currentDir: string, relativePath: string = ''): Promise<void> {
-        const items = await fs.readdir(currentDir);
+        const items = await readdir(currentDir);
 
         for (const item of items) {
             const fullPath = path.join(currentDir, item);
             const itemRelativePath = path.join(relativePath, item);
-            const stats = await fs.stat(fullPath);
+            const stats = await stat(fullPath);
 
             if (stats.isDirectory()) {
                 await scanRecursive(fullPath, itemRelativePath);

@@ -1,5 +1,4 @@
 import { Browser } from './browser';
-import { version } from 'mariadb';
 
 export class Firefox extends Browser {
 

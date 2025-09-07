@@ -1,5 +1,6 @@
 import * as path from 'path';
-import * as fs from 'fs-extra';
+import { ensureDirSync } from "./utils/file-utils";
+import fs from "fs";
 
 const LOGS_DIR = path.join(__dirname, '../../loki/logs');
 
@@ -53,7 +54,7 @@ class Logger {
 
     private ensureLogsDirectory(): void {
         try {
-            fs.ensureDirSync(LOGS_DIR);
+            ensureDirSync(LOGS_DIR);
         } catch (error) {
             console.error('Failed to create logs directory:', error);
         }

@@ -32,35 +32,51 @@ export default {
             );
         }
 
-        // request interceptor for auth-token
-        axiosInstance.interceptors.request.use(
-            (config) => {
-                const token = localStorage.getItem('authToken') || options.token;
-                if (token && config.headers) {
-                    config.headers.Authorization = `Bearer ${token}`;
-                }
-                return config;
-            },
-            (error) => {
-                return Promise.reject(error);
+        axiosInstance.interceptors.request.use(config => {
+            const token = localStorage.getItem('streamToken');
+            if (token) {
+                config.headers['X-Stream-Token'] = token;
             }
-        );
+            return config;
+        });
 
-        // response interceptor for error handling
-        axiosInstance.interceptors.response.use(
-            (response) => response,
-            (error) => {
-                if (error.response?.status === 503) {
-                    console.error('Backend service unavailable');
-                }
-                if (error.response?.status === 401) {
-                    // token expired/invalid
-                    localStorage.removeItem('authToken');
-                    // optional: redirect to log in
-                }
-                return Promise.reject(error);
+        axiosInstance.interceptors.response.use(response => {
+            const token = response.headers['X-Stream-Token'];
+            if (token) {
+                localStorage.setItem('streamToken', token);
             }
-        );
+            return response;
+        });
+
+        // // request interceptor for auth-token
+        // axiosInstance.interceptors.request.use(
+        //     (config) => {
+        //         const token = localStorage.getItem('authToken') || options.token;
+        //         if (token && config.headers) {
+        //             config.headers.Authorization = `Bearer ${token}`;
+        //         }
+        //         return config;
+        //     },
+        //     (error) => {
+        //         return Promise.reject(error);
+        //     }
+        // );
+        //
+        // // response interceptor for error handling
+        // axiosInstance.interceptors.response.use(
+        //     (response) => response,
+        //     (error) => {
+        //         if (error.response?.status === 503) {
+        //             console.error('Backend service unavailable');
+        //         }
+        //         if (error.response?.status === 401) {
+        //             // token expired/invalid
+        //             localStorage.removeItem('authToken');
+        //             // optional: redirect to log in
+        //         }
+        //         return Promise.reject(error);
+        //     }
+        // );
 
         // for options api
         app.config.globalProperties.$axios = axiosInstance;

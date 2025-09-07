@@ -17,7 +17,7 @@
                 <router-link to="/register">
                     <div class="w-32 max-w-[8rem] m-4">
                         <div
-                            class="bg-background-darker w-32 h-32 flex items-center justify-center rounded-full ring-0 transition duration-200 hover:ring-2 hover:scale-105 ring-gray">
+                            class="bg-black-900 w-32 h-32 flex items-center justify-center rounded-full ring-0 transition duration-200 hover:ring-2 hover:scale-105 ring-gray">
                             <div class="text-white text-4xl">+</div>
                         </div>
                         <p class="w-full text-gray text-center font-semibold mt-2">{{ $t("login.add-profile") }}</p>
