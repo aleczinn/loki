@@ -20,8 +20,11 @@
                 </p>
 
                 <h3 class="text-white font-bold mb-2">Sessions</h3>
+                <p class="text-white">Sessions: {{ sessions?.activeSessions }}</p>
+                <p class="text-white">Active Transcodes: {{ sessions?.activeTranscodes }}</p>
                 <ul class="text-white flex flex-col mb-4">
-                    <li v-for="session in getSessions()">- {{ session.id }} [{{ session.file.name }}]</li>
+
+                    <li v-for="session in sessions?.sessions">- {{ session.token }} [{{ session.quality }}]</li>
                 </ul>
 
                 <div class="w-full bg-black/30 rounded-xl">
@@ -64,9 +67,20 @@ interface MediaFile {
     modified: Date;
 }
 
-interface StreamSession {
+interface StreamingSession {
+    token: string;
     id: string;
     file: MediaFile;
+    quality: string;
+    createdAt: Date;
+    lastAccessed: Date;
+    hasActiveTranscode: boolean;
+}
+
+interface StreamingInfo {
+    activeSessions: number;
+    activeTranscodes: number;
+    sessions: StreamingSession[];
 }
 
 const isLoading = ref(true);
@@ -76,7 +90,7 @@ const selectedMedia = ref<MediaFile | null>(null);
 const videoRef = ref<HTMLVideoElement | null>(null)
 
 let sessionInterval: number | undefined;
-const sessions = ref<StreamSession[]>([]);
+const sessions = ref<StreamingInfo | null>(null);
 
 const loadMediaFiles = async () => {
     isLoading.value = true;
@@ -93,7 +107,7 @@ const loadMediaFiles = async () => {
 
 const loadSessions = async () => {
     try {
-        const response = await axios?.get<any[]>('/sessions');
+        const response = await axios?.get<any>('/sessions');
         sessions.value = response?.data || [];
     } catch (err) {
         console.error('Failed to load media files:', err);
@@ -303,7 +317,7 @@ onMounted(() => {
     loadMediaFiles();
 
     sessionInterval = window.setInterval(() => {
-        // loadSessions();
+        loadSessions();
     }, 3000)
 })
 

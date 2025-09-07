@@ -63,6 +63,9 @@ router.get('/api/streaming/:id/:quality/segment:index.ts', async (req: Request, 
     try {
         const { id, quality, index } = req.params;
         const segment = parseInt(index);
+        const token = req.headers['x-stream-token'] as string
+            || req.query.token as string
+            || undefined;
 
         if (isNaN(segment) || segment < 0) {
             return res.status(400).json({ error: 'Invalid segment index' });
@@ -77,20 +80,22 @@ router.get('/api/streaming/:id/:quality/segment:index.ts', async (req: Request, 
             return res.status(404).json({ error: 'Media file does not exist on disk' });
         }
 
-        const segmentPath = path.join(TRANSCODE_PATH, id, `segment${segment}.ts`);
+        const { path: segmentPath, token: sessionToken } = await streamingService.handleSegment(file, segment, quality, token);
 
-        // First check if segment already exists
-        if (await pathExists(segmentPath)) {
+        res.setHeader('X-Stream-Token', sessionToken);
+
+        if (segmentPath) {
             res.setHeader('Content-Type', 'video/mp2t');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
             return res.sendFile(segmentPath);
         }
 
-        // Create segment here / start transcode?
-        // TODO : start transcoding here
-
-        // If still not ready, ask client to retry
-        res.setHeader('Retry-After', '1');
-        res.status(503).json({ error: 'Segment not ready, please retry' });
+        // Segment not ready, ask client to retry
+        res.setHeader('Retry-After', '2');
+        res.status(503).json({
+            error: 'Segment not ready',
+            message: 'Transcoding in progress, please retry'
+        });
     } catch (error) {
         logger.ERROR(`Error serving segment: ${error}`);
         res.status(500).json({ error: 'Failed to serve segment' });

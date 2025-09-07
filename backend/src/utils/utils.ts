@@ -91,3 +91,7 @@ export async function scanMediaDirectory(dir: string): Promise<MediaFile[]> {
 export function getHashFromPath(filePath: string): string {
     return crypto.createHash('md5').update(filePath).digest('hex');
 }
+
+export function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}

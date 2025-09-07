@@ -6,6 +6,7 @@ import { logger } from "../logger";
 import AsyncLock from "async-lock";
 import { ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
 import fs from "fs";
+import { sleep } from "../utils/utils";
 
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
 export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
@@ -15,12 +16,14 @@ export const SEGMENT_DURATION = 4; // seconds per segment
 export const SEGMENT_PUFFER_COUNT = 10; // is the number how many segments could technically be created in one transcoding call
 export const SEGMENT_PUFFER_LOOK_AHEAD = 3; // defined the number where to check for future segments. (current segment + PUFFER_COUNT - x)
 export const SEGMENT_OVERLAP_THRESHOLD = 3; // segments distance to consider reusing a job
+export const SEEK_THRESHOLD = 3; // is the number in segments when to cancel a transcode while seeking
 
 interface TranscodeJob {
     id: string;
-    process: ffmpeg.FfmpegCommand;
+    sessionId: string;
+    process?: ffmpeg.FfmpegCommand;
+    status: 'running' | 'stopped' | 'completed';
     startSegment: number;
-    latestSegment: number;
     createdAt: Date;
 }
 
@@ -31,6 +34,12 @@ interface StreamSession {
     quality: string;
     createdAt: Date;
     lastAccessed: Date;
+    transcode?: TranscodeJob;
+}
+
+interface QualityOptions {
+    videoOptions: string[]
+    audioOptions: string[]
 }
 
 class StreamingService {
@@ -139,85 +148,95 @@ class StreamingService {
         };
     }
 
-    async handleSegment(file: MediaFile, segmentIndex: number, quality: string, token?: string): Promise<{ path: string; token: string }> {
-        return {
-            path: '',
-            token: ''
+    async handleSegment(file: MediaFile, segmentIndex: number, quality: string, token?: string): Promise<{ path: string | null; token: string }> {
+        const session = await this.getOrCreateSession(file, quality, token);
+
+        const dir = path.join(TRANSCODE_PATH, session.token, file.id, quality);
+        const playlistPath = path.join(dir, 'playlist.m3u8');
+        const segmentPath = path.join(dir, 'segment%d.ts');
+
+        // Check if segment already exists
+        if (await pathExists(segmentPath)) {
+            logger.DEBUG(`Serving existing segment ${segmentIndex} for session ${session.id}`);
+
+            return {
+                path: segmentPath,
+                token: session.token
+            };
         }
+
+        await this.handleTranscode(session, segmentIndex);
+
+        // Check again after short delay (segment might be ready now)
+        await sleep(100);
+
+        if (await pathExists(segmentPath)) {
+            return {
+                path: segmentPath,
+                token: session.token
+            };
+        }
+
+        return {
+            path: null,
+            token: session.token
+        };
     }
 
-    // private async loadExistingSessions(): Promise<void> {
-    //     try {
-    //         if (!await fs.pathExists(TRANSCODE_PATH)) return;
-    //
-    //         const dirs = await fs.readdir(TRANSCODE_PATH);
-    //         for (const dir of dirs) {
-    //             const sessionPath = path.join(TRANSCODE_PATH, dir);
-    //             const stats = await fs.stat(sessionPath);
-    //
-    //             if (stats.isDirectory()) {
-    //                 // Check if segments exist
-    //                 const files = await fs.readdir(sessionPath);
-    //                 const segments = files.filter(f => f.match(/^segment\d+\.ts$/));
-    //
-    //                 if (segments.length > 0) {
-    //                     const id = dir;
-    //                     const file = await findMediaFileById(id);
-    //                     if (!file) continue;
-    //
-    //                     // Extract segment numbers from existing files
-    //                     const completedSegments = new Set<number>();
-    //                     segments.forEach(seg => {
-    //                         const match = seg.match(/segment(\d+)\.ts/);
-    //                         if (match) {
-    //                             completedSegments.add(parseInt(match[1]));
-    //                         }
-    //                     });
-    //
-    //                     logger.DEBUG(`Found existing session ${dir} with ${completedSegments.values()} segments`);
-    //
-    //                     const session: StreamSession = {
-    //                         id: id,
-    //                         file: file,
-    //                         jobs: new Map(),
-    //                         pendingSegments: new Set(),
-    //                         completedSegments: completedSegments,
-    //                         waitingClients: new Map()
-    //                     };
-    //
-    //                     this.sessions.set(id, session);
-    //                 }
-    //             }
-    //         }
-    //     } catch (error) {
-    //         logger.ERROR(`Error loading existing sessions: ${error}`);
-    //     }
-    // }
+    private async handleTranscode(session: StreamSession, requestedSegment: number): Promise<void> {
+        return await this.lock.acquire(`transcode-${session.id}`, async () => {
+            const currentJob = this.activeJobs.get(session.id);
 
+            if (currentJob && currentJob.status === 'running') {
+                const seekDistance = Math.abs(requestedSegment - currentJob.startSegment);
+
+                if (seekDistance > SEEK_THRESHOLD) {
+                    // User seeked, restart transcoding from new position
+                    logger.INFO(`Seek detected: segment ${currentJob.startSegment} → ${requestedSegment} (distance: ${seekDistance})`);
+                    await this.stopTranscode(session);
+                    await this.startTranscode(session, requestedSegment);
+                } else {
+                    // Update current segment tracking
+                    currentJob.startSegment = Math.max(currentJob.startSegment, requestedSegment);
+                    logger.DEBUG(`Segment ${requestedSegment} within threshold, continuing transcode`);
+                }
+            } else {
+                // No active job or job completed, start new one
+                await this.startTranscode(session, requestedSegment);
+            }
+        });
+    }
 
     private async startTranscode(session: StreamSession, startSegment: number): Promise<void> {
         const file = session.file;
-        const jobId = `${session.id}-${startSegment}-${Date.now()}`;
+        const jobId = crypto.randomBytes(8).toString('hex');
 
-        const dir = path.join(TRANSCODE_PATH, session.id);
-        const playlistPath = path.join(dir, `playlist-${jobId}.m3u8`);
-        const segmentPath = path.join(dir, 'segment%d.ts');
-        const seekTime = startSegment * SEGMENT_DURATION;
+        const duration = file.metadata?.general.Duration || -1;
+        if (duration === -1) {
+            throw new Error('Invalid media duration. Something is wrong with the metadata!');
+        }
+
+        const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
+        const dir = path.join(TRANSCODE_PATH, session.token, file.id, session.quality);
 
         await ensureDir(dir);
+
+        const seekTime = startSegment * SEGMENT_DURATION;
+
+        const playlistPath = path.join(dir, `playlist.m3u8`);
+        const segmentPath = path.join(dir, 'segment%d.ts');
+
+        const qualityOptions = this.getQualityOptions(session.quality);
 
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
 
-        // Calculate target segments based on mode
-        let inputOptions = [
-            '-copyts',
-            '-ss', `${seekTime}`,
-            '-threads 0',
-        ];
-
         const command = ffmpeg(file.path)
-            .inputOptions(inputOptions)
+            .inputOptions([
+                '-copyts',
+                '-ss', `${seekTime}`,
+                '-threads 0',
+            ])
             .videoCodec('libx264')
             .audioCodec('aac')
             .outputOptions([
@@ -236,6 +255,7 @@ class StreamingService {
                 // AUDIO
                 '-b:a', '192k',
                 '-ac', '2',
+                '-ar', '48000',
 
                 // HLS
                 '-f', 'hls',
@@ -248,183 +268,294 @@ class StreamingService {
             ])
             .output(playlistPath);
 
-        // const job: TranscodeJob = {
-        //     id: jobId,
-        //     process: command,
-        //     startSegment: startSegment,
-        //     latestSegment: startSegment - 1,
-        //     targetSegment: startSegment + targetSegments - 1,
-        //     mode: mode,
-        //     createdAt: new Date()
-        // };
+        const job: TranscodeJob = {
+            id: jobId,
+            sessionId: session.id,
+            startSegment: startSegment,
+            status: 'running',
+            createdAt: new Date()
+        };
 
-        // Mark target segments as pending
-        // for (let i = startSegment; i <= job.targetSegment; i++) {
-        //     session.pendingSegments.add(i);
-        // }
+        job.process = command
+            .on('start', (command) => {
+                logger.INFO(`Transcode started [${session.id}]: from segment ${startSegment} to end`);
+                logger.DEBUG(`FFmpeg command: ${command}`);
+            })
+            .on('progress', (progress) => {
+                // Log progress periodically
+                const percent = progress.percent || 0;
+                if (Math.floor(percent) % 10 === 0) {
+                    logger.DEBUG(`Transcode progress [${session.id}]: ${percent.toFixed(1)}%`);
+                }
+            })
+            .on('end', async () => {
+                logger.INFO(`Transcode completed [${session.id}]`);
+                job.status = 'completed';
+                this.activeJobs.delete(session.id);
+            })
+            .on('error', async (err) => {
+                // Check if error is due to process being killed (expected for seeking)
+                if (!err.message?.includes('SIGKILL')) {
+                    logger.ERROR(`Transcode error [${session.id}]: ${err}`);
+                }
+                job.status = 'stopped';
+                this.activeJobs.delete(session.id);
+            });
 
-        // command.on('progress', (progress) => {
-        //     const time = parseFloat(String(progress.timemark.split(':').reduce((acc, val, i) => acc + parseFloat(val) * Math.pow(60, 2 - i), 0)));
-        //     const currentSegment = startSegment + Math.floor(time / SEGMENT_DURATION);
-        //
-        //     // Update completed segments
-        //     for (let i = job.latestSegment + 1; i <= currentSegment; i++) {
-        //         session.pendingSegments.delete(i);
-        //         session.completedSegments.add(i);
-        //
-        //         // Notify waiting clients
-        //         const waiting = session.waitingClients.get(i);
-        //         if (waiting) {
-        //             waiting.forEach(callback => callback(true));
-        //             session.waitingClients.delete(i);
-        //         }
-        //     }
-        //
-        //     job.latestSegment = currentSegment;
-        // })
-        //     .on('end', () => {
-        //         logger.DEBUG(`Job ${jobId} finished (mode: ${mode})`);
-        //
-        //         // Mark all remaining segments as completed
-        //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
-        //             if (session.pendingSegments.has(i)) {
-        //                 session.pendingSegments.delete(i);
-        //                 session.completedSegments.add(i);
-        //                 const waiting = session.waitingClients.get(i);
-        //                 if (waiting) {
-        //                     waiting.forEach(callback => callback(true));
-        //                     session.waitingClients.delete(i);
-        //                 }
-        //             }
-        //         }
-        //
-        //         // Remove job from session
-        //         session.jobs.delete(jobId);
-        //
-        //         // Clean up temporary playlist
-        //         fs.unlink(playlistPath);
-        //
-        //         // Start slow transcode if this was fast mode and we need more segments
-        //         const duration = file.metadata?.video[0].Duration || 0;
-        //         if (mode === 'fast' && job.targetSegment < Math.ceil(duration / SEGMENT_DURATION) - 1) {
-        //             const nextSegment = job.targetSegment + 1;
-        //             // Check if another job is already handling these segments
-        //             const existingJob = this.findSuitableJob(session, nextSegment);
-        //             if (!existingJob) {
-        //                 logger.DEBUG(`Starting follow-up slow transcode from segment ${nextSegment}`);
-        //                 this.startTranscodeJob(session, nextSegment, 'slow');
-        //             }
-        //         }
-        //     })
-        //     .on('error', (err) => {
-        //         logger.ERROR(`Job ${jobId} error: ${err.message}`);
-        //
-        //         // Clean up pending segments
-        //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
-        //             if (session.pendingSegments.has(i)) {
-        //                 session.pendingSegments.delete(i);
-        //             }
-        //         }
-        //
-        //         // Notify waiting clients
-        //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
-        //             const waiting = session.waitingClients.get(i);
-        //             if (waiting) {
-        //                 waiting.forEach(callback => callback(false));
-        //                 session.waitingClients.delete(i);
-        //             }
-        //         }
-        //
-        //         // Remove job
-        //         session.jobs.delete(jobId);
-        //
-        //         // Clean up temporary playlist
-        //         fs.unlink(playlistPath);
-        //     });
+        command.run();
 
-        // session.jobs.set(jobId, job);
-        // command.run();
+        this.activeJobs.set(session.id, job);
+        session.transcode = job;
     }
 
-    async killSession(id: string): Promise<void> {
-        // return this.lock.acquire(`media-${id}`, async () => {
-        //     const session = this.sessions.get(id);
-        //     if (!session) return;
-        //
-        //     // Kill all jobs in the session
-        //     const killPromises = Array.from(session.jobs.values()).map(job => {
-        //         return new Promise<void>((resolve) => {
-        //             const timeout = setTimeout(() => {
-        //                 logger.WARNING(`Force killing job ${job.id}`);
-        //                 try {
-        //                     job.process.kill('SIGKILL');
-        //                 } catch (e) {
-        //                     // Process might already be dead
-        //                 }
-        //                 resolve();
-        //             }, 2000);
-        //
-        //             job.process.on('error', () => {
-        //                 clearTimeout(timeout);
-        //                 resolve();
-        //             });
-        //
-        //             job.process.on('end', () => {
-        //                 clearTimeout(timeout);
-        //                 resolve();
-        //             });
-        //
-        //             try {
-        //                 job.process.kill('SIGTERM');
-        //             } catch (e) {
-        //                 clearTimeout(timeout);
-        //                 resolve();
-        //             }
-        //         });
-        //     });
-        //
-        //     await Promise.all(killPromises);
-        //
-        //     // Clear all jobs
-        //     session.jobs.clear();
-        //
-        //     // Notify all waiting clients
-        //     session.waitingClients.forEach((callbacks) => {
-        //         callbacks.forEach(callback => callback(false));
-        //     });
-        //     session.waitingClients.clear();
-        //     session.pendingSegments.clear();
-        // });
+    // private async startTranscode(session: StreamSession, startSegment: number): Promise<void> {
+    //     const file = session.file;
+    //     const jobId = `${session.id}-${startSegment}-${Date.now()}`;
+    //
+    //     const dir = path.join(TRANSCODE_PATH, session.id);
+    //     const playlistPath = path.join(dir, `playlist-${jobId}.m3u8`);
+    //     const segmentPath = path.join(dir, 'segment%d.ts');
+    //     const seekTime = startSegment * SEGMENT_DURATION;
+    //
+    //     await ensureDir(dir);
+    //
+    //     const framerate = file.metadata?.video[0]?.FrameRate || -1;
+    //     const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
+    //
+    //     const qualityOptions = this.getQualityOptions()
+    //
+    //     // Calculate target segments based on mode
+    //     let inputOptions = [
+    //         '-copyts',
+    //         '-ss', `${seekTime}`,
+    //         '-threads 0',
+    //     ];
+    //
+    //     const command = ffmpeg(file.path)
+    //         .inputOptions(inputOptions)
+    //         .videoCodec('libx264')
+    //         .audioCodec('aac')
+    //
+    //         .outputOptions([
+    //             // GENERAL
+    //             '-copyts',
+    //             '-map', '0',
+    //             '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
+    //
+    //             // VIDEO
+    //             '-pix_fmt', 'yuv420p',
+    //             '-preset veryfast',
+    //             '-crf', '24',
+    //             `-g ${gopSize}`,
+    //             '-sc_threshold', '0',
+    //
+    //             // AUDIO
+    //             '-b:a', '192k',
+    //             '-ac', '2',
+    //
+    //             // HLS
+    //             '-f', 'hls',
+    //             `-hls_time ${SEGMENT_DURATION}`,
+    //             '-hls_list_size 0',
+    //             '-hls_playlist_type vod',
+    //             '-hls_flags', 'independent_segments',
+    //             `-start_number ${startSegment}`,
+    //             `-hls_segment_filename ${segmentPath}`,
+    //         ])
+    //         .output(playlistPath);
+    //
+    //     // const job: TranscodeJob = {
+    //     //     id: jobId,
+    //     //     process: command,
+    //     //     startSegment: startSegment,
+    //     //     latestSegment: startSegment - 1,
+    //     //     targetSegment: startSegment + targetSegments - 1,
+    //     //     mode: mode,
+    //     //     createdAt: new Date()
+    //     // };
+    //
+    //     // Mark target segments as pending
+    //     // for (let i = startSegment; i <= job.targetSegment; i++) {
+    //     //     session.pendingSegments.add(i);
+    //     // }
+    //
+    //     // command.on('progress', (progress) => {
+    //     //     const time = parseFloat(String(progress.timemark.split(':').reduce((acc, val, i) => acc + parseFloat(val) * Math.pow(60, 2 - i), 0)));
+    //     //     const currentSegment = startSegment + Math.floor(time / SEGMENT_DURATION);
+    //     //
+    //     //     // Update completed segments
+    //     //     for (let i = job.latestSegment + 1; i <= currentSegment; i++) {
+    //     //         session.pendingSegments.delete(i);
+    //     //         session.completedSegments.add(i);
+    //     //
+    //     //         // Notify waiting clients
+    //     //         const waiting = session.waitingClients.get(i);
+    //     //         if (waiting) {
+    //     //             waiting.forEach(callback => callback(true));
+    //     //             session.waitingClients.delete(i);
+    //     //         }
+    //     //     }
+    //     //
+    //     //     job.latestSegment = currentSegment;
+    //     // })
+    //     //     .on('end', () => {
+    //     //         logger.DEBUG(`Job ${jobId} finished (mode: ${mode})`);
+    //     //
+    //     //         // Mark all remaining segments as completed
+    //     //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
+    //     //             if (session.pendingSegments.has(i)) {
+    //     //                 session.pendingSegments.delete(i);
+    //     //                 session.completedSegments.add(i);
+    //     //                 const waiting = session.waitingClients.get(i);
+    //     //                 if (waiting) {
+    //     //                     waiting.forEach(callback => callback(true));
+    //     //                     session.waitingClients.delete(i);
+    //     //                 }
+    //     //             }
+    //     //         }
+    //     //
+    //     //         // Remove job from session
+    //     //         session.jobs.delete(jobId);
+    //     //
+    //     //         // Clean up temporary playlist
+    //     //         fs.unlink(playlistPath);
+    //     //
+    //     //         // Start slow transcode if this was fast mode and we need more segments
+    //     //         const duration = file.metadata?.video[0].Duration || 0;
+    //     //         if (mode === 'fast' && job.targetSegment < Math.ceil(duration / SEGMENT_DURATION) - 1) {
+    //     //             const nextSegment = job.targetSegment + 1;
+    //     //             // Check if another job is already handling these segments
+    //     //             const existingJob = this.findSuitableJob(session, nextSegment);
+    //     //             if (!existingJob) {
+    //     //                 logger.DEBUG(`Starting follow-up slow transcode from segment ${nextSegment}`);
+    //     //                 this.startTranscodeJob(session, nextSegment, 'slow');
+    //     //             }
+    //     //         }
+    //     //     })
+    //     //     .on('error', (err) => {
+    //     //         logger.ERROR(`Job ${jobId} error: ${err.message}`);
+    //     //
+    //     //         // Clean up pending segments
+    //     //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
+    //     //             if (session.pendingSegments.has(i)) {
+    //     //                 session.pendingSegments.delete(i);
+    //     //             }
+    //     //         }
+    //     //
+    //     //         // Notify waiting clients
+    //     //         for (let i = job.startSegment; i <= job.targetSegment; i++) {
+    //     //             const waiting = session.waitingClients.get(i);
+    //     //             if (waiting) {
+    //     //                 waiting.forEach(callback => callback(false));
+    //     //                 session.waitingClients.delete(i);
+    //     //             }
+    //     //         }
+    //     //
+    //     //         // Remove job
+    //     //         session.jobs.delete(jobId);
+    //     //
+    //     //         // Clean up temporary playlist
+    //     //         fs.unlink(playlistPath);
+    //     //     });
+    //
+    //     // session.jobs.set(jobId, job);
+    //     // command.run();
+    // }
+
+    async stopTranscode(session: StreamSession): Promise<void> {
+       const job = this.activeJobs.get(session.id);
+
+       if (job?.process && job.status === 'running') {
+           logger.INFO(`Stopping transcode [${session.id}]`);
+           job.process.kill('SIGKILL');
+           job.status = 'stopped';
+           this.activeJobs.delete(session.id);
+
+           // Wait a bit for process to fully terminate
+           await sleep(100);
+       }
+    }
+
+    /**
+     * Get quality settings based on preset
+     */
+    private getQualityOptions(quality: string): QualityOptions {
+        const settings: Record<string, QualityOptions> = {
+            '1080p_20mbps': {
+                videoOptions: [
+                    '-vf', '-1:1080',
+                    '-preset veryfast',
+                    '-crf', '24',
+                    '-b:v', '20000k'
+                ],
+                audioOptions: [
+                    '-b:a', '192k',
+                    '-ac', '2',
+                    '-ar', '48000',
+                ]
+            },
+            '720p_6mbps': {
+                videoOptions: [
+                    '-vf', '-1:720',
+                    '-preset veryfast',
+                    '-crf', '24',
+                    '-b:v', '6000k'
+                ],
+                audioOptions: [
+                    '-b:a', '128k',
+                    '-ac', '2',
+                    '-ar', '48000',
+                ]
+            },
+            '480p_3mbps': {
+                videoOptions: [
+                    '-vf', '-1:480',
+                    '-preset veryfast',
+                    '-crf', '24',
+                    '-b:v', '3000k'
+                ],
+                audioOptions: [
+                    '-b:a', '128k',
+                    '-ac', '2',
+                    '-ar', '48000',
+                ]
+            },
+            '360p_1mbps': {
+                videoOptions: [
+                    '-vf', '-1:360',
+                    '-preset veryfast',
+                    '-crf', '24',
+                    '-b:v', '1000k'
+                ],
+                audioOptions: [
+                    '-b:a', '128k',
+                    '-ac', '2',
+                    '-ar', '48000',
+                ]
+            }
+        };
+
+        return settings[quality] || settings['720p_6mbps'];
     }
 
     getSessionInfo() {
-        // return Array.from(this.sessions.entries()).map(([id, session]) => ({
-        //     id,
-        //     fileName: session.file.name,
-        //     filePath: session.file.path,
-        //     isTranscoding: session.jobs.size > 0,
-        //     activeJobs: session.jobs.size,
-        //     // jobs: Array.from(session.jobs.values()).map(job => ({
-        //     //     id: job.id,
-        //     //     mode: job.mode,
-        //     //     startSegment: job.startSegment,
-        //     //     latestSegment: job.latestSegment,
-        //     //     targetSegment: job.targetSegment,
-        //     //     age: Math.floor((Date.now() - job.createdAt.getTime()) / 1000)
-        //     // })),
-        //     completedSegments: session.completedSegments.size,
-        //     pendingSegments: session.pendingSegments.size,
-        //     waitingClients: session.waitingClients.size
-        // }));
-        return '';
+        return {
+            activeSessions: this.sessions.size,
+            activeTranscodes: this.activeJobs.size,
+            sessions: Array.from(this.sessions.values()).map(session => ({
+                token: session.token,
+                id: session.id,
+                file: session.file,
+                quality: session.quality,
+                createdAt: session.createdAt,
+                lastAccessed: session.lastAccessed,
+                hasActiveTranscode: this.activeJobs.has(session.id)
+            }))
+        }
     }
 
     getSessions(): Map<string, StreamSession> {
         return this.sessions;
-    }
-
-    getSessionsFlat(): StreamSession[] {
-        return Array.from(this.sessions.values());
     }
 
     /**
@@ -467,12 +598,13 @@ class StreamingService {
     async shutdown(): Promise<void> {
         logger.INFO('Shutting down StreamingService...');
 
-        // Kill all active sessions
-        // for (const [id, session] of this.sessions) {
-        //     if (session.jobs.size > 0) {
-        //         await this.killSession(id);
-        //     }
-        // }
+        // Stop all active transcoding jobs
+        for (const session of this.sessions.values()) {
+            await this.stopTranscode(session);
+        }
+
+        this.sessions.clear();
+        this.activeJobs.clear();
 
         logger.INFO('StreamingService shutdown complete');
     }

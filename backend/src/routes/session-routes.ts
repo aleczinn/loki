@@ -20,8 +20,8 @@ router.get('/api/user', async (req: Request, res: Response) => {
  */
 router.get('/api/sessions', async (req: Request, res: Response) => {
     try {
-        const sessions = mediaService.getSessions();
-        res.status(200).json(Array.from(sessions.values()));
+        const sessions = mediaService.getSessionInfo();
+        res.status(200).json(sessions);
     } catch (error) {
         logger.ERROR(`Error getting active sessions: ${error}`);
         res.status(500).json({ error: 'Failed to get active sessions' });
