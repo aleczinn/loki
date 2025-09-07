@@ -99,8 +99,6 @@ class StreamingService {
         await ensureDir(dir);
 
         if (await pathExists(playlistPath)) {
-            console.log("FILE ALREADY EXISTS");
-
             const playlist = await readFile(playlistPath, "utf-8");
 
             return {
@@ -120,9 +118,6 @@ class StreamingService {
         playlist += `#EXT-X-TARGETDURATION:${SEGMENT_DURATION}\n`;
         playlist += '#EXT-X-MEDIA-SEQUENCE:0\n';
         playlist += '#EXT-X-PLAYLIST-TYPE:VOD\n\n';
-
-        // Add session token as custom tag for client
-        // playlist += `#EXT-X-SESSION-TOKEN:${session.token}\n\n`;
 
         for (let i = 0; i < totalSegments; i++) {
             const segmentDuration = Math.min(
@@ -144,6 +139,12 @@ class StreamingService {
         };
     }
 
+    async handleSegment(file: MediaFile, segmentIndex: number, quality: string, token?: string): Promise<{ path: string; token: string }> {
+        return {
+            path: '',
+            token: ''
+        }
+    }
 
     // private async loadExistingSessions(): Promise<void> {
     //     try {

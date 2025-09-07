@@ -19,8 +19,6 @@
                                                                                                  @click="cancelStream">(X)</a>
                 </p>
 
-                <button @click="testFetch">TESTFETCH</button>
-
                 <h3 class="text-white font-bold mb-2">Sessions</h3>
                 <ul class="text-white flex flex-col mb-4">
                     <li v-for="session in getSessions()">- {{ session.id }} [{{ session.file.name }}]</li>

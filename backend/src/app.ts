@@ -8,12 +8,12 @@ import * as path from 'path';
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import sessionRoutes from "./routes/session-routes";
-import mediaService from "./services/streaming-service";
 import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
 import { userAgentMiddleware } from "./middleware/user-agent-handler";
 import { ensureDirSync } from "./utils/file-utils";
+import streamingService from "./services/streaming-service";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -63,9 +63,15 @@ app.use(streamingRoutes)
 app.use(sessionRoutes)
 
 // Graceful shutdown
+process.on('SIGTERM', async () => {
+    logger.INFO('SIGTERM received, shutting down gracefully');
+    await streamingService.shutdown();
+    process.exit(0);
+});
+
 process.on('SIGINT', async () => {
-    logger.INFO('Shutting down gracefully...');
-    await mediaService.shutdown();
+    logger.INFO('SIGINT received, shutting down gracefully');
+    await streamingService.shutdown();
     process.exit(0);
 });
 
