@@ -135,26 +135,28 @@ function initHls(url: string) {
 
     if (!videoRef.value) return;
 
+    const token = getToken();
+
     if (Hls.isSupported()) {
-        let tokenCaptured = false;
+        // let tokenCaptured = false;
 
         hls.value = new Hls({
             xhrSetup: (xhr: XMLHttpRequest, requestUrl: string) => {
-                const token = sessionStorage.getItem('streamToken');
-                if (token) {
+                // const token = sessionStorage.getItem('streamToken');
+                // if (token) {
                     xhr.setRequestHeader('X-Stream-Token', token);
-                }
+                // }
 
-                if (!tokenCaptured && requestUrl.includes('playlist.m3u8')) {
-                    xhr.addEventListener('load', function() {
-                        const newToken = xhr.getResponseHeader('X-Stream-Token');
-
-                        if (newToken && newToken !== token) {
-                            sessionStorage.setItem('streamToken', newToken);
-                            tokenCaptured = true;
-                        }
-                    });
-                }
+                // if (!tokenCaptured && requestUrl.includes('playlist.m3u8')) {
+                //     xhr.addEventListener('load', function() {
+                //         const newToken = xhr.getResponseHeader('X-Stream-Token');
+                //
+                //         if (newToken && newToken !== token) {
+                //             sessionStorage.setItem('streamToken', newToken);
+                //             tokenCaptured = true;
+                //         }
+                //     });
+                // }
             }
         });
 
@@ -167,6 +169,21 @@ function initHls(url: string) {
         videoRef.value.src = url;
         videoRef.value.play();
     }
+}
+
+function generateToken(): string {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substring(2, 15);
+    return `${timestamp}-${random}`;
+}
+
+function getToken(): string {
+    let token = sessionStorage.getItem('streamToken');
+    if (!token) {
+        token = generateToken();
+        sessionStorage.setItem('streamToken', token);
+    }
+    return token;
 }
 
 function getSessions() {

@@ -82,6 +82,8 @@ router.get('/api/streaming/:id/:quality/segment:index.ts', async (req: Request, 
 
         const { path: segmentPath, token: sessionToken } = await streamingService.handleSegment(file, segment, quality, token);
 
+        console.log(`SegmentToken: ${token} | FinalToken: ${sessionToken}`)
+
         res.setHeader('X-Stream-Token', sessionToken);
 
         if (segmentPath) {
