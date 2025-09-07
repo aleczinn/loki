@@ -6,7 +6,7 @@ import { logger } from "../logger";
 import AsyncLock from "async-lock";
 import { ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
 import fs from "fs";
-import { sleep } from "../utils/utils";
+import { CYAN, GREEN, MAGENTA, RED, RESET, sleep, YELLOW } from "../utils/utils";
 
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
 export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
@@ -152,8 +152,7 @@ class StreamingService {
         const session = await this.getOrCreateSession(file, quality, token);
 
         const dir = path.join(TRANSCODE_PATH, session.token, file.id, quality);
-        const playlistPath = path.join(dir, 'playlist.m3u8');
-        const segmentPath = path.join(dir, 'segment%d.ts');
+        const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
 
         // Check if segment already exists
         if (await pathExists(segmentPath)) {
@@ -192,7 +191,7 @@ class StreamingService {
 
                 if (seekDistance > SEEK_THRESHOLD) {
                     // User seeked, restart transcoding from new position
-                    logger.INFO(`Seek detected: segment ${currentJob.startSegment} → ${requestedSegment} (distance: ${seekDistance})`);
+                    logger.INFO(`${YELLOW}Seek detected: segment ${currentJob.startSegment} → ${requestedSegment} (distance: ${seekDistance})${RESET}`);
                     await this.stopTranscode(session);
                     await this.startTranscode(session, requestedSegment);
                 } else {
@@ -233,6 +232,7 @@ class StreamingService {
 
         const command = ffmpeg(file.path)
             .inputOptions([
+                // '-re', // Echtzeitmodus - Wäre nur sinnvoll, wenn fast start benutzt wird und x segmente transkodiert wurden. Dann kann man auf -re wechseln, um den rest "sanft" weiter zu transkodieren
                 '-copyts',
                 '-ss', `${seekTime}`,
                 '-threads 0',
@@ -242,7 +242,8 @@ class StreamingService {
             .outputOptions([
                 // GENERAL
                 '-copyts',
-                '-map', '0',
+                '-map', '0:v',
+                '-map', '0:a',
                 '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
 
                 // VIDEO
@@ -278,25 +279,26 @@ class StreamingService {
 
         job.process = command
             .on('start', (command) => {
-                logger.INFO(`Transcode started [${session.id}]: from segment ${startSegment} to end`);
-                logger.DEBUG(`FFmpeg command: ${command}`);
+                logger.INFO(`${CYAN}Transcode started [${session.id}]: from segment ${startSegment} to end${RESET}`);
             })
             .on('progress', (progress) => {
-                // Log progress periodically
                 const percent = progress.percent || 0;
-                if (Math.floor(percent) % 10 === 0) {
-                    logger.DEBUG(`Transcode progress [${session.id}]: ${percent.toFixed(1)}%`);
-                }
+                logger.INFO(`${MAGENTA}Transcode progress [${session.id}]: ${progress.currentFps} FPS - ${percent.toFixed(1)}%${RESET}`);
             })
             .on('end', async () => {
-                logger.INFO(`Transcode completed [${session.id}]`);
+                logger.INFO(`${GREEN}Transcode completed [${session.id}]${RESET}`);
                 job.status = 'completed';
                 this.activeJobs.delete(session.id);
             })
-            .on('error', async (err) => {
+            .on('error', async (err, stdout, stderr) => {
                 // Check if error is due to process being killed (expected for seeking)
                 if (!err.message?.includes('SIGKILL')) {
-                    logger.ERROR(`Transcode error [${session.id}]: ${err}`);
+                    logger.ERROR(`${RED}Transcode error [${session.id}]: ${err}${RESET}`);
+
+                    logger.ERROR(`${RED}Transcode error [${session.id}]:${RESET}`);
+                    logger.ERROR(`${RED}Error: ${err.message}${RESET}`);
+                    logger.ERROR(`${RED}STDERR: ${stderr}${RESET}`);
+                    logger.ERROR(`${RED}STDOUT: ${stdout}${RESET}`);
                 }
                 job.status = 'stopped';
                 this.activeJobs.delete(session.id);

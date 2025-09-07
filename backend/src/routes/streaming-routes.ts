@@ -34,20 +34,20 @@ router.get('/api/streaming/:id/:quality/playlist.m3u8', async (req: Request, res
         const { playlist, token: sessionToken } = await streamingService.generatePlaylist(file, quality, token);
 
         // Modify playlist URLs to include token for Safari if needed
-        let modifiedPlaylist = playlist;
-        if (req.query.token) {
-            // Add token to segment URLs for Safari
-            modifiedPlaylist = playlist.replace(
-                /segment(\d+)\.ts/g,
-                `segment$1.ts?token=${sessionToken}`
-            );
-        }
+        // let modifiedPlaylist = playlist;
+        // if (req.query.token) {
+        //     // Add token to segment URLs for Safari
+        //     modifiedPlaylist = playlist.replace(
+        //         /segment(\d+)\.ts/g,
+        //         `segment$1.ts?token=${sessionToken}`
+        //     );
+        // }
 
         res.setHeader('X-Stream-Token', sessionToken);
         res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
         res.setHeader('Cache-Control', 'no-cache');
 
-        res.send(modifiedPlaylist);
+        res.send(playlist);
     } catch (error) {
         logger.ERROR(`Error creating stream: ${error}`);
         res.status(500).json({ error: 'Failed to create stream' });

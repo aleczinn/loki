@@ -123,15 +123,9 @@ const selectMedia = (media: MediaFile) => {
 
 const streamUrl = () => {
     if (!selectedMedia.value) return '';
-    const quality = "1080p_20mpbs";
+    const quality = "1080p_20mbps";
     return `/api/streaming/${selectedMedia.value.id}/${quality}/playlist.m3u8`;
 };
-
-const testFetch = async () => {
-    const response = await fetch('/api/streaming/06ac6c4df26e52dfc1f52f9e55548323/1080p_20mbps/playlist.m3u8');
-    const token = response.headers.get('X-Stream-Token');
-    console.log('Token:', token); // Sollte den Token zeigen
-}
 
 function initHls(url: string) {
     if (hls.value) {
@@ -317,7 +311,7 @@ onMounted(() => {
     loadMediaFiles();
 
     sessionInterval = window.setInterval(() => {
-        loadSessions();
+        // loadSessions();
     }, 3000)
 })
 
