@@ -4,7 +4,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
-import { ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
+import { clearDir, ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
 import fs from "fs";
 import { CYAN, GREEN, MAGENTA, RED, RESET, sleep, YELLOW } from "../utils/utils";
 
@@ -55,6 +55,9 @@ class StreamingService {
 
         ensureDirSync(TRANSCODE_PATH);
         ensureDirSync(METADATA_PATH);
+
+        // TODO : Temp to clear transcode folder
+        clearDir(TRANSCODE_PATH);
     }
 
     /**
@@ -588,8 +591,8 @@ class StreamingService {
                 .on('error', (err) => reject(err))
                 .screenshot({
                     timestamps: [timestamp],
-                    filename,
-                    folder
+                    filename: filename,
+                    folder: folder
                 })
         });
     }

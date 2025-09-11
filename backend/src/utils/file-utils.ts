@@ -1,6 +1,8 @@
-import { mkdir, access, constants, readFile as fsReadFile, writeFile as fsWriteFile, readdir as fsReaddir, stat as fsStat } from 'fs/promises';
+import { rm, mkdir, access, constants, readFile as fsReadFile, writeFile as fsWriteFile, readdir as fsReaddir, stat as fsStat } from 'fs/promises';
 import fs from "fs";
 import path from "path";
+import { RED, RESET } from "./utils";
+import { logger } from "../logger";
 
 /**
  * Ensure that a directory exists. Creates it recursively if needed.
@@ -65,4 +67,13 @@ export function statSync(path: string) {
 
 export async function readdir(dir: string) {
     return await fsReaddir(dir);
+}
+
+export async function clearDir(path: string) {
+    try {
+        await rm(path, { recursive: true, force: true });
+        await mkdir(path);
+    } catch (error) {
+        logger.ERROR(`${RED}Error: ${error}${RESET}`);
+    }
 }
