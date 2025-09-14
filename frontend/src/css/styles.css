@@ -6,6 +6,7 @@
     --color-primary-light: #8FC5EA;
     --color-primary: #53A7DD;
     --color-primary-darker: #1e6fab;
+    --color-primary-darkest: #092133;
 
     --color-alert: #EB3F5E;
     --color-success: #4CAF50;
@@ -37,6 +38,10 @@
 
     /* Border Width */
     --border-width-1: 1px;
+
+    /* Z-Index */
+    --z-index-videoplayer: 5000;
+    --z-index-popup: 9999;
 }
 
 @layer base {
@@ -49,6 +54,36 @@
             transition-duration: 0.01ms !important;
             scroll-behavior: auto !important;
         }
+    }
+}
+
+@layer utilities {
+    .hit-area-sm,
+    .hit-area-md,
+    .hit-area-lg {
+        position: relative;
+    }
+
+    .hit-area-sm::after {
+        content: '';
+        position: absolute;
+        inset: -0.35rem;
+    }
+
+    .hit-area-md::after {
+        content: '';
+        position: absolute;
+        inset: -0.55rem;
+    }
+
+    .hit-area-lg::after {
+        content: '';
+        position: absolute;
+        inset: -0.85rem;
+    }
+
+    .player-gradient {
+        background: linear-gradient(0deg,rgba(13, 12, 15, 1) 0%, rgba(13, 12, 15, 0) 25%, rgba(13, 12, 15, 0) 90%, rgba(13, 12, 15, 0.9) 100%);
     }
 }
 

@@ -1,4 +1,6 @@
 <template>
+    <loki-videoplayer ref="player" :file="selectedMedia"></loki-videoplayer>
+
     <div class="flex flex-col h-screen">
         <main class="flex-1 py-8">
             <div class="mx-auto max-w-[87rem]">
@@ -13,34 +15,12 @@
                     </a>
                 </div>
 
-                <p class="text-white font-bold mb-4">Selected: <span
-                    class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia"
-                                                                                                 class="text-red-300 font-normal hover:cursor-pointer"
-                                                                                                 @click="cancelStream">(X)</a>
-                </p>
-
                 <h3 class="text-white font-bold mb-2">Sessions</h3>
                 <p class="text-white">Sessions: {{ sessions?.activeSessions }}</p>
                 <p class="text-white">Active Transcodes: {{ sessions?.activeTranscodes }}</p>
                 <ul class="text-white flex flex-col mb-4">
-
                     <li v-for="session in sessions?.sessions">- {{ session.token }} [{{ session.quality }}]</li>
                 </ul>
-
-                <div class="w-full bg-black/30 rounded-xl">
-                    <video ref="videoRef"
-                           class="w-full rounded shadow-lg"
-                           controls
-                           autoplay
-                           @timeupdate="onTimeUpdate"
-                           @seeked="onSeeked"
-                           @seeking="onSeeking"
-                           @loadedmetadata="onLoadedMetadata"
-                           @waiting="onWaiting"
-                           @playing="onPlaying"
-                           @error="onError">
-                    </video>
-                </div>
             </div>
         </main>
 
@@ -53,9 +33,11 @@
 <script setup lang="ts">
 import { inject, onMounted, onUnmounted, ref } from "vue";
 import type { AxiosInstance } from "axios";
-import Hls from "hls.js";
+import LokiVideoplayer from "../../components/loki-videoplayer";
 
 const axios = inject<AxiosInstance>('axios');
+
+const player = ref();
 
 interface MediaFile {
     id: string;
@@ -84,10 +66,8 @@ interface StreamingInfo {
 }
 
 const isLoading = ref(true);
-const hls = ref<Hls | null>(null)
 const mediaFiles = ref<MediaFile[]>([]);
 const selectedMedia = ref<MediaFile | null>(null);
-const videoRef = ref<HTMLVideoElement | null>(null)
 
 let sessionInterval: number | undefined;
 const sessions = ref<StreamingInfo | null>(null);
@@ -118,115 +98,10 @@ const loadSessions = async () => {
 
 const selectMedia = (media: MediaFile) => {
     selectedMedia.value = media;
-    initHls(streamUrl());
-}
-
-const streamUrl = () => {
-    if (!selectedMedia.value) return '';
-    const quality = "1080p_20mbps";
-    return `/api/streaming/${selectedMedia.value.id}/${quality}/playlist.m3u8`;
-};
-
-function initHls(url: string) {
-    if (hls.value) {
-        hls.value.destroy();
-        hls.value = null;
-    }
-
-    if (!videoRef.value) return;
-
-    const token = getToken();
-
-    if (Hls.isSupported()) {
-        // let tokenCaptured = false;
-
-        hls.value = new Hls({
-            xhrSetup: (xhr: XMLHttpRequest, requestUrl: string) => {
-                // const token = sessionStorage.getItem('streamToken');
-                // if (token) {
-                    xhr.setRequestHeader('X-Stream-Token', token);
-                // }
-
-                // if (!tokenCaptured && requestUrl.includes('playlist.m3u8')) {
-                //     xhr.addEventListener('load', function() {
-                //         const newToken = xhr.getResponseHeader('X-Stream-Token');
-                //
-                //         if (newToken && newToken !== token) {
-                //             sessionStorage.setItem('streamToken', newToken);
-                //             tokenCaptured = true;
-                //         }
-                //     });
-                // }
-            }
-        });
-
-        hls.value.loadSource(url);
-        hls.value.attachMedia(videoRef.value);
-        hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoRef.value!.play();
-        });
-    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
-        videoRef.value.src = url;
-        videoRef.value.play();
-    }
-}
-
-function generateToken(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 15);
-    return `${timestamp}-${random}`;
-}
-
-function getToken(): string {
-    let token = sessionStorage.getItem('streamToken');
-    if (!token) {
-        token = generateToken();
-        sessionStorage.setItem('streamToken', token);
-    }
-    return token;
 }
 
 function getSessions() {
     return sessions.value;
-}
-
-function cancelStream(): void {
-    selectedMedia.value = null;
-    if (hls.value) {
-        hls.value.destroy()
-        hls.value = null
-    }
-    if (videoRef.value) {
-        videoRef.value.src = ''
-    }
-}
-
-function onTimeUpdate(): void {
-
-}
-
-function onSeeked(): void {
-
-}
-
-function onSeeking(): void {
-
-}
-
-function onLoadedMetadata(): void {
-
-}
-
-function onWaiting(): void {
-
-}
-
-function onPlaying(): void {
-
-}
-
-function onError(): void {
-
 }
 
 function formatFileSize(bytes: number): string {
