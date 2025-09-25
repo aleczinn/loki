@@ -121,6 +121,7 @@ import IconPlayerForward30 from "../../icons/player/icon-player-forward-30.vue";
 import IconInfo from "../../icons/icon-info.vue";
 import type { MediaFile } from "../../types/media.ts";
 import IconFullscreen from "../../icons/icon-fullscreen.vue";
+import { clamp } from "../../lib/utils.ts";
 
 interface VideoPlayerProps {
     file?: MediaFile;
@@ -232,7 +233,9 @@ function closePlayer() {
 
 function skip(seconds: number) {
     if (!videoRef.value) return;
-    videoRef.value.currentTime = Math.max(0, videoRef.value.currentTime + seconds);
+
+    const value = videoRef.value.currentTime + seconds;
+    videoRef.value.currentTime = clamp(value, 0, videoRef.value.duration);
 }
 
 function handleKeyboard(e: KeyboardEvent) {
