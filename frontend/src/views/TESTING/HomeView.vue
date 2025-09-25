@@ -1,5 +1,5 @@
 <template>
-    <loki-videoplayer ref="player" :file="selectedMedia"></loki-videoplayer>
+    <loki-player ref="player" :quality="selectedQuality"></loki-player>
 
     <div class="flex flex-col h-screen">
         <main class="flex-1 py-8">
@@ -7,20 +7,13 @@
                 <!-- ADD CONTENT HERE -->
                 <h3 class="text-white font-bold mb-2">Media Files</h3>
                 <div class="flex flex-col mb-4">
-                    <a v-for="media in mediaFiles" :key="media.name" @click="selectMedia(media)"
+                    <a v-for="media in mediaFiles" :key="media.name" @click="playMedia(media)"
                        class="text-white  transition-all duration-200 hover:cursor-pointer hover:ml-4">
                         > {{ media.name }} <span class="text-gray-500">({{
                             formatFileSize(media.size)
                         }}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
                     </a>
                 </div>
-
-                <h3 class="text-white font-bold mb-2">Sessions</h3>
-                <p class="text-white">Sessions: {{ sessions?.activeSessions }}</p>
-                <p class="text-white">Active Transcodes: {{ sessions?.activeTranscodes }}</p>
-                <ul class="text-white flex flex-col mb-4">
-                    <li v-for="session in sessions?.sessions">- {{ session.token }} [{{ session.quality }}]</li>
-                </ul>
             </div>
         </main>
 
@@ -33,11 +26,9 @@
 <script setup lang="ts">
 import { inject, onMounted, onUnmounted, ref } from "vue";
 import type { AxiosInstance } from "axios";
-import LokiVideoplayer from "../../components/loki-videoplayer";
+import { LokiPlayer } from "../../components/loki-player";
 
 const axios = inject<AxiosInstance>('axios');
-
-const player = ref();
 
 interface MediaFile {
     id: string;
@@ -49,28 +40,10 @@ interface MediaFile {
     modified: Date;
 }
 
-interface StreamingSession {
-    token: string;
-    id: string;
-    file: MediaFile;
-    quality: string;
-    createdAt: Date;
-    lastAccessed: Date;
-    hasActiveTranscode: boolean;
-}
-
-interface StreamingInfo {
-    activeSessions: number;
-    activeTranscodes: number;
-    sessions: StreamingSession[];
-}
-
 const isLoading = ref(true);
 const mediaFiles = ref<MediaFile[]>([]);
-const selectedMedia = ref<MediaFile | null>(null);
-
-let sessionInterval: number | undefined;
-const sessions = ref<StreamingInfo | null>(null);
+const player = ref();
+const selectedQuality = ref('1080p_20mbps');
 
 const loadMediaFiles = async () => {
     isLoading.value = true;
@@ -85,23 +58,8 @@ const loadMediaFiles = async () => {
     }
 }
 
-const loadSessions = async () => {
-    try {
-        const response = await axios?.get<any>('/sessions');
-        sessions.value = response?.data || [];
-    } catch (err) {
-        console.error('Failed to load media files:', err);
-    } finally {
-        isLoading.value = false;
-    }
-}
-
-const selectMedia = (media: MediaFile) => {
-    selectedMedia.value = media;
-}
-
-function getSessions() {
-    return sessions.value;
+const playMedia = (media: MediaFile) => {
+    player.value?.play(media);
 }
 
 function formatFileSize(bytes: number): string {
@@ -201,10 +159,6 @@ function getMainAudioTrack(media: MediaFile): string {
 
 onMounted(() => {
     loadMediaFiles();
-
-    sessionInterval = window.setInterval(() => {
-        // loadSessions();
-    }, 3000)
 })
 
 onUnmounted(() => {

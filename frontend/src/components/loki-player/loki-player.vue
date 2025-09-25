@@ -1,7 +1,7 @@
 <template>
-    <Teleport to="body">
-        <section v-if="isOpen"
-                 class="fixed inset-0 bg-black-800 z-videoplayer">
+    <Teleport v-if="isOpen"
+              to="body">
+        <section class="fixed inset-0 bg-black-800 z-videoplayer">
             <div class="relative flex flex-row justify-center w-full h-full">
                 <div class="aspect-video bg-black-900">
                     <video ref="videoRef"
@@ -13,81 +13,91 @@
                            @waiting="isBuffering = true"
                            @playing="isBuffering = false"
                            @timeupdate="updateProgress"
-                           @ended="onVideoEnd"
-                    >
+                           @ended="onVideoEnd">
                     </video>
                 </div>
 
-                <div class="absolute inset-0 player-gradient" @mousemove="showControls" @mouseleave="showControls"
-                     @click="togglePlayPause"></div>
+                <div class="absolute inset-0 flex flex-col"
+                     @mousemove="showControls"
+                     @mouseleave="hideControlsWithDelay"
+                     @click="togglePlayPause"
+                     @keyup="handleKeyboard">
+                    <div class="absolute inset-0 pointer-events-none"
+                         :class="controlsVisible ? 'player-gradient' : ''">
+                    </div>
 
-                <loki-loading-spinner v-if="isLoading || isBuffering"
-                                      class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                </loki-loading-spinner>
+                    <loki-loading-spinner v-if="isLoading || isBuffering"
+                                          class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                    </loki-loading-spinner>
 
-                <!-- Top-Bar -->
-                <div class="absolute top-0 left-0 right-0 p-6 opacity-0 transition-opacity duration-200 ease-in-out"
-                     :class="{'opacity-100': controlsVisible}">
-                    <div class="flex flex-row justify-between">
-                        <div
-                            class="flex flex-row gap-2.5 items-center text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                            @click="closePlayer">
-                            <span class="">
-                                <icon-arrow-left class="w-6 h-6"></icon-arrow-left>
-                            </span>
-                            <p class="">Title (2013)</p>
-                        </div>
+                    <!-- Top Bar -->
+                    <div class="relative z-10 p-6 transition-opacity duration-300"
+                         :class="controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'"
+                         @click.stop>
+                        <div class="flex justify-between">
+                            <button @click="closePlayer"
+                                    class="flex items-center gap-2 text-white hover:text-primary transition-colors">
+                                <icon-arrow-left class="w-6 h-6"/>
+                                <span>{{ props.file?.name || 'Video' }}</span>
+                            </button>
 
-                        <div class="flex flex-row gap-2.5 items-center">
-                            <icon-chromecast class="text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"></icon-chromecast>
-                            <icon-fullscreen class="text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer" @click="toggleFullscreen"></icon-fullscreen>
+                            <div class="flex gap-6">
+                                <button @click=""
+                                        class="text-white hover:cursor-pointer transition-colors duration-300 ease-in-out hover:text-primary">
+                                    <icon-chromecast class="w-6 h-6"/>
+                                </button>
+
+                                <button @click="toggleFullscreen"
+                                        class="text-white hover:cursor-pointer transition-colors duration-300 ease-in-out hover:text-primary">
+                                    <icon-fullscreen class="w-6 h-6"/>
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Bottom-Bar -->
-                <div
-                    class="absolute bottom-0 left-0 right-0 px-6 py-12 opacity-0 transition-opacity duration-200 ease-in-out"
-                    :class="{'opacity-100': controlsVisible}">
-                    <!-- Timeline -->
-                    <div class="relative w-full h-1 mb-12 rounded-full bg-black-700
+                    <!-- Bottom Bar -->
+                    <div class="absolute bottom-0 left-0 right-0 px-6 py-12 opacity-0 transition-opacity duration-200 ease-in-out" :class="{'opacity-100': controlsVisible}">
+                        <!-- Timeline -->
+                        <div class="relative w-full h-1 mb-12 rounded-full bg-black-700
                                 after:absolute after:h-full after:w-[30%] after:bg-primary after:rounded-full
                                 before:absolute before:h-full before:w-[33%] before:bg-primary-darkest before:rounded-full"
-                    ></div>
+                        ></div>
 
-                    <div class="grid grid-cols-3">
-                        <div class="flex flex-row justify-start items-center"></div>
+                        <!-- Buttons -->
+                        <div class="grid grid-cols-3">
+                            <div class="flex flex-row justify-start items-center"></div>
 
-                        <div class="flex flex-row gap-4 justify-center items-center">
+                            <div class="flex flex-row gap-4 justify-center items-center">
                             <span @click.stop="skip(-30)"
                                   class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
                                 <icon-player-rewind class="w-6 h-6"></icon-player-rewind>
                             </span>
 
-                            <span @click.stop="skip(-10)"
-                                  class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
+                                <span @click.stop="skip(-10)"
+                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
                                 <icon-player-rewind10 class="w-6 h-6"></icon-player-rewind10>
                             </span>
 
-                            <span @click="togglePlayPause"
-                                  class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
+                                <span @click="togglePlayPause"
+                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
                                 <icon-player-play v-if="!isPlaying" class="w-8 h-8"/>
                                 <icon-player-pause v-if="isPlaying" class="w-8 h-8"></icon-player-pause>
                             </span>
 
-                            <span @click.stop="skip(10)"
-                                  class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
+                                <span @click.stop="skip(10)"
+                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
                                 <icon-player-forward30 class="w-6 h-6"></icon-player-forward30>
                             </span>
 
-                            <span @click.stop="skip(30)"
-                                  class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
+                                <span @click.stop="skip(30)"
+                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
                                 <icon-player-forward class="w-6 h-6"></icon-player-forward>
                             </span>
-                        </div>
+                            </div>
 
-                        <div class="flex flex-row gap-2 justify-end items-center">
-                            <icon-info class="text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"></icon-info>
+                            <div class="flex flex-row gap-2 justify-end items-center">
+                                <icon-info class="text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"></icon-info>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -98,7 +108,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { nextTick, onUnmounted, ref, watch } from "vue";
+import { nextTick, onUnmounted, ref } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -127,6 +137,11 @@ const props = withDefaults(defineProps<VideoPlayerProps>(), {
     startTime: 0,
 });
 
+const emit = defineEmits<{
+    closed: [];
+    ended: [];
+}>();
+
 const isOpen = ref(false);
 const isLoading = ref(true);
 const isBuffering = ref(false);
@@ -134,24 +149,23 @@ const isPlaying = ref(false);
 const controlsVisible = ref(true);
 let controlsTimer: NodeJS.Timeout | null = null;
 
+const progress = ref(0);
+const currentTime = ref(0);
+const duration = ref(0);
+
 const hls = ref<Hls | null>(null)
-const videoRef = ref<HTMLVideoElement | null>(null)
+const videoRef = ref<HTMLVideoElement | null>(null);
+const currentFile = ref<MediaFile | null>(null);
 
 function initHLS(url: string) {
-    console.log("call init hls with ", url);
-
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
     }
 
-    console.log("loading... ", videoRef.value);
-
     if (!videoRef.value) return;
 
     if (Hls.isSupported()) {
-        console.log("create hls instance");
-
         hls.value = new Hls({
             debug: false,
             enableWorker: true,
@@ -159,7 +173,7 @@ function initHLS(url: string) {
             backBufferLength: 60,
             maxBufferLength: 120,
             autoStartLoad: true,
-            xhrSetup: (xhr: XMLHttpRequest, requestUrl: string) => {
+            xhrSetup: (xhr: XMLHttpRequest, _: string) => {
                 const token = getToken();
                 if (token) {
                     xhr.setRequestHeader('X-Stream-Token', token);
@@ -184,6 +198,16 @@ function generateToken(): string {
     return `${timestamp}-${random}`;
 }
 
+function openPlayer(file: MediaFile) {
+    currentFile.value = file;
+    isOpen.value = true;
+
+    nextTick(() => {
+        const url = `/api/streaming/${file.id}/${props.quality}/playlist.m3u8`
+        initHLS(url);
+    })
+}
+
 function getToken(): string {
     let token = sessionStorage.getItem('streamToken');
     if (!token) {
@@ -193,14 +217,6 @@ function getToken(): string {
     return token;
 }
 
-function startPlayback() {
-    if (props.file) {
-        console.log("start playback");
-        const quality = "1080p_20mbps";
-        initHLS(`/api/streaming/${props.file.id}/${quality}/playlist.m3u8`);
-    }
-}
-
 function closePlayer() {
     if (hls.value) {
         hls.value.destroy();
@@ -208,6 +224,10 @@ function closePlayer() {
     }
 
     isOpen.value = false;
+    currentFile.value = null;
+    isPlaying.value = false;
+
+    emit('closed');
 }
 
 function skip(seconds: number) {
@@ -216,6 +236,8 @@ function skip(seconds: number) {
 }
 
 function handleKeyboard(e: KeyboardEvent) {
+    console.log("key up");
+
     switch(e.key) {
         case ' ':
         case 'Space':
@@ -249,35 +271,58 @@ function showControls() {
 
     if (controlsTimer) {
         clearTimeout(controlsTimer);
-        controlsTimer = null;
     }
 
-    // if (isPlaying.value && isLoading.value && !isBuffering.value) {
-    controlsTimer = setTimeout(() => {
-        controlsVisible.value = false;
-    }, 3000)
-    // }
-}
-
-function togglePlayPause() {
-    console.log("togglePlayPause");
-    if (!videoRef.value) return;
-
-    if (videoRef.value.paused) {
-        videoRef.value.play();
-        isPlaying.value = true;
-    } else {
-        videoRef.value.pause();
-        isPlaying.value = false;
+    // Nur verstecken wenn Video läuft
+    if (isPlaying.value && !isLoading.value && !isBuffering.value) {
+        controlsTimer = setTimeout(() => {
+            controlsVisible.value = false;
+        }, 3000);
     }
 }
 
 function updateProgress() {
+    if (!videoRef.value) return;
+    currentTime.value = videoRef.value.currentTime;
+    duration.value = videoRef.value.duration || 0;
+    progress.value = duration.value ? (currentTime.value / duration.value) * 100 : 0;
+}
 
+// function seek(event: MouseEvent) {
+//     if (!videoRef.value || !duration.value) return;
+//     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+//     const percent = (event.clientX - rect.left) / rect.width;
+//     videoRef.value.currentTime = percent * duration.value;
+// }
+
+function hideControlsWithDelay() {
+    if (isPlaying.value) {
+        controlsTimer = setTimeout(() => {
+            controlsVisible.value = false;
+        }, 3000);
+    }
+}
+
+function togglePlayPause() {
+    console.log('play pause 1');
+
+    if (!videoRef.value) return;
+
+    console.log('play pause 2');
+
+    if (videoRef.value.paused) {
+        videoRef.value.play();
+        isPlaying.value = true;
+        console.log('play pause - play');
+    } else {
+        videoRef.value.pause();
+        isPlaying.value = false;
+        console.log('play pause - pause');
+    }
 }
 
 function onVideoEnd() {
-
+    emit('ended');
 }
 
 onUnmounted(() => {
@@ -286,18 +331,23 @@ onUnmounted(() => {
     }
 });
 
-// Watch for prop changes
-watch(() => props.file, async (newFile) => {
-    if (newFile) {
-        isOpen.value = true;
-
-        await nextTick();
-
-        startPlayback();
-    } else {
+defineExpose({
+    play(file: MediaFile) {
+        openPlayer(file);
+    },
+    pause() {
+        videoRef.value?.pause();
+    },
+    resume() {
+        videoRef.value?.play();
+    },
+    close() {
         closePlayer();
+    },
+    isPlaying() {
+        return isPlaying.value;
     }
-}, { immediate: true });
+})
 </script>
 
 <style scoped lang="css">
