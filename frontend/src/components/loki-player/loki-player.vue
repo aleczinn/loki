@@ -25,7 +25,7 @@
 
                     <!-- Gradient Overlay -->
                     <div class="absolute inset-0 pointer-events-none"
-                         :class="controlsVisible ? 'player-gradient' : ''">
+                         :class="{'player-gradient': controlsVisible}">
                     </div>
 
                     <!-- Loading Spinner -->
@@ -145,6 +145,19 @@
 
                             <div class="flex flex-row gap-4 justify-end items-center">
                                 <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        :title="videoRef?.muted ? 'Stumm (M)' : 'Ton Ein (M)'"
+                                        :aria-label="videoRef?.muted ? 'Stumm' : 'Ton Ein'"
+                                        @click="toggleMute">
+                                    <icon-player-volume v-if="! videoRef?.muted" lass="w-full h-full" aria-hidden="true"></icon-player-volume>
+                                    <icon-player-muted v-if="videoRef?.muted" lass="w-full h-full" aria-hidden="true"></icon-player-muted>
+                                </button>
+
+                                <!-- Volume -->
+                                <div class="">
+
+                                </div>
+
+                                <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
                                         title="Einstellungen">
                                     <icon-gear class="w-full h-full" aria-hidden="true"></icon-gear>
                                 </button>
@@ -180,6 +193,8 @@ import type { MediaFile } from "../../types/media.ts";
 import IconFullscreen from "../../icons/icon-fullscreen.vue";
 import { clamp } from "../../lib/utils.ts";
 import IconGear from "../../icons/icon-gear.vue";
+import IconPlayerVolume from "../../icons/player/icon-player-volume.vue";
+import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
 
 interface VideoPlayerProps {
     quality?: string;
