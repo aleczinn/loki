@@ -1,9 +1,9 @@
 <template>
     <Teleport v-if="isOpen"
               to="body">
-        <section class="fixed inset-0 bg-black-800 z-videoplayer">
+        <section class="fixed inset-0 bg-black z-videoplayer">
             <div class="relative flex flex-row justify-center w-full h-full">
-                <div class="aspect-video bg-black-900">
+                <div class="aspect-video bg-black">
                     <video ref="videoRef"
                            class="w-full h-full"
                            @play="isPlaying = true"
@@ -33,26 +33,25 @@
                                           class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
                     </loki-loading-spinner>
 
+                    <icon-player-pause class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/10 w-42 h-42 opacity-0 transition-opacity duration-300 ease-in-out" :class="{'opacity-100': !isPlaying && !isBuffering && !isLoading}"></icon-player-pause>
+
                     <!-- Top Bar -->
                     <div class="relative z-10 p-6 transition-opacity duration-300"
                          :class="controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'"
                          @click.stop>
                         <div class="flex justify-between">
-                            <button @click="closePlayer"
-                                    class="flex items-center gap-2 text-white hover:text-primary transition-colors">
-                                <icon-arrow-left class="w-6 h-6"/>
-                                <span>{{ props.file?.name || 'Video' }}</span>
-                            </button>
+                            <div class="flex flex-row gap-2 items-center">
+                                <button @click="closePlayer" class="hit-area-sm flex items-center gap-2 text-white transition-colors duration-300 ease-in-out hover:cursor-pointer hover:text-primary">
+                                    <icon-arrow-left class="w-6 h-6"/>
+                                </button>
+
+                                <span class="text-white">{{ currentFile?.name || 'Video' }}</span>
+                            </div>
 
                             <div class="flex gap-6">
                                 <button @click=""
                                         class="text-white hover:cursor-pointer transition-colors duration-300 ease-in-out hover:text-primary">
                                     <icon-chromecast class="w-6 h-6"/>
-                                </button>
-
-                                <button @click="toggleFullscreen"
-                                        class="text-white hover:cursor-pointer transition-colors duration-300 ease-in-out hover:text-primary">
-                                    <icon-fullscreen class="w-6 h-6"/>
                                 </button>
                             </div>
                         </div>
@@ -62,22 +61,22 @@
                     <div class="flex-1 relative" @click="togglePlayPause"></div>
 
                     <!-- Bottom Bar -->
-                    <div class="absolute bottom-0 left-0 right-0 px-6 py-12 opacity-0 transition-opacity duration-200 ease-in-out" :class="{'opacity-100': controlsVisible}">
+                    <div class="absolute bottom-0 left-0 right-0 px-12 py-12 opacity-0 transition-opacity duration-200 ease-in-out" :class="{'opacity-100': controlsVisible}">
                         <!-- Timeline with Time Display -->
-                        <div class="mb-4">
+                        <div class="mb-8">
                             <!-- Time Display -->
                             <div class="flex items-center gap-3 text-white text-sm mb-2">
-                                <span class="min-w-[50px] text-right">{{ formatTime(currentTime) }}</span>
+                                <span class="text-right">{{ formatTime(currentTime) }}</span>
 
                                 <!-- Timeline Bar -->
-                                <div class="flex-1 relative h-1 bg-white/30 rounded-full cursor-pointer group"
+                                <div class="flex-1 relative h-1 bg-progressbar-dark rounded-full cursor-pointer group"
                                      @click="seek($event)"
                                      @mouseenter="showTooltip = true"
                                      @mouseleave="showTooltip = false"
                                      @mousemove="updateTooltip($event)">
 
                                     <!-- Buffered -->
-                                    <div class="absolute h-full bg-white/20 rounded-full"
+                                    <div class="absolute h-full bg-progressbar-light rounded-full"
                                          :style="{width: `${bufferedPercent}%`}">
                                     </div>
 
@@ -96,49 +95,66 @@
                                     </div>
                                 </div>
 
-                                <span class="min-w-[50px]">{{ formatTime(duration) }}</span>
-
-                                <!-- End Time -->
-                                <span class="text-white/60 ml-2">
-                                Ends at {{ endTime }}
-                            </span>
+                                <span class="">{{ formatTime(duration) }}</span>
                             </div>
                         </div>
 
                         <!-- Buttons -->
                         <div class="grid grid-cols-3">
-                            <div class="flex flex-row justify-start items-center"></div>
-
-                            <div class="flex flex-row gap-4 justify-center items-center">
-                            <span @click.stop="skip(-30)"
-                                  class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
-                                <icon-player-rewind class="w-6 h-6"></icon-player-rewind>
-                            </span>
-
-                                <span @click.stop="skip(-10)"
-                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
-                                <icon-player-rewind10 class="w-6 h-6"></icon-player-rewind10>
-                            </span>
-
-                                <span @click="togglePlayPause"
-                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
-                                <icon-player-play v-if="!isPlaying" class="w-8 h-8"/>
-                                <icon-player-pause v-if="isPlaying" class="w-8 h-8"></icon-player-pause>
-                            </span>
-
-                                <span @click.stop="skip(10)"
-                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
-                                <icon-player-forward30 class="w-6 h-6"></icon-player-forward30>
-                            </span>
-
-                                <span @click.stop="skip(30)"
-                                      class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer">
-                                <icon-player-forward class="w-6 h-6"></icon-player-forward>
-                            </span>
+                            <div class="flex flex-col justify-start select-none">
+                                <span class="text-sm text-white">{{ currentFile?.name || 'Video' }}</span>
+                                <span class="text-sm text-gray mb-1">2007</span>
+                                <span class="text-sm text-gray">Endet um: {{ endTime }}</span>
                             </div>
 
-                            <div class="flex flex-row gap-2 justify-end items-center">
-                                <icon-info class="text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"></icon-info>
+                            <div class="flex flex-row gap-4 justify-center items-center">
+                                <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        title="Vorheriges Kapitel"
+                                        @click="">
+                                    <icon-player-rewind class="w-full h-full"></icon-player-rewind>
+                                </button>
+
+                                <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        title="Zurückspulen (Pfeil links)"
+                                        aria-label="Zurückspulen"
+                                        @click="skip(-10)">
+                                    <icon-player-rewind10 class="w-full h-full"></icon-player-rewind10>
+                                </button>
+
+                                <button class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        :title="isPlaying ? 'Pause (Leertaste)' : 'Abspielen (Leertaste)'"
+                                        :aria-label="isPlaying ? 'Pause' : 'Abspielen'"
+                                        @click="togglePlayPause">
+                                    <icon-player-play v-if="!isPlaying" class="w-5 h-5"/>
+                                    <icon-player-pause v-if="isPlaying" class="w-5 h-5"></icon-player-pause>
+                                </button>
+
+                                <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        title="Vorspulen (Pfeil rechts)"
+                                        aria-label="Vorspulen"
+                                        @click="skip(30)">
+                                    <icon-player-forward30 class="w-full h-full"></icon-player-forward30>
+                                </button>
+
+                                <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        title="Nächstes Kapitel"
+                                        @click="">
+                                    <icon-player-forward class="w-full h-full"></icon-player-forward>
+                                </button>
+                            </div>
+
+                            <div class="flex flex-row gap-4 justify-end items-center">
+                                <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        title="Einstellungen">
+                                    <icon-gear class="w-full h-full" aria-hidden="true"></icon-gear>
+                                </button>
+
+                                <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                        title="Vollbild (F)"
+                                        aria-label="Vollbild"
+                                        @click="toggleFullscreen">
+                                    <icon-fullscreen class="w-5 h-5" aria-hidden="true"></icon-fullscreen>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -160,13 +176,12 @@ import IconPlayerForward from "../../icons/player/icon-player-forward.vue";
 import IconPlayerPause from "../../icons/player/icon-player-pause.vue";
 import IconPlayerRewind10 from "../../icons/player/icon-player-rewind-10.vue";
 import IconPlayerForward30 from "../../icons/player/icon-player-forward-30.vue";
-import IconInfo from "../../icons/icon-info.vue";
 import type { MediaFile } from "../../types/media.ts";
 import IconFullscreen from "../../icons/icon-fullscreen.vue";
 import { clamp } from "../../lib/utils.ts";
+import IconGear from "../../icons/icon-gear.vue";
 
 interface VideoPlayerProps {
-    file?: MediaFile;
     quality?: string;
     audioTrack?: number;
     subtitleTrack?: number;
@@ -237,7 +252,7 @@ function initHLS(url: string) {
             enableWorker: true,
             lowLatencyMode: false,
             backBufferLength: 60,
-            maxBufferLength: 120,
+            maxBufferLength: 60,
             autoStartLoad: true,
             xhrSetup: (xhr: XMLHttpRequest, _: string) => {
                 const token = getToken();
@@ -274,6 +289,8 @@ function generateToken(): string {
 function openPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
+    progress.value = 0;
+    bufferedPercent.value = 0;
 
     nextTick(() => {
         const url = `/api/streaming/${file.id}/${props.quality}/playlist.m3u8`
