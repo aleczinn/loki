@@ -63,28 +63,33 @@
                     <!-- Bottom Bar -->
                     <div class="absolute bottom-0 left-0 right-0 px-12 py-12 opacity-0 transition-opacity duration-200 ease-in-out" :class="{'opacity-100': controlsVisible}">
                         <!-- Timeline with Time Display -->
-                        <div class="mb-8">
+                        <div class="mb-4">
                             <!-- Time Display -->
                             <div class="flex items-center gap-3 text-white text-sm mb-2">
                                 <span class="text-right">{{ formatTime(currentTime) }}</span>
 
                                 <!-- Timeline Bar -->
-                                <div class="flex-1 relative h-1 bg-progressbar-dark rounded-full cursor-pointer group"
+                                <div class="flex-1 relative py-2 -my-2 cursor-pointer group"
                                      @click="seek($event)"
                                      @mouseenter="showTooltip = true"
                                      @mouseleave="showTooltip = false"
                                      @mousemove="updateTooltip($event)">
 
-                                    <!-- Buffered -->
-                                    <div class="absolute h-full bg-progressbar-light rounded-full"
-                                         :style="{width: `${bufferedPercent}%`}">
-                                    </div>
+                                    <!-- Invisible Hit Area -->
+                                    <div class="absolute inset-0"></div>
 
-                                    <!-- Progress -->
-                                    <div class="absolute h-full bg-primary rounded-full transition-all"
-                                         :style="{width: `${progress}%`}">
-                                        <!-- Scrubber -->
-                                        <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    <!-- Visible Timeline -->
+                                    <div class="relative h-1 bg-progressbar-dark rounded-full">
+                                        <!-- Buffered -->
+                                        <div class="absolute h-full bg-progressbar-light rounded-full"
+                                             :style="{width: `${bufferedPercent}%`}">
+                                        </div>
+
+                                        <!-- Progress -->
+                                        <div class="absolute h-full bg-primary rounded-full transition-all"
+                                             :style="{width: `${progress}%`}">
+                                            <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                        </div>
                                     </div>
 
                                     <!-- Seek Tooltip -->
