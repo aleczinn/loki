@@ -20,8 +20,9 @@
 
                 <!-- Controls Container -->
                 <div class="absolute inset-0 flex flex-col"
-                     @mousemove="showControls"
-                     @mouseleave="hideControlsWithDelay">
+                     :class="controlsVisible ? 'cursor-default' : 'cursor-none'"
+                     @mousemove="handleMouseMove"
+                     @mouseleave="handleMouseLeave">
 
                     <!-- Gradient Overlay -->
                     <div class="absolute inset-0 pointer-events-none"
@@ -36,7 +37,7 @@
                     <icon-player-pause class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/10 w-42 h-42 opacity-0 transition-opacity duration-300 ease-in-out" :class="{'opacity-100': !isPlaying && !isBuffering && !isLoading}"></icon-player-pause>
 
                     <!-- Top Bar -->
-                    <div class="relative z-10 p-6 transition-opacity duration-300"
+                    <div class="relative z-10 p-6 transition-opacity duration-500"
                          :class="controlsVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'"
                          @click.stop>
                         <div class="flex justify-between">
@@ -61,7 +62,7 @@
                     <div class="flex-1 relative" @click="togglePlayPause"></div>
 
                     <!-- Bottom Bar -->
-                    <div class="absolute bottom-0 left-0 right-0 px-12 py-12 opacity-0 transition-opacity duration-200 ease-in-out" :class="{'opacity-100': controlsVisible}">
+                    <div class="absolute bottom-0 left-0 right-0 px-12 py-12 opacity-0 transition-opacity duration-500 ease-in-out" :class="{'opacity-100': controlsVisible}">
                         <!-- Timeline with Time Display -->
                         <div class="mb-4">
                             <!-- Time Display -->
@@ -184,7 +185,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -227,6 +228,7 @@ const isBuffering = ref(false);
 const isPlaying = ref(false);
 const controlsVisible = ref(true);
 let controlsTimer: NodeJS.Timeout | null = null;
+let lastMousePosition = { x: 0, y: 0 };
 
 // Progress
 const progress = ref(0);
@@ -345,8 +347,16 @@ function togglePlayPause() {
 
     if (videoRef.value.paused) {
         videoRef.value.play();
+
+        showControls();
     } else {
         videoRef.value.pause();
+
+        controlsVisible.value = true; // Keep visible when paused
+        if (controlsTimer) {
+            clearTimeout(controlsTimer);
+            controlsTimer = null;
+        }
     }
 }
 
@@ -464,6 +474,27 @@ function toggleMute() {
     videoRef.value.muted = !videoRef.value.muted;
 }
 
+function handleMouseMove(event: MouseEvent) {
+    // Check if mouse actually moved
+    const moved = event.clientX !== lastMousePosition.x || event.clientY !== lastMousePosition.y;
+
+    if (moved) {
+        lastMousePosition = { x: event.clientX, y: event.clientY };
+        showControls();
+    }
+}
+
+function handleMouseLeave() {
+    // Instantly hide when leaving the player area
+    if (isPlaying.value) {
+        controlsVisible.value = false;
+        if (controlsTimer) {
+            clearTimeout(controlsTimer);
+            controlsTimer = null;
+        }
+    }
+}
+
 function showControls() {
     controlsVisible.value = true;
 
@@ -471,17 +502,7 @@ function showControls() {
         clearTimeout(controlsTimer);
     }
 
-    // Nur verstecken wenn Video läuft
     if (isPlaying.value && !isLoading.value && !isBuffering.value) {
-        controlsTimer = setTimeout(() => {
-            controlsVisible.value = false;
-        }, 2000);
-    }
-}
-
-
-function hideControlsWithDelay() {
-    if (isPlaying.value) {
         controlsTimer = setTimeout(() => {
             controlsVisible.value = false;
         }, 2000);
@@ -490,14 +511,18 @@ function hideControlsWithDelay() {
 
 // Window focus handling
 function handleWindowBlur() {
+    // Instant hide
     controlsVisible.value = false;
     if (controlsTimer) {
         clearTimeout(controlsTimer);
+        controlsTimer = null;
     }
 }
 
 function handleWindowFocus() {
-    showControls();
+    // Instant show
+    controlsVisible.value = true;
+    showControls(); // Start timer
 }
 
 function onVideoEnd() {
@@ -523,6 +548,21 @@ onUnmounted(() => {
 
     if (hls.value) {
         hls.value.destroy();
+    }
+});
+
+// Watch playing state
+watch(isPlaying, (playing) => {
+    if (!playing) {
+        // Always show controls when paused
+        controlsVisible.value = true;
+        if (controlsTimer) {
+            clearTimeout(controlsTimer);
+            controlsTimer = null;
+        }
+    } else {
+        // Start hide timer when playing
+        showControls();
     }
 });
 
