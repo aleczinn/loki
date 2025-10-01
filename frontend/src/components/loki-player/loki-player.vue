@@ -565,6 +565,7 @@ defineExpose({
     setVolume(value: number) {
         if (!videoRef.value) return;
         videoRef.value.volume = value;
+        volume.value = value;
     }
 })
 </script>
