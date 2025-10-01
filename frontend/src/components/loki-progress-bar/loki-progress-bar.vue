@@ -1,9 +1,9 @@
 <template>
-    <div class="relative min-h-1 bg-progressbar-dark rounded-full hitbox cursor-pointer group"
+    <div class="timeline relative min-h-1 bg-progressbar-dark rounded-full cursor-pointer group"
          @click="handleClick($event)"
-         @mouseenter="handleMouseEnter"
-         @mouseleave="handleMouseLeave"
-         @mousemove="handleMouseMove($event)"
+         @mouseenter="handleTimelineMouseEnter"
+         @mouseleave="handleTimelineMouseLeave"
+         @mousemove="handleTimelineMouseMove($event)"
 
     >
         <div class="absolute h-full bg-progressbar-light rounded-full" :style="{width: `${secondaryPercent}%`}"></div>
@@ -76,11 +76,11 @@ function handleMouseEnter() {
     showTooltip.value = true;
 }
 
-function handleMouseLeave() {
+function handleTimelineMouseLeave() {
     showTooltip.value = false;
 }
 
-function handleMouseMove(e: MouseEvent) {
+function handleTimelineMouseMove(e: MouseEvent) {
     const element = (e.currentTarget as HTMLElement);
     const rect = element.getBoundingClientRect();
     let x = e.clientX - rect.left;
@@ -117,10 +117,17 @@ function updateTooltipValue(value: number) {
 </script>
 
 <style scoped lang="css">
-.hitbox::after {
+.timeline::after {
     content: '';
     position: absolute;
     inset-inline: 0;
     inset-block: -0.75rem;
+}
+
+.thumba::after {
+    content: '';
+    position: absolute;
+    inset: -0.75rem;
+    background: rgba(255, 0, 0, 0.4);
 }
 </style>
