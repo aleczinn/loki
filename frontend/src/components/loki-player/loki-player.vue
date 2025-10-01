@@ -62,7 +62,7 @@
                                                    :min-value="0"
                                                    :max-value="videoRef?.duration || 0"
                                                    mode="time"
-                                                   draggable
+                                                   draggable-mode="none"
                                                    @update:value="handleSeek">
                                 </loki-progress-bar>
 
@@ -128,11 +128,11 @@
                                                        :min-value="0"
                                                        :max-value="1"
                                                        mode="percent"
-                                                       draggable
+                                                       draggable-mode="instant"
                                                        @update:value="handleVolume">
                                     </loki-progress-bar>
 
-                                    <span class="text-white text-right min-w-[2.25rem]">{{ Math.round(volume * 100) }}%</span>
+                                    <span class="text-white text-right min-w-[2.75rem]">{{ Math.round(volume * 100) }}%</span>
 
                                     <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
                                             title="Einstellungen">
