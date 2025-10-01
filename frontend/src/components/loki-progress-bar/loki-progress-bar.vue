@@ -1,5 +1,5 @@
 <template>
-    <div class="relative min-h-1 bg-progressbar-dark rounded-full hitbox hover:cursor-pointer"
+    <div class="relative min-h-1 bg-progressbar-dark rounded-full hitbox cursor-pointer group"
          @click="handleClick($event)"
          @mouseenter="handleMouseEnter"
          @mouseleave="handleMouseLeave"
@@ -9,7 +9,7 @@
         <div class="absolute h-full bg-progressbar-light rounded-full" :style="{width: `${secondaryPercent}%`}"></div>
 
         <div class="absolute h-full bg-primary rounded-full" :style="{width: `${mainPercent}%`}">
-<!--            <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full"></div>-->
+            <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"></div>
         </div>
 
         <div v-if="showTooltip"

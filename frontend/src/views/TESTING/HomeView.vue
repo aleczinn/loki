@@ -9,11 +9,19 @@
                 <div class="flex flex-col mb-4">
                     <a v-for="media in mediaFiles" :key="media.name" @click="playMedia(media)"
                        class="text-white  transition-all duration-200 hover:cursor-pointer hover:ml-4">
-                        > {{ media.name }} <span class="text-gray-500">({{
-                            formatFileSize(media.size)
-                        }}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
+                        > {{ media.name }} <span class="text-gray-500">({{formatFileSize(media.size)}}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
                     </a>
                 </div>
+
+                <label for="quality" class="text-white mr-2">Qualität:</label>
+                <select id="quality" v-model="selectedQuality" class="text-white border rounded px-2 py-1">
+                    <option class="text-white bg-black-800"
+                        v-for="q in qualities"
+                        :key="q.value"
+                        :value="q.value">
+                        {{ q.label }}
+                    </option>
+                </select>
             </div>
         </main>
 
@@ -43,7 +51,16 @@ interface MediaFile {
 const isLoading = ref(true);
 const mediaFiles = ref<MediaFile[]>([]);
 const player = ref();
-const selectedQuality = ref('1080p_20mbps');
+const selectedQuality = ref('original');
+
+const qualities = [
+    { label: "Original", value: "original" },
+    { label: "1080p 20 Mbps", value: "1080p_20mbps" },
+    { label: "1080p 8 Mbps", value: "1080p_8mbps" },
+    { label: "720p 6 Mbps", value: "720p_6mbps" },
+    { label: "480p 3 Mbps", value: "480p_3mbps" },
+    { label: "360p 1 Mbps", value: "360p_1mbps" },
+];
 
 const loadMediaFiles = async () => {
     isLoading.value = true;

@@ -55,7 +55,8 @@
 
                         <!-- Bottom Bar -->
                         <div class="absolute bottom-0 left-0 right-0 px-12 py-12">
-                            <div class="flex flex-row items-center gap-3 text-white text-sm">
+                            <!-- Timeline -->
+                            <div class="flex flex-row items-center gap-3 text-white text-sm mb-4">
                                 <span class="text-left">{{ formatTime(currentTime) }}</span>
 
                                 <loki-progress-bar class="w-full h-1"
@@ -68,48 +69,6 @@
                                 </loki-progress-bar>
 
                                 <span class="text-right">{{ formatTime(duration) }}</span>
-                            </div>
-
-                            <!-- Timeline with Time Display -->
-                            <div class="mb-4">
-                                <!-- Time Display -->
-                                <div class="flex items-center gap-3 text-white text-sm mb-2">
-                                    <span class="text-right">{{ formatTime(currentTime) }}</span>
-
-                                    <!-- Timeline Bar -->
-                                    <div class="flex-1 relative py-2 -my-2 cursor-pointer group"
-                                         @click="seek($event)"
-                                         @mouseenter="showTooltip = true"
-                                         @mouseleave="showTooltip = false"
-                                         @mousemove="updateTooltip($event)">
-
-                                        <!-- Invisible Hit Area -->
-                                        <div class="absolute inset-0"></div>
-
-                                        <!-- Visible Timeline -->
-                                        <div class="relative h-1 bg-progressbar-dark rounded-full">
-                                            <!-- Buffered -->
-                                            <div class="absolute h-full bg-progressbar-light rounded-full"
-                                                 :style="{width: `${bufferedPercent}%`}">
-                                            </div>
-
-                                            <!-- Progress -->
-                                            <div class="absolute h-full bg-primary rounded-full transition-all"
-                                                 :style="{width: `${progress}%`}">
-                                                <div class="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Seek Tooltip -->
-                                        <div v-if="showTooltip"
-                                             class="absolute bottom-full mb-2 px-2 py-2 bg-black-800 text-white text-xs rounded pointer-events-none"
-                                             :style="{left: `${tooltipPosition}px`, transform: 'translateX(-50%)'}">
-                                            {{ formatTime(tooltipTime) }}
-                                        </div>
-                                    </div>
-
-                                    <span class="">{{ formatTime(duration) }}</span>
-                                </div>
                             </div>
 
                             <!-- Buttons -->
@@ -195,7 +154,7 @@
                                           class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
                     </loki-loading-spinner>
 
-                    <icon-player-pause class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/20 w-30 h-30 opacity-0 transition-opacity duration-300 ease-in-out" :class="{'opacity-100': !isPlaying && !isBuffering && !isLoading}"></icon-player-pause>
+                    <icon-player-pause class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/20 w-30 h-30 pointer-events-none opacity-0 transition-opacity duration-300 ease-in-out" :class="{'opacity-100': !isPlaying && !isBuffering && !isLoading}"></icon-player-pause>
                 </div>
             </div>
         </section>
