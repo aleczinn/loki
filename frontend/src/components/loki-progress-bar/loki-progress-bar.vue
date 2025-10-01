@@ -1,9 +1,10 @@
 <template>
     <div class="timeline relative min-h-1 bg-progressbar-dark rounded-full cursor-pointer group"
          ref="barRef"
+         @click="handleClick"
          @mousedown="handleMouseDown"
-         @mouseenter="handleTimelineMouseEnter"
-         @mouseleave="handleTimelineMouseLeave"
+         @mouseenter="handleMouseEnter"
+         @mouseleave="handleMouseLeave"
     >
         <div class="absolute h-full bg-progressbar-light rounded-full" :style="{width: `${secondaryPercent}%`}"></div>
 
@@ -85,14 +86,22 @@ function calculateValueFromMouseX(e: MouseEvent): number {
     return props.minValue + (percent * range);
 }
 
+function handleClick(e: MouseEvent) {
+    if (props.draggableMode === 'none') {
+        const newValue = calculateValueFromMouseX(e);
+        emit("update:value", newValue);
+    }
+}
+
 function handleMouseDown(e: MouseEvent) {
     if (props.draggableMode !== 'none') {
         isDragging.value = true;
-    }
-    showTooltip.value = true;
-    draggingValue.value = calculateValueFromMouseX(e);
+        showTooltip.value = true;
 
-    window.addEventListener("mouseup", handleMouseUp);
+        draggingValue.value = calculateValueFromMouseX(e);
+
+        window.addEventListener("mouseup", handleMouseUp);
+    }
 }
 
 function handleMouseMove(e: MouseEvent) {
@@ -107,23 +116,20 @@ function handleMouseMove(e: MouseEvent) {
     }
 }
 
-function handleMouseUp(e: MouseEvent) {
-    const newValue = calculateValueFromMouseX(e);
-    if (props.draggableMode === 'none') {
-        emit("update:value", newValue);
-    } else {
+function handleMouseUp() {
+    if (isDragging.value && props.draggableMode !== 'none') {
         emit("update:value", draggingValue.value);
-    }
 
-    isDragging.value = false;
-    if (!isInArea.value) {
-        showTooltip.value = false;
-    }
+        isDragging.value = false;
+        if (!isInArea.value) {
+            showTooltip.value = false;
+        }
 
-    window.removeEventListener("mouseup", handleMouseUp);
+        window.removeEventListener("mouseup", handleMouseUp);
+    }
 }
 
-function handleTimelineMouseEnter() {
+function handleMouseEnter() {
     isInArea.value = true;
 
     if (!isDragging.value) {
@@ -131,7 +137,7 @@ function handleTimelineMouseEnter() {
     }
 }
 
-function handleTimelineMouseLeave() {
+function handleMouseLeave() {
     isInArea.value = false;
 
     if (!isDragging.value) {
@@ -176,6 +182,7 @@ onBeforeUnmount(() => {
     content: '';
     position: absolute;
     inset-inline: 0;
-    inset-block: -0.75rem;
+    inset-block-start: -1rem;
+    inset-block-end: -0.75rem;
 }
 </style>
