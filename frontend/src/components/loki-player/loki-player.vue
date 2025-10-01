@@ -62,7 +62,7 @@
                                                    :min-value="0"
                                                    :max-value="videoRef?.duration || 0"
                                                    mode="time"
-                                                   draggable-mode="none"
+                                                   draggable-mode="delayed"
                                                    @update:value="handleSeek">
                                 </loki-progress-bar>
 
