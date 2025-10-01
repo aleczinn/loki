@@ -25,14 +25,11 @@
                      @mouseleave="handleMouseLeave">
 
                     <!-- Controls Container -->
-                    <div class="relative w-full h-full flex flex-col opacity-0 transition-opacity" :class="{'opacity-100': controlsVisible}">
-                        <!-- Gradient Overlay -->
-                        <div class="absolute inset-0 pointer-events-none"
-                             :class="{'player-gradient': controlsVisible}">
-                        </div>
-
+                    <div class="relative w-full h-full flex flex-col p-12 opacity-0 transition-opacity player-gradient"
+                         :class="{'opacity-100': controlsVisible}"
+                    >
                         <!-- Top Bar -->
-                        <div class="relative z-10 p-6">
+                        <div class="relative">
                             <div class="flex justify-between">
                                 <div class="flex flex-row gap-2 items-center">
                                     <button @click="closePlayer" class="hit-area-sm flex items-center gap-2 text-white transition-colors duration-300 ease-in-out hover:cursor-pointer hover:text-primary">
@@ -54,7 +51,7 @@
                         <div class="flex-1 relative" @click="togglePlayPause"></div>
 
                         <!-- Bottom Bar -->
-                        <div class="absolute bottom-0 left-0 right-0 px-12 py-12">
+                        <div class="">
                             <!-- Timeline -->
                             <div class="flex flex-row items-center gap-3 text-white text-sm mb-4">
                                 <span class="text-left">{{ formatTime(currentTime) }}</span>
@@ -65,6 +62,7 @@
                                                    :min-value="0"
                                                    :max-value="videoRef?.duration || 0"
                                                    mode="time"
+                                                   draggable
                                                    @update:value="handleSeek">
                                 </loki-progress-bar>
 
@@ -126,12 +124,15 @@
 
                                     <!-- Volume -->
                                     <loki-progress-bar class="w-32 h-1"
-                                                       :value="videoRef?.volume || 0"
+                                                       :value="volume"
                                                        :min-value="0"
                                                        :max-value="1"
                                                        mode="percent"
+                                                       draggable
                                                        @update:value="handleVolume">
                                     </loki-progress-bar>
+
+                                    <span class="text-white text-right min-w-[2.25rem]">{{ Math.round(volume * 100) }}%</span>
 
                                     <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
                                             title="Einstellungen">
@@ -215,11 +216,7 @@ const currentTime = ref(0);
 const bufferTime = ref(0);
 const duration = ref(0);
 const bufferedPercent = ref(0);
-
-// Tooltip
-const showTooltip = ref(false);
-const tooltipPosition = ref(0);
-const tooltipTime = ref(0);
+const volume = ref(1);
 
 // Refs
 const hls = ref<Hls | null>(null)
@@ -276,6 +273,10 @@ function initHLS(url: string) {
                 console.error('Fatal HLS error:', data);
             }
         });
+
+        if (videoRef.value) {
+            videoRef.value.volume = volume.value;
+        }
     } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
         videoRef.value.src = url;
         videoRef.value.play();
@@ -347,15 +348,6 @@ function skip(seconds: number) {
     videoRef.value.currentTime = clamp(value, 0, videoRef.value.duration);
 }
 
-// Timeline seek
-function seek(event: MouseEvent) {
-    if (!videoRef.value || !duration.value) return;
-
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const percent = (event.clientX - rect.left) / rect.width;
-    videoRef.value.currentTime = percent * duration.value;
-}
-
 function handleSeek(newValue: number) {
     if (!videoRef.value) return;
 
@@ -365,19 +357,8 @@ function handleSeek(newValue: number) {
 function handleVolume(newValue: number) {
     if (!videoRef.value) return;
 
+    volume.value = newValue;
     videoRef.value.volume  = newValue;
-}
-
-// Timeline tooltip
-function updateTooltip(event: MouseEvent) {
-    if (!duration.value) return;
-
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const percent = x / rect.width;
-
-    tooltipPosition.value = x;
-    tooltipTime.value = percent * duration.value;
 }
 
 // Progress updates
@@ -465,6 +446,12 @@ function toggleMute() {
     if (!videoRef.value) return;
 
     videoRef.value.muted = !videoRef.value.muted;
+    // Optional
+    if (videoRef.value.muted) {
+        volume.value = 0;
+    } else {
+        volume.value = videoRef.value.volume;
+    }
 }
 
 function handleMouseMove(event: MouseEvent) {
@@ -504,9 +491,6 @@ function showControls() {
 
 // Window focus handling
 function handleWindowBlur() {
-    console.log("browser fenster verlassen");
-
-
     // Instant hide
     controlsVisible.value = false;
     if (controlsTimer) {
@@ -516,8 +500,6 @@ function handleWindowBlur() {
 }
 
 function handleWindowFocus() {
-    console.log("browser fenster betreten");
-
     // Instant show
     controlsVisible.value = true;
     showControls(); // Start timer
@@ -579,6 +561,10 @@ defineExpose({
     },
     isPlaying() {
         return isPlaying.value;
+    },
+    setVolume(value: number) {
+        if (!videoRef.value) return;
+        videoRef.value.volume = value;
     }
 })
 </script>
