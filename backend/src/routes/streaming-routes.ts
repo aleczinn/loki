@@ -87,4 +87,17 @@ router.get('/api/streaming/:id/:quality/segment:index.ts', async (req: Request, 
     }
 });
 
+router.get('/api/streaming/:id/kill', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const token = req.headers['x-stream-token'] as string
+            || req.query.token as string
+            || undefined;
+
+    } catch (error) {
+        logger.ERROR(`Error killing session: ${error}`);
+        res.status(500).json({ error: 'Failed to kill session' });
+    }
+});
+
 export default router;
