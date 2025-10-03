@@ -77,3 +77,14 @@ export async function clearDir(path: string) {
         logger.ERROR(`${RED}Error: ${error}${RESET}`);
     }
 }
+
+/**
+ * Deletes a file if it exists.
+ */
+export async function deleteFile(filePath: string): Promise<void> {
+    try {
+        await rm(filePath, { force: true });
+    } catch (error) {
+        logger.ERROR(`${RED}Error clearing file ${filePath}: ${error}${RESET}`);
+    }
+}

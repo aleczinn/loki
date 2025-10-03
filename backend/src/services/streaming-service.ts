@@ -4,7 +4,7 @@ import ffmpeg from 'fluent-ffmpeg';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
-import { clearDir, ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
+import { clearDir, deleteFile, ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
 import { BLUE, CYAN, GREEN, MAGENTA, RED, RESET, sleep, YELLOW } from "../utils/utils";
 import { spawn, ChildProcess } from 'child_process';
 import ffmpegStatic from 'ffmpeg-static';
@@ -19,7 +19,7 @@ export const SEGMENT_PUFFER_LOOK_AHEAD = 3; // defined the number where to check
 export const SEGMENT_OVERLAP_THRESHOLD = 3; // segments distance to consider reusing a job
 export const SEEK_THRESHOLD = 3; // is the number in segments when to cancel a transcode while seeking
 
-let globalIndex = 0;
+let GLOBAL_INDEX = 0;
 
 interface TranscodeJob {
     id: string;
@@ -28,7 +28,7 @@ interface TranscodeJob {
     status: 'running' | 'stopped' | 'completed';
     startSegment: number;
     createdAt: Date;
-    index?: number;
+    index: number;
 }
 
 interface StreamSession {
@@ -236,7 +236,7 @@ class StreamingService {
 
         const seekTime = startSegment * SEGMENT_DURATION;
 
-        const playlistPath = path.join(dir, `playlist.m3u8`);
+        const tempPlaylistPath = path.join(dir, `temp_${jobId}.m3u8`);
         const segmentPath = path.join(dir, 'segment%d.ts');
 
         const qualityOptions = this.getQualityOptions(session.quality);
@@ -285,7 +285,7 @@ class StreamingService {
             '-nostats',              // Keine Stats im stderr
 
             // Output
-            playlistPath
+            tempPlaylistPath
         ];
 
         const job: TranscodeJob = {
@@ -294,7 +294,7 @@ class StreamingService {
             startSegment: startSegment,
             status: 'running',
             createdAt: new Date(),
-            index: globalIndex++
+            index: GLOBAL_INDEX++
         };
 
         // FFmpeg spawnen
@@ -337,7 +337,7 @@ class StreamingService {
         });
 
         // Process Ende
-        ffmpegProcess.on('exit', (code, signal) => {
+        ffmpegProcess.on('exit', async (code, signal) => {
             if (job.status === 'stopped') {
                 logger.DEBUG(`Process stopped by user [Index: ${job.index}]`);
                 return;
@@ -346,6 +346,11 @@ class StreamingService {
             if (code === 0) {
                 logger.INFO(`${MAGENTA}Transcode completed [${session.id}] [Index: ${job.index}]${RESET}`);
                 job.status = 'completed';
+
+                // Cleanup temp playlist nach erfolgreichem Transcoding
+                try {
+                    await deleteFile(tempPlaylistPath);
+                } catch (e) {}
             } else if (signal === 'SIGKILL') {
                 logger.DEBUG(`Process killed [Index: ${job.index}]`);
             } else {
