@@ -13,13 +13,13 @@
         </loki-button>
 
         <loki-button variant="primary">
-            <icon-play></icon-play>
+            <icon-play-inline></icon-play-inline>
             Weiterschauen
         </loki-button>
 
         <loki-button variant="primary">
             Weiterschauen
-            <icon-play></icon-play>
+            <icon-play-inline></icon-play-inline>
         </loki-button>
 
         <loki-button variant="primary" disabled>
@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import IconPlay from "../../icons/icon-play.vue";
+import IconPlayInline from "../../icons/icon-play-inline.vue";
 import { LokiButton } from "../../components/loki-button";
 </script>
 

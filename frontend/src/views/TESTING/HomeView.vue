@@ -1,46 +1,27 @@
 <template>
+    <loki-player ref="player" :quality="selectedQuality"></loki-player>
+
     <div class="flex flex-col h-screen">
         <main class="flex-1 py-8">
             <div class="mx-auto max-w-[87rem]">
                 <!-- ADD CONTENT HERE -->
                 <h3 class="text-white font-bold mb-2">Media Files</h3>
                 <div class="flex flex-col mb-4">
-                    <a v-for="media in mediaFiles" :key="media.name" @click="selectMedia(media)"
+                    <a v-for="media in mediaFiles" :key="media.name" @click="playMedia(media)"
                        class="text-white  transition-all duration-200 hover:cursor-pointer hover:ml-4">
-                        > {{ media.name }} <span class="text-gray-500">({{
-                            formatFileSize(media.size)
-                        }}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
+                        > {{ media.name }} <span class="text-gray-500">({{formatFileSize(media.size)}}) ({{ getVideoFormat(media) }}) ({{ getMainAudioTrack(media) }})</span>
                     </a>
                 </div>
 
-                <p class="text-white font-bold mb-4">Selected: <span
-                    class="font-normal">{{ selectedMedia ? selectedMedia.name : '/' }}</span> <a v-if="selectedMedia"
-                                                                                                 class="text-red-300 font-normal hover:cursor-pointer"
-                                                                                                 @click="cancelStream">(X)</a>
-                </p>
-
-                <h3 class="text-white font-bold mb-2">Sessions</h3>
-                <p class="text-white">Sessions: {{ sessions?.activeSessions }}</p>
-                <p class="text-white">Active Transcodes: {{ sessions?.activeTranscodes }}</p>
-                <ul class="text-white flex flex-col mb-4">
-
-                    <li v-for="session in sessions?.sessions">- {{ session.token }} [{{ session.quality }}]</li>
-                </ul>
-
-                <div class="w-full bg-black/30 rounded-xl">
-                    <video ref="videoRef"
-                           class="w-full rounded shadow-lg"
-                           controls
-                           autoplay
-                           @timeupdate="onTimeUpdate"
-                           @seeked="onSeeked"
-                           @seeking="onSeeking"
-                           @loadedmetadata="onLoadedMetadata"
-                           @waiting="onWaiting"
-                           @playing="onPlaying"
-                           @error="onError">
-                    </video>
-                </div>
+                <label for="quality" class="text-white mr-2">Qualität:</label>
+                <select id="quality" v-model="selectedQuality" class="text-white border rounded px-2 py-1">
+                    <option class="text-white bg-black-800"
+                        v-for="q in qualities"
+                        :key="q.value"
+                        :value="q.value">
+                        {{ q.label }}
+                    </option>
+                </select>
             </div>
         </main>
 
@@ -53,7 +34,7 @@
 <script setup lang="ts">
 import { inject, onMounted, onUnmounted, ref } from "vue";
 import type { AxiosInstance } from "axios";
-import Hls from "hls.js";
+import { LokiPlayer } from "../../components/loki-player";
 
 const axios = inject<AxiosInstance>('axios');
 
@@ -67,30 +48,19 @@ interface MediaFile {
     modified: Date;
 }
 
-interface StreamingSession {
-    token: string;
-    id: string;
-    file: MediaFile;
-    quality: string;
-    createdAt: Date;
-    lastAccessed: Date;
-    hasActiveTranscode: boolean;
-}
-
-interface StreamingInfo {
-    activeSessions: number;
-    activeTranscodes: number;
-    sessions: StreamingSession[];
-}
-
 const isLoading = ref(true);
-const hls = ref<Hls | null>(null)
 const mediaFiles = ref<MediaFile[]>([]);
-const selectedMedia = ref<MediaFile | null>(null);
-const videoRef = ref<HTMLVideoElement | null>(null)
+const player = ref();
+const selectedQuality = ref('original');
 
-let sessionInterval: number | undefined;
-const sessions = ref<StreamingInfo | null>(null);
+const qualities = [
+    { label: "Original", value: "original" },
+    { label: "1080p 20 Mbps", value: "1080p_20mbps" },
+    { label: "1080p 8 Mbps", value: "1080p_8mbps" },
+    { label: "720p 6 Mbps", value: "720p_6mbps" },
+    { label: "480p 3 Mbps", value: "480p_3mbps" },
+    { label: "360p 1 Mbps", value: "360p_1mbps" },
+];
 
 const loadMediaFiles = async () => {
     isLoading.value = true;
@@ -105,128 +75,8 @@ const loadMediaFiles = async () => {
     }
 }
 
-const loadSessions = async () => {
-    try {
-        const response = await axios?.get<any>('/sessions');
-        sessions.value = response?.data || [];
-    } catch (err) {
-        console.error('Failed to load media files:', err);
-    } finally {
-        isLoading.value = false;
-    }
-}
-
-const selectMedia = (media: MediaFile) => {
-    selectedMedia.value = media;
-    initHls(streamUrl());
-}
-
-const streamUrl = () => {
-    if (!selectedMedia.value) return '';
-    const quality = "1080p_20mbps";
-    return `/api/streaming/${selectedMedia.value.id}/${quality}/playlist.m3u8`;
-};
-
-function initHls(url: string) {
-    if (hls.value) {
-        hls.value.destroy();
-        hls.value = null;
-    }
-
-    if (!videoRef.value) return;
-
-    const token = getToken();
-
-    if (Hls.isSupported()) {
-        // let tokenCaptured = false;
-
-        hls.value = new Hls({
-            xhrSetup: (xhr: XMLHttpRequest, requestUrl: string) => {
-                // const token = sessionStorage.getItem('streamToken');
-                // if (token) {
-                    xhr.setRequestHeader('X-Stream-Token', token);
-                // }
-
-                // if (!tokenCaptured && requestUrl.includes('playlist.m3u8')) {
-                //     xhr.addEventListener('load', function() {
-                //         const newToken = xhr.getResponseHeader('X-Stream-Token');
-                //
-                //         if (newToken && newToken !== token) {
-                //             sessionStorage.setItem('streamToken', newToken);
-                //             tokenCaptured = true;
-                //         }
-                //     });
-                // }
-            }
-        });
-
-        hls.value.loadSource(url);
-        hls.value.attachMedia(videoRef.value);
-        hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoRef.value!.play();
-        });
-    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
-        videoRef.value.src = url;
-        videoRef.value.play();
-    }
-}
-
-function generateToken(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 15);
-    return `${timestamp}-${random}`;
-}
-
-function getToken(): string {
-    let token = sessionStorage.getItem('streamToken');
-    if (!token) {
-        token = generateToken();
-        sessionStorage.setItem('streamToken', token);
-    }
-    return token;
-}
-
-function getSessions() {
-    return sessions.value;
-}
-
-function cancelStream(): void {
-    selectedMedia.value = null;
-    if (hls.value) {
-        hls.value.destroy()
-        hls.value = null
-    }
-    if (videoRef.value) {
-        videoRef.value.src = ''
-    }
-}
-
-function onTimeUpdate(): void {
-
-}
-
-function onSeeked(): void {
-
-}
-
-function onSeeking(): void {
-
-}
-
-function onLoadedMetadata(): void {
-
-}
-
-function onWaiting(): void {
-
-}
-
-function onPlaying(): void {
-
-}
-
-function onError(): void {
-
+const playMedia = (media: MediaFile) => {
+    player.value?.play(media);
 }
 
 function formatFileSize(bytes: number): string {
@@ -326,10 +176,6 @@ function getMainAudioTrack(media: MediaFile): string {
 
 onMounted(() => {
     loadMediaFiles();
-
-    sessionInterval = window.setInterval(() => {
-        // loadSessions();
-    }, 3000)
 })
 
 onUnmounted(() => {

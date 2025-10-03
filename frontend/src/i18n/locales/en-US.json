@@ -31,5 +31,43 @@
         "language": "Language",
         "german": "German",
         "english": "English"
+    },
+    "player": {
+        "ends-at": "Ends at",
+        "play": {
+            "title": "Play (Space)",
+            "label": "Play"
+        },
+        "pause": {
+            "title": "Pause (Space)",
+            "label": "Pause"
+        },
+        "forward": {
+            "title": "Forward (Arrow right)",
+            "label": "Forward"
+        },
+        "rewind": {
+            "title": "Rewind (Arrow left)",
+            "label": "Rewind"
+        },
+        "chapter": {
+            "next": "Next chapter",
+            "previous": "Previous chapter"
+        },
+        "soundtrack": "Soundtrack",
+        "captions": "Captions",
+        "settings": "Settings",
+        "mute": {
+            "title": "Mute (M)",
+            "label": "Mute"
+        },
+        "unmute": {
+            "title": "Sound on (M)",
+            "label": "Sound on"
+        },
+        "fullscreen": {
+            "title": "Fullscreen (F)",
+            "label": "Fullscreen"
+        }
     }
 }
