@@ -6,9 +6,9 @@ export abstract class Browser {
     protected version: number;
     protected platform: string;
 
+    protected containers: string[] = [];
     protected videoCodecs: string[] = [];
     protected audioCodecs: string[] = [];
-    protected containers: string[] = [];
 
     protected profiles: VideoProfile[] = [];
 
@@ -20,13 +20,17 @@ export abstract class Browser {
         this.detectCapabilities();
     }
 
-    abstract detectCapabilities(): void;
+    protected abstract detectCapabilities(): void;
 
-    supportsVideo(codec: string): boolean {
+    isContainerSupported(codec: string): boolean {
+        return this.containers.includes(codec.toLowerCase());
+    }
+
+    isVideoSupported(codec: string): boolean {
         return this.videoCodecs.includes(codec.toLowerCase());
     }
 
-    supportsAudio(codec: string): boolean {
+    isAudioSupported(codec: string): boolean {
         return this.audioCodecs.includes(codec.toLowerCase());
     }
 }

@@ -181,8 +181,7 @@ onBeforeUnmount(() => {
 .timeline::after {
     content: '';
     position: absolute;
-    inset-inline: 0;
-    inset-block-start: -1rem;
-    inset-block-end: -0.75rem;
+    inset-inline: -0.5rem;
+    inset-block: -1em;
 }
 </style>
