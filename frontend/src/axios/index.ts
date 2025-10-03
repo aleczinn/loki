@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance } from "axios";
 import type { App } from 'vue';
+import { LOKI_TOKEN } from "../variables.ts";
 
 interface AxiosOptions {
     baseURL?: string
@@ -33,18 +34,18 @@ export default {
         }
 
         axiosInstance.interceptors.request.use(config => {
-            const token = sessionStorage.getItem('streamToken');
+            const token = sessionStorage.getItem(LOKI_TOKEN);
             if (token) {
-                config.headers['X-Stream-Token'] = token;
+                config.headers['X-Client-Token'] = token;
             }
             return config;
         });
 
         axiosInstance.interceptors.response.use(response => {
-            const token = response.headers['X-Stream-Token'];
-            if (token) {
-                sessionStorage.setItem('streamToken', token);
-            }
+            // const token = response.headers['X-Client-Token'];
+            // if (token) {
+            //     sessionStorage.setItem(LOKI_TOKEN, token);
+            // }
             return response;
         });
 

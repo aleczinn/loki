@@ -5,6 +5,7 @@ import { AddressInfo } from 'net';
 import errorHandler from "./middleware/error-handler";
 import dotenv from "dotenv";
 import * as path from 'path';
+import userRoutes from "./routes/user-routes";
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import sessionRoutes from "./routes/session-routes";
@@ -14,6 +15,7 @@ import { logger } from "./logger";
 import { userAgentMiddleware } from "./middleware/user-agent-handler";
 import { ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
+
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -30,20 +32,6 @@ app.use(cors({
     allowedHeaders: ['X-Stream-Token', 'Content-Type', 'Authorization']
 }));
 
-// // Zusätzliche CORS Headers für Streaming
-// app.use((req, res, next) => {
-//     // CORS Headers für HLS Streaming
-//     if (req.path.includes('/api/streaming/')) {
-//         res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-//         res.setHeader('Access-Control-Allow-Headers', 'Range');
-//         res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range');
-//     }
-//     res.setHeader('Access-Control-Allow-Origin', '*');
-//     res.setHeader('Access-Control-Allow-Headers', 'X-Stream-Token, Content-Type');
-//     res.setHeader('Access-Control-Expose-Headers', 'X-Stream-Token');
-//     next();
-// });
-
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(loggerHandler)
@@ -58,9 +46,10 @@ app.get('/health', (req, res) => {
 
 app.use(userAgentMiddleware)
 
-app.use(mediaRoutes)
-app.use(streamingRoutes)
-app.use(sessionRoutes)
+app.use(userRoutes);
+app.use(mediaRoutes);
+app.use(streamingRoutes);
+app.use(sessionRoutes);
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

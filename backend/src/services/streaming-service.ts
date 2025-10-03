@@ -64,22 +64,8 @@ class StreamingService {
         clearDir(TRANSCODE_PATH);
     }
 
-    /**
-     * Generate or retrieve token for a client
-     */
-    private generateToken(): string {
-        // Generate hash-based token
-        const timestamp = Date.now().toString();
-        const random = crypto.randomBytes(16).toString('hex');
-        return crypto
-            .createHash('sha256')
-            .update(`${timestamp}-${random}`)
-            .digest('hex')
-            .substring(0, 32); // Use first 32 chars for shorter tokens
-    }
-
     async getOrCreateSession(file: MediaFile, quality: string, token?: string): Promise<StreamSession> {
-        const sessionToken = token || this.generateToken();
+        const sessionToken = token || 'no-token-found';
         const sessionId = `${sessionToken}-${file.id}-${quality}`;
 
         return await this.lock.acquire(sessionId, async () => {

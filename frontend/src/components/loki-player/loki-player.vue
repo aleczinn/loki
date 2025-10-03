@@ -196,6 +196,7 @@ import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
 import { LokiProgressBar } from "../loki-progress-bar";
 import IconCaptions from "../../icons/icon-captions.vue";
 import IconMusicNote from "../../icons/icon-music-note.vue";
+import { LOKI_VOLUME } from "../../variables.ts";
 
 interface VideoPlayerProps {
     quality?: string;
@@ -308,11 +309,6 @@ function openPlayer(file: MediaFile) {
 
     currentTime.value = 0;
     buffered.value = 0;
-
-    const storedVolume = localStorage.getItem('loki-volume');
-    if (storedVolume) {
-        volume.value = parseFloat(storedVolume);
-    }
 
     nextTick(() => {
         const url = `/api/streaming/${file.id}/${props.quality}/playlist.m3u8`
@@ -531,12 +527,12 @@ onMounted(() => {
     document.addEventListener('keydown', handleKeyboard);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
-
-    const storedVolume = localStorage.getItem('loki-volume');
+    
+    const storedVolume = localStorage.getItem(LOKI_VOLUME);
     if (storedVolume) {
         volume.value = parseFloat(storedVolume);
     } else {
-        localStorage.setItem('loki-volume', volume.value.toString());
+        localStorage.setItem(LOKI_VOLUME, volume.value.toString());
     }
 });
 
@@ -570,7 +566,7 @@ watch(isPlaying, (playing) => {
 });
 
 watch(volume, (newVal) => {
-    localStorage.setItem("loki-volume", newVal.toString());
+    localStorage.setItem(LOKI_VOLUME, newVal.toString());
 });
 
 defineExpose({
