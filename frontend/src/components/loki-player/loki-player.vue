@@ -196,7 +196,7 @@ import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
 import { LokiProgressBar } from "../loki-progress-bar";
 import IconCaptions from "../../icons/icon-captions.vue";
 import IconMusicNote from "../../icons/icon-music-note.vue";
-import { LOKI_VOLUME } from "../../variables.ts";
+import { LOKI_TOKEN, LOKI_VOLUME } from "../../variables.ts";
 
 interface VideoPlayerProps {
     quality?: string;
@@ -268,9 +268,10 @@ function initHLS(url: string) {
             maxBufferLength: 60,
             autoStartLoad: true,
             xhrSetup: (xhr: XMLHttpRequest, _: string) => {
-                const token = getToken();
+                const token = sessionStorage.getItem(LOKI_TOKEN);
+
                 if (token) {
-                    xhr.setRequestHeader('X-Stream-Token', token);
+                    xhr.setRequestHeader('X-Client-Token', token);
                 }
             }
         });
@@ -314,15 +315,6 @@ function openPlayer(file: MediaFile) {
         const url = `/api/streaming/${file.id}/${props.quality}/playlist.m3u8`
         initHLS(url);
     })
-}
-
-function getToken(): string {
-    let token = sessionStorage.getItem('loki-token');
-    if (!token) {
-        token = generateToken();
-        sessionStorage.setItem('loki-token', token);
-    }
-    return token;
 }
 
 function closePlayer() {
@@ -527,7 +519,7 @@ onMounted(() => {
     document.addEventListener('keydown', handleKeyboard);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
-    
+
     const storedVolume = localStorage.getItem(LOKI_VOLUME);
     if (storedVolume) {
         volume.value = parseFloat(storedVolume);

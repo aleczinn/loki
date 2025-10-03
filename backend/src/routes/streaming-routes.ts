@@ -13,7 +13,7 @@ const router = Router();
 router.get('/api/streaming/:id/:quality/playlist.m3u8', async (req: Request, res: Response) => {
     try {
         const { id, quality } = req.params;
-        const token = req.headers['x-stream-token'] as string
+        const token = req.headers['x-client-token'] as string
             || req.query.token as string
             || undefined;
 
@@ -48,7 +48,7 @@ router.get('/api/streaming/:id/:quality/segment:index.ts', async (req: Request, 
     try {
         const { id, quality, index } = req.params;
         const segment = parseInt(index);
-        const token = req.headers['x-stream-token'] as string
+        const token = req.headers['x-client-token'] as string
             || req.query.token as string
             || undefined;
 
@@ -67,7 +67,7 @@ router.get('/api/streaming/:id/:quality/segment:index.ts', async (req: Request, 
 
         const { path: segmentPath, token: sessionToken } = await streamingService.handleSegment(file, segment, quality, token);
 
-        res.setHeader('X-Stream-Token', sessionToken);
+        res.setHeader('X-Client-Token', sessionToken);
 
         if (segmentPath) {
             res.setHeader('Content-Type', 'video/mp2t');
@@ -90,7 +90,7 @@ router.get('/api/streaming/:id/:quality/segment:index.ts', async (req: Request, 
 router.get('/api/streaming/:id/kill', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const token = req.headers['x-stream-token'] as string
+        const token = req.headers['x-client-token'] as string
             || req.query.token as string
             || undefined;
 

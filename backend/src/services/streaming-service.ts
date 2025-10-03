@@ -225,6 +225,9 @@ class StreamingService {
         const segmentPath = path.join(dir, 'segment%d.ts');
 
         const qualityOptions = this.getQualityOptions(session.quality);
+        if (!qualityOptions) {
+            throw new Error('FATAL: Something is wrong with the provided quality option!');
+        }
 
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
@@ -240,17 +243,13 @@ class StreamingService {
             // Video
             '-c:v', 'libx264',
             '-pix_fmt', 'yuv420p',
-            '-preset', 'veryfast',
-            '-crf', '24',
+            ...qualityOptions.videoOptions,
             '-g', String(gopSize),
             '-sc_threshold', '0',
             '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
 
             // Audio
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-ac', '2',
-            '-ar', '48000',
+            ...qualityOptions.audioOptions,
 
             // Mapping
             '-map', '0:v:0',  // Erster Video Stream
@@ -381,14 +380,29 @@ class StreamingService {
     /**
      * Get quality settings based on preset
      */
-    private getQualityOptions(quality: string): QualityOptions {
+    private getQualityOptions(quality: string): QualityOptions | null {
         const settings: Record<string, QualityOptions> = {
             '1080p_20mbps': {
                 videoOptions: [
-                    '-vf', '-1:1080',
-                    '-preset veryfast',
-                    '-crf', '24',
-                    '-b:v', '20000k'
+                    '-vf', 'scale=-2:1080',
+                    '-preset', 'veryfast',
+                    '-b:v', '20000k',
+                    '-maxrate', '22000k',
+                    '-bufsize', '40000k',
+                ],
+                audioOptions: [
+                    '-b:a', '192k',
+                    '-ac', '2',
+                    '-ar', '48000',
+                ]
+            },
+            '1080p_8mbps': {
+                videoOptions: [
+                    '-vf', 'scale=-2:1080',
+                    '-preset', 'veryfast',
+                    '-b:v', '8000k',
+                    '-maxrate', '10000k',
+                    '-bufsize', '20000k',
                 ],
                 audioOptions: [
                     '-b:a', '192k',
@@ -398,10 +412,11 @@ class StreamingService {
             },
             '720p_6mbps': {
                 videoOptions: [
-                    '-vf', '-1:720',
-                    '-preset veryfast',
-                    '-crf', '24',
-                    '-b:v', '6000k'
+                    '-vf', 'scale=-2:720',
+                    '-preset', 'veryfast',
+                    '-b:v', '6000k',
+                    '-maxrate', '7000k',
+                    '-bufsize', '14000k',
                 ],
                 audioOptions: [
                     '-b:a', '128k',
@@ -411,10 +426,11 @@ class StreamingService {
             },
             '480p_3mbps': {
                 videoOptions: [
-                    '-vf', '-1:480',
-                    '-preset veryfast',
-                    '-crf', '24',
-                    '-b:v', '3000k'
+                    '-vf', 'scale=-2:480',
+                    '-preset', 'veryfast',
+                    '-b:v', '3000k',
+                    '-maxrate', '3500k',
+                    '-bufsize', '7000k',
                 ],
                 audioOptions: [
                     '-b:a', '128k',
@@ -424,10 +440,11 @@ class StreamingService {
             },
             '360p_1mbps': {
                 videoOptions: [
-                    '-vf', '-1:360',
-                    '-preset veryfast',
-                    '-crf', '24',
-                    '-b:v', '1000k'
+                    '-vf', 'scale=-2:360',
+                    '-preset', 'veryfast',
+                    '-b:v', '1000k',
+                    '-maxrate', '1200k',
+                    '-bufsize', '2400k',
                 ],
                 audioOptions: [
                     '-b:a', '128k',
@@ -437,7 +454,7 @@ class StreamingService {
             }
         };
 
-        return settings[quality] || settings['720p_6mbps'];
+        return settings[quality] || null;
     }
 
     getSessionInfo() {
