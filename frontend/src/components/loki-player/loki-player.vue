@@ -57,10 +57,10 @@
                                 <span class="text-left">{{ formatTime(currentTime) }}</span>
 
                                 <loki-progress-bar class="w-full h-1"
-                                                   :value="videoRef?.currentTime || 0"
-                                                   :value-secondary="bufferTime"
+                                                   :value="currentTime"
+                                                   :value-secondary="buffered"
                                                    :min-value="0"
-                                                   :max-value="videoRef?.duration || 0"
+                                                   :max-value="duration"
                                                    mode="time"
                                                    draggable-mode="delayed"
                                                    @update:value="handleSeek">
@@ -132,7 +132,7 @@
                                                        @update:value="handleVolume">
                                     </loki-progress-bar>
 
-                                    <span class="text-white text-right min-w-[2.75rem]">{{ Math.round(volume * 100) }}%</span>
+<!--                                    <span class="text-white text-right min-w-[2.75rem]">{{ Math.round(volume * 100) }}%</span>-->
 
                                     <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
                                             title="Einstellungen">
@@ -211,11 +211,9 @@ let controlsTimer: NodeJS.Timeout | null = null;
 let lastMousePosition = { x: 0, y: 0 };
 
 // Progress
-const progress = ref(0);
 const currentTime = ref(0);
-const bufferTime = ref(0);
 const duration = ref(0);
-const bufferedPercent = ref(0);
+const buffered = ref(0);
 const volume = ref(1);
 
 // Refs
@@ -225,7 +223,7 @@ const currentFile = ref<MediaFile | null>(null);
 
 // Computed end time
 const endTime = computed(() => {
-    if (!duration.value) return '--:--';
+    if (!duration.value) return '00:00';
 
     const now = new Date();
     const remainingSeconds = duration.value - currentTime.value;
@@ -292,8 +290,14 @@ function generateToken(): string {
 function openPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
-    progress.value = 0;
-    bufferedPercent.value = 0;
+
+    currentTime.value = 0;
+    buffered.value = 0;
+
+    const storedVolume = localStorage.getItem('playerVolume');
+    if (storedVolume) {
+        volume.value = parseFloat(storedVolume);
+    }
 
     nextTick(() => {
         const url = `/api/streaming/${file.id}/${props.quality}/playlist.m3u8`
@@ -367,18 +371,15 @@ function updateProgress() {
 
     currentTime.value = videoRef.value.currentTime;
     duration.value = videoRef.value.duration || 0;
-    progress.value = duration.value ? (currentTime.value / duration.value) * 100 : 0;
 }
 
 function updateBuffer() {
     if (!videoRef.value || !duration.value) return;
 
-    const buffered = videoRef.value.buffered;
-    if (buffered.length > 0) {
+    const b = videoRef.value.buffered;
+    if (b.length > 0) {
         // Get the end of the last buffered range
-        const bufferedEnd = buffered.end(buffered.length - 1);
-        bufferedPercent.value = (bufferedEnd / duration.value) * 100;
-        bufferTime.value = bufferedEnd;
+        buffered.value = b.end(b.length - 1);
     }
 }
 
@@ -544,6 +545,10 @@ watch(isPlaying, (playing) => {
         // Start hide timer when playing
         showControls();
     }
+});
+
+watch(volume, (newVal) => {
+    localStorage.setItem("playerVolume", newVal.toString());
 });
 
 defineExpose({
