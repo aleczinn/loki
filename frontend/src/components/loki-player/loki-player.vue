@@ -74,49 +74,56 @@
                                 <div class="flex flex-col justify-start select-none">
                                     <span class="text-sm text-white">{{ currentFile?.name || 'Video' }}</span>
                                     <span class="text-sm text-gray mb-1">2007</span>
-                                    <span class="text-sm text-gray">Endet um: {{ endTime }}</span>
+                                    <span class="text-sm text-gray">{{ $t('player.ends-at') }}: {{ endTime }}</span>
                                 </div>
 
                                 <div class="flex flex-row gap-4 justify-center items-center">
                                     <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            title="Vorheriges Kapitel"
+                                            :title="$t('player.chapter.previous')"
                                             @click="">
                                         <icon-player-rewind class="w-full h-full"></icon-player-rewind>
                                     </button>
 
                                     <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            title="Zurückspulen (Pfeil links)"
-                                            aria-label="Zurückspulen"
+                                            :title="$t('player.rewind.title')"
+                                            :aria-label="$t('player.rewind.label')"
                                             @click="skip(-10)">
                                         <icon-player-rewind10 class="w-full h-full"></icon-player-rewind10>
                                     </button>
 
                                     <button class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="isPlaying ? 'Pause (Leertaste)' : 'Abspielen (Leertaste)'"
-                                            :aria-label="isPlaying ? 'Pause' : 'Abspielen'"
+                                            :title="$t(isPlaying ? 'player.pause.title' : 'player.play.title')"
+                                            :aria-label="$t(isPlaying ? 'player.pause.label' : 'player.play.label')"
                                             @click="togglePlayPause">
                                         <icon-player-play v-if="!isPlaying" class="w-5 h-5"/>
                                         <icon-player-pause v-if="isPlaying" class="w-5 h-5"></icon-player-pause>
                                     </button>
 
                                     <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            title="Vorspulen (Pfeil rechts)"
-                                            aria-label="Vorspulen"
+                                            :title="$t('player.forward.title')"
+                                            :aria-label="$t('player.forward.label')"
                                             @click="skip(30)">
                                         <icon-player-forward30 class="w-full h-full"></icon-player-forward30>
                                     </button>
 
                                     <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            title="Nächstes Kapitel"
+                                            :title="$t('player.chapter.next')"
                                             @click="">
                                         <icon-player-forward class="w-full h-full"></icon-player-forward>
                                     </button>
                                 </div>
 
-                                <div class="flex flex-row gap-4 justify-end items-center">
+                                <div class="flex flex-row gap-6 justify-end items-center">
+
                                     <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="videoRef?.muted ? 'Stumm (M)' : 'Ton Ein (M)'"
-                                            :aria-label="videoRef?.muted ? 'Stumm' : 'Ton Ein'"
+                                            :title="$t('player.captions')"
+                                            @click="">
+                                        <icon-captions class="w-full h-full" aria-hidden="true"></icon-captions>
+                                    </button>
+
+                                    <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                            :title="$t(videoRef?.muted ? 'player.unmute.title' : 'player.mute.title')"
+                                            :aria-label="$t(videoRef?.muted ? 'player.unmute.label' : 'player.mute.label')"
                                             @click="toggleMute">
                                         <icon-player-volume v-if="! videoRef?.muted" lass="w-full h-full" aria-hidden="true"></icon-player-volume>
                                         <icon-player-muted v-if="videoRef?.muted" lass="w-full h-full" aria-hidden="true"></icon-player-muted>
@@ -135,13 +142,13 @@
 <!--                                    <span class="text-white text-right min-w-[2.75rem]">{{ Math.round(volume * 100) }}%</span>-->
 
                                     <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            title="Einstellungen">
+                                            :title="$t('player.settings')">
                                         <icon-gear class="w-full h-full" aria-hidden="true"></icon-gear>
                                     </button>
 
                                     <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            title="Vollbild (F)"
-                                            aria-label="Vollbild"
+                                            :title="$t('player.fullscreen.title')"
+                                            :aria-label="$t('player.fullscreen.label')"
                                             @click="toggleFullscreen">
                                         <icon-fullscreen class="w-5 h-5" aria-hidden="true"></icon-fullscreen>
                                     </button>
@@ -181,6 +188,7 @@ import IconGear from "../../icons/icon-gear.vue";
 import IconPlayerVolume from "../../icons/player/icon-player-volume.vue";
 import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
 import { LokiProgressBar } from "../loki-progress-bar";
+import IconCaptions from "../../icons/icon-captions.vue";
 
 interface VideoPlayerProps {
     quality?: string;
@@ -294,7 +302,7 @@ function openPlayer(file: MediaFile) {
     currentTime.value = 0;
     buffered.value = 0;
 
-    const storedVolume = localStorage.getItem('playerVolume');
+    const storedVolume = localStorage.getItem('loki-volume');
     if (storedVolume) {
         volume.value = parseFloat(storedVolume);
     }
@@ -306,10 +314,10 @@ function openPlayer(file: MediaFile) {
 }
 
 function getToken(): string {
-    let token = sessionStorage.getItem('streamToken');
+    let token = sessionStorage.getItem('loki-token');
     if (!token) {
         token = generateToken();
-        sessionStorage.setItem('streamToken', token);
+        sessionStorage.setItem('loki-token', token);
     }
     return token;
 }
@@ -516,6 +524,13 @@ onMounted(() => {
     document.addEventListener('keydown', handleKeyboard);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
+
+    const storedVolume = localStorage.getItem('loki-volume');
+    if (storedVolume) {
+        volume.value = parseFloat(storedVolume);
+    } else {
+        localStorage.setItem('loki-volume', volume.value.toString());
+    }
 });
 
 onUnmounted(() => {
@@ -548,7 +563,7 @@ watch(isPlaying, (playing) => {
 });
 
 watch(volume, (newVal) => {
-    localStorage.setItem("playerVolume", newVal.toString());
+    localStorage.setItem("loki-volume", newVal.toString());
 });
 
 defineExpose({

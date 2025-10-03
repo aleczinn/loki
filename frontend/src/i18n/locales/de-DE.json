@@ -8,7 +8,6 @@
         "live": "Live",
         "movies": "Filme",
         "series": "Serien",
-        "images": "Bilder",
         "watchlist": "Merkliste"
     },
     "genre": {
@@ -31,5 +30,42 @@
         "language": "Sprachen",
         "german": "Deutsch",
         "english": "Englisch"
+    },
+    "player": {
+        "ends-at": "Endet um",
+        "play": {
+            "title": "Abspielen (Leertaste)",
+            "label": "Abspielen"
+        },
+        "pause": {
+            "title": "Pause (Leertaste)",
+            "label": "Pause"
+        },
+        "forward": {
+            "title": "Vorspulen (Pfeil rechts)",
+            "label": "Vorspulen"
+        },
+        "rewind": {
+            "title": "Zurückspulen (Pfeil links)",
+            "label": "Zurückspulen"
+        },
+        "chapter": {
+            "next": "Nächstes Kapitel",
+            "previous": "Vorheriges Kapitel"
+        },
+        "captions": "Untertitel",
+        "settings": "Einstellungen",
+        "mute": {
+            "title": "Stumm (M)",
+            "label": "Stumm"
+        },
+        "unmute": {
+            "title": "Ton Ein (M)",
+            "label": "Ton Ein"
+        },
+        "fullscreen": {
+            "title": "Vollbild (F)",
+            "label": "Vollbild"
+        }
     }
 }
