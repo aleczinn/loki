@@ -116,6 +116,12 @@
                                 <div class="flex flex-row gap-6 justify-end items-center">
 
                                     <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
+                                            :title="$t('player.soundtrack')"
+                                            @click="">
+                                        <icon-music-note class="w-full h-full" aria-hidden="true"></icon-music-note>
+                                    </button>
+
+                                    <button class="hit-area-sm text-white w-7 h-7 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
                                             :title="$t('player.captions')"
                                             @click="">
                                         <icon-captions class="w-full h-full" aria-hidden="true"></icon-captions>
@@ -189,6 +195,7 @@ import IconPlayerVolume from "../../icons/player/icon-player-volume.vue";
 import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
 import { LokiProgressBar } from "../loki-progress-bar";
 import IconCaptions from "../../icons/icon-captions.vue";
+import IconMusicNote from "../../icons/icon-music-note.vue";
 
 interface VideoPlayerProps {
     quality?: string;
