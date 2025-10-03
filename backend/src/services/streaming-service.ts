@@ -28,7 +28,6 @@ interface TranscodeJob {
     status: 'running' | 'stopped' | 'completed';
     startSegment: number;
     createdAt: Date;
-    index: number;
 }
 
 interface StreamSession {
@@ -279,15 +278,14 @@ class StreamingService {
             sessionId: session.id,
             startSegment: startSegment,
             status: 'running',
-            createdAt: new Date(),
-            index: GLOBAL_INDEX++
+            createdAt: new Date()
         };
 
         // FFmpeg spawnen
         const ffmpegProcess: ChildProcess = spawn(ffmpegPath, args);
         job.process = ffmpegProcess;
 
-        logger.INFO(`${GREEN}Transcode started [${session.id}]: segment ${startSegment} [Index: ${job.index}]${RESET}`);
+        logger.INFO(`${GREEN}Transcode started - start segment ${startSegment} [${session.id}]${RESET}`);
 
         // Progress parsing
         let progressBuffer = '';
@@ -306,7 +304,7 @@ class StreamingService {
                         const timeSec = timeMs / 1000000;  // Microseconds to seconds
                         const percent = (timeSec / duration) * 100;
 
-                        logger.INFO(`${BLUE}Progress: ${percent.toFixed(1)}% [Index: ${job.index}]${RESET}`);
+                        logger.INFO(`${BLUE}Progress: ${percent.toFixed(1)}% [${session.id}]${RESET}`);
                     }
                 }
             }
@@ -325,12 +323,12 @@ class StreamingService {
         // Process Ende
         ffmpegProcess.on('exit', async (code, signal) => {
             if (job.status === 'stopped') {
-                logger.DEBUG(`Process stopped by user [Index: ${job.index}]`);
+                logger.DEBUG(`Process stopped by user [${session.id}]`);
                 return;
             }
 
             if (code === 0) {
-                logger.INFO(`${MAGENTA}Transcode completed [${session.id}] [Index: ${job.index}]${RESET}`);
+                logger.INFO(`${MAGENTA}Transcode completed [${session.id}]${RESET}`);
                 job.status = 'completed';
 
                 // Cleanup temp playlist nach erfolgreichem Transcoding
@@ -338,9 +336,9 @@ class StreamingService {
                     await deleteFile(tempPlaylistPath);
                 } catch (e) {}
             } else if (signal === 'SIGKILL') {
-                logger.DEBUG(`Process killed [Index: ${job.index}]`);
+                logger.DEBUG(`Process killed [${session.id}]`);
             } else {
-                logger.ERROR(`FFmpeg exited with code ${code} [Index: ${job.index}]`);
+                logger.ERROR(`FFmpeg exited with code ${code} [${session.id}]`);
                 job.status = 'stopped';
             }
 
@@ -356,7 +354,7 @@ class StreamingService {
 
         if (!job || job.status !== 'running') return;
 
-        logger.INFO(`Stopping transcode [${session.id}] [Index: ${job.index}]`);
+        logger.INFO(`Stopping transcode [${session.id}]`);
 
         // Status sofort setzen
         job.status = 'stopped';
