@@ -25,24 +25,24 @@
                      @mouseleave="handleMouseLeave">
 
                     <!-- Controls Container -->
-                    <div class="relative w-full h-full flex flex-col p-12 opacity-0 transition-opacity player-gradient"
+                    <div class="relative w-full h-full flex flex-col p-12 opacity-100 transition-opacity player-gradient"
                          :class="{'opacity-100': controlsVisible}"
                     >
                         <!-- Top Bar -->
                         <div class="relative">
                             <div class="flex justify-between">
                                 <div class="flex flex-row gap-2 items-center">
-                                    <button @click="closePlayer" class="hit-area-sm flex items-center gap-2 text-white transition-colors duration-300 ease-in-out hover:cursor-pointer hover:text-primary">
-                                        <icon-arrow-left class="w-6 h-6"/>
-                                    </button>
+                                    <loki-player-button :title="$t('player.back')">
+                                        <icon-arrow-left class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
                                     <span class="text-white">{{ currentFile?.name || 'Video' }}</span>
                                 </div>
 
                                 <div class="flex gap-6">
-                                    <button class="text-white hover:cursor-pointer transition-colors duration-300 ease-in-out hover:text-primary">
-                                        <icon-chromecast class="w-6 h-6"/>
-                                    </button>
+                                    <loki-player-button :title="$t('player.chromecast')">
+                                        <icon-chromecast class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
                                 </div>
                             </div>
                         </div>
@@ -77,63 +77,62 @@
                                     <span class="text-sm text-gray">{{ $t('player.ends-at') }}: {{ endTime }}</span>
                                 </div>
 
-                                <div class="flex flex-row gap-4 justify-center items-center">
-                                    <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.chapter.previous')"
-                                            @click="">
-                                        <icon-player-rewind class="w-full h-full"></icon-player-rewind>
-                                    </button>
+                                <div class="flex flex-row gap-2 justify-center items-center">
+                                    <loki-player-button @click=""
+                                                        :title="$t('player.chapter.previous')"
+                                    >
+                                        <icon-player-rewind class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
-                                    <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.rewind.title')"
-                                            :aria-label="$t('player.rewind.label')"
-                                            @click="skip(-10)">
-                                        <icon-player-rewind10 class="w-full h-full"></icon-player-rewind10>
-                                    </button>
+                                    <loki-player-button @click="skip(-10)"
+                                                        :title="$t('player.rewind.title')"
+                                                        :aria-label="$t('player.rewind.label')"
+                                    >
+                                        <icon-player-rewind10 class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
-                                    <button class="hit-area-sm text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t(isPlaying ? 'player.pause.title' : 'player.play.title')"
-                                            :aria-label="$t(isPlaying ? 'player.pause.label' : 'player.play.label')"
-                                            @click="togglePlayPause">
-                                        <icon-player-play v-if="!isPlaying" class="w-5 h-5"/>
-                                        <icon-player-pause v-if="isPlaying" class="w-5 h-5"></icon-player-pause>
-                                    </button>
+                                    <loki-player-button @click="togglePlayPause"
+                                                        :title="$t(isPlaying ? 'player.pause.title' : 'player.play.title')"
+                                                        :aria-label="$t(isPlaying ? 'player.pause.label' : 'player.play.label')"
+                                    >
+                                        <icon-player-play v-if="!isPlaying" class="w-5 h-5" aria-hidden="true"/>
+                                        <icon-player-pause v-if="isPlaying" class="w-5 h-5" aria-hidden="true"/>
+                                    </loki-player-button>
 
-                                    <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.forward.title')"
-                                            :aria-label="$t('player.forward.label')"
-                                            @click="skip(30)">
-                                        <icon-player-forward30 class="w-full h-full"></icon-player-forward30>
-                                    </button>
+                                    <loki-player-button @click="skip(30)"
+                                                        :title="$t('player.forward.title')"
+                                                        :aria-label="$t('player.forward.label')"
+                                    >
+                                        <icon-player-forward30 class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
-                                    <button class="hit-area-sm w-6 h-6 text-white transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.chapter.next')"
-                                            @click="">
-                                        <icon-player-forward class="w-full h-full"></icon-player-forward>
-                                    </button>
+                                    <loki-player-button @click=""
+                                                        :title="$t('player.chapter.next')"
+                                    >
+                                        <icon-player-forward class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
                                 </div>
 
-                                <div class="flex flex-row gap-6 justify-end items-center">
+                                <div class="flex flex-row gap-2 justify-end items-center">
+                                    <loki-player-button @click=""
+                                                        :title="$t('player.soundtrack')"
+                                    >
+                                        <icon-music-note class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
-                                    <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.soundtrack')"
-                                            @click="">
-                                        <icon-music-note class="w-full h-full" aria-hidden="true"></icon-music-note>
-                                    </button>
+                                    <loki-player-button @click=""
+                                                        :title="$t('player.captions')"
+                                    >
+                                        <icon-captions class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
-                                    <button class="hit-area-sm text-white w-7 h-7 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.captions')"
-                                            @click="">
-                                        <icon-captions class="w-full h-full" aria-hidden="true"></icon-captions>
-                                    </button>
-
-                                    <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t(videoRef?.muted ? 'player.unmute.title' : 'player.mute.title')"
-                                            :aria-label="$t(videoRef?.muted ? 'player.unmute.label' : 'player.mute.label')"
-                                            @click="toggleMute">
-                                        <icon-player-volume v-if="! videoRef?.muted" lass="w-full h-full" aria-hidden="true"></icon-player-volume>
-                                        <icon-player-muted v-if="videoRef?.muted" lass="w-full h-full" aria-hidden="true"></icon-player-muted>
-                                    </button>
+                                    <loki-player-button @click="toggleMute"
+                                                        :title="$t(videoRef?.muted ? 'player.unmute.title' : 'player.mute.title')"
+                                                        :aria-label="$t(videoRef?.muted ? 'player.unmute.label' : 'player.mute.label')"
+                                    >
+                                        <icon-player-volume v-if="! videoRef?.muted" lass="w-6 h-6" aria-hidden="true"/>
+                                        <icon-player-muted v-if="videoRef?.muted" lass="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
                                     <!-- Volume -->
                                     <loki-progress-bar class="w-32 h-1"
@@ -145,19 +144,18 @@
                                                        @update:value="handleVolume">
                                     </loki-progress-bar>
 
-<!--                                    <span class="text-white text-right min-w-[2.75rem]">{{ Math.round(volume * 100) }}%</span>-->
+                                    <loki-player-button @click=""
+                                                        :title="$t('player.settings')"
+                                    >
+                                        <icon-gear class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
 
-                                    <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.settings')">
-                                        <icon-gear class="w-full h-full" aria-hidden="true"></icon-gear>
-                                    </button>
-
-                                    <button class="hit-area-sm text-white w-6 h-6 transition-colors duration-300 ease-in-out hover:text-primary hover:cursor-pointer"
-                                            :title="$t('player.fullscreen.title')"
-                                            :aria-label="$t('player.fullscreen.label')"
-                                            @click="toggleFullscreen">
-                                        <icon-fullscreen class="w-5 h-5" aria-hidden="true"></icon-fullscreen>
-                                    </button>
+                                    <loki-player-button @click="toggleFullscreen"
+                                                        :title="$t('player.fullscreen.title')"
+                                                        :aria-label="$t('player.fullscreen.label')"
+                                    >
+                                        <icon-fullscreen class="w-6 h-6" aria-hidden="true"/>
+                                    </loki-player-button>
                                 </div>
                             </div>
                         </div>
@@ -197,6 +195,7 @@ import { LokiProgressBar } from "../loki-progress-bar";
 import IconCaptions from "../../icons/icon-captions.vue";
 import IconMusicNote from "../../icons/icon-music-note.vue";
 import { LOKI_TOKEN, LOKI_VOLUME } from "../../variables.ts";
+import { LokiPlayerButton } from "../loki-player-button";
 
 interface VideoPlayerProps {
     quality?: string;
@@ -296,12 +295,6 @@ function initHLS(url: string) {
         videoRef.value.src = url;
         videoRef.value.play();
     }
-}
-
-function generateToken(): string {
-    const timestamp = Date.now().toString(36);
-    const random = Math.random().toString(36).substring(2, 15);
-    return `${timestamp}-${random}`;
 }
 
 function openPlayer(file: MediaFile) {

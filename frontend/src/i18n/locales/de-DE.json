@@ -32,6 +32,8 @@
         "english": "Englisch"
     },
     "player": {
+        "back": "Zurück",
+        "chromecast": "Auf Gerät wiedergeben",
         "ends-at": "Endet um",
         "play": {
             "title": "Abspielen (Leertaste)",

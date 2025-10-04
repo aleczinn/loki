@@ -33,6 +33,8 @@
         "english": "English"
     },
     "player": {
+        "back": "Back",
+        "chromecast": "Play on device",
         "ends-at": "Ends at",
         "play": {
             "title": "Play (Space)",
