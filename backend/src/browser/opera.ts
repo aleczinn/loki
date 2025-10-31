@@ -1,11 +1,10 @@
 import { Browser } from './browser';
-import { version } from 'mariadb';
 
 export class Opera extends Browser {
 
     detectCapabilities(): void {
         // Container
-        this.containers = ['mp4', 'webm', 'mkv'];
+        this.container = ['mp4', 'webm', 'mkv'];
 
         // Video
         if (this.version >= 10) {

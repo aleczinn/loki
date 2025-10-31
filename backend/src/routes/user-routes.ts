@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import userManager from "../services/user-manager";
+import { ClientInfo } from "../types/client-info";
 
 const router = Router();
 
@@ -8,13 +9,16 @@ const router = Router();
  */
 router.post('/api/user/register', async (req: Request, res: Response) => {
         const { token } = req.body;
+        const userAgent = req.get('User-Agent') || 'Unknown';
 
-        if (token) {
-            return res.status(200).json({ token: token });
-        }
-
-        const newToken = userManager.createToken();
+        const newToken = userManager.registerClient(token, userAgent);
     return res.status(200).json({ token: newToken  });
+});
+
+router.get('/api/user/info', async (req: Request, res: Response) => {
+    const clients: ClientInfo[] = Array.from( userManager.getClients().values());
+
+    return res.status(200).json({ clients });
 });
 
 export default router;

@@ -4,7 +4,7 @@ export class Firefox extends Browser {
 
     detectCapabilities(): void {
         // Container
-        this.containers = ['mp4', 'webm', 'mkv'];
+        this.container = ['mp4', 'webm', 'mkv'];
 
         // Video
         if (this.version >= 3) {

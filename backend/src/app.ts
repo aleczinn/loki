@@ -12,7 +12,6 @@ import sessionRoutes from "./routes/session-routes";
 import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
-import { userAgentMiddleware } from "./middleware/user-agent-handler";
 import { ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
 
@@ -43,8 +42,6 @@ app.get('/health', (req, res) => {
         uptime: process.uptime()
     });
 });
-
-app.use(userAgentMiddleware)
 
 app.use(userRoutes);
 app.use(mediaRoutes);

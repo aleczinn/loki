@@ -6,7 +6,7 @@ export abstract class Browser {
     protected version: number;
     protected platform: string;
 
-    protected containers: string[] = [];
+    protected container: string[] = [];
     protected videoCodecs: string[] = [];
     protected audioCodecs: string[] = [];
 
@@ -23,7 +23,7 @@ export abstract class Browser {
     protected abstract detectCapabilities(): void;
 
     isContainerSupported(codec: string): boolean {
-        return this.containers.includes(codec.toLowerCase());
+        return this.container.includes(codec.toLowerCase());
     }
 
     isVideoSupported(codec: string): boolean {
@@ -32,5 +32,49 @@ export abstract class Browser {
 
     isAudioSupported(codec: string): boolean {
         return this.audioCodecs.includes(codec.toLowerCase());
+    }
+
+    getName(): string {
+        return this.name;
+    }
+
+    getVersion(): number {
+        return this.version;
+    }
+
+    getPlatform(): string{
+        return this.platform;
+    }
+
+    getContainer(): string[] {
+        return this.container;
+    }
+
+    getVideoCodecs(): string[] {
+        return this.videoCodecs;
+    }
+
+    getAudioCodecs(): string[] {
+        return this.audioCodecs;
+    }
+
+    getProfiles(): VideoProfile[] {
+        return this.profiles;
+    }
+
+    supportsDolbyVision(): boolean {
+        return this.profiles.includes('dolby vision');
+    }
+
+    supportsHDR10Plus(): boolean {
+        return this.profiles.includes('hdr10+');
+    }
+
+    supportsHDR10(): boolean {
+        return this.profiles.includes('hdr10');
+    }
+
+    supportsHLG(): boolean {
+        return this.profiles.includes('hlg');
     }
 }

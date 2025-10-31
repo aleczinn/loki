@@ -4,7 +4,7 @@ export class Edge extends Browser {
 
     detectCapabilities(): void {
         // Container
-        this.containers = ['mp4', 'webm', 'mkv'];
+        this.container = ['mp4', 'webm', 'mkv'];
 
         // Video
         this.videoCodecs.push('theora', 'ogg');

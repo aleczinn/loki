@@ -21,7 +21,6 @@ router.get('/api/media', async (req: Request, res: Response) => {
 router.get('/api/media/:id/qualities', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const client = req.clientInfo;
 
         const file = await findMediaFileById(id);
         if (!file) {

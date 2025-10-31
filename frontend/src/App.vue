@@ -20,7 +20,6 @@ async function registerClient() {
 
         if (token) {
             sessionStorage.setItem(LOKI_TOKEN, token);
-            console.log('Registered client:', token);
         } else {
             console.error('Server did not send a valid token');
         }
