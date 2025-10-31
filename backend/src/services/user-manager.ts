@@ -67,9 +67,7 @@ class UserManager {
             maxResolution: this.detectMaxResolution(userAgent),
             supportsDolbyVision: browser.supportsDolbyVision(),
             supportsHDR10: browser.supportsHDR10(),
-            supportsHDR10Plus: browser.supportsHDR10Plus(),
-            supportsDirectPlay: true, // Will be refined based on actual codec support
-            supportsDirectStream: true
+            supportsHDR10Plus: browser.supportsHDR10Plus()
         };
     }
 

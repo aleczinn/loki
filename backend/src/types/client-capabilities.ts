@@ -6,6 +6,4 @@ export interface ClientCapabilities {
     supportsDolbyVision: boolean;
     supportsHDR10: boolean;
     supportsHDR10Plus: boolean;
-    supportsDirectPlay: boolean;
-    supportsDirectStream: boolean;
 }
