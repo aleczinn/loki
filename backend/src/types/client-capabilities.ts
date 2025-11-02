@@ -1,9 +1,10 @@
+import { MediaAudioCodec, MediaContainer, MediaVideoCodec, MediaVideoProfile } from "../browser/browser";
+
 export interface ClientCapabilities {
-    containers: string[];
-    videoCodecs: string[];
-    audioCodecs: string[];
-    maxResolution: string;
-    supportsDolbyVision: boolean;
-    supportsHDR10: boolean;
-    supportsHDR10Plus: boolean;
+    maxResolutionWidth: number;
+    maxResolutionHeight: number;
+    containers: MediaContainer[];
+    videoCodecs: MediaVideoCodec[];
+    audioCodecs: MediaAudioCodec[];
+    hdrFormats: MediaVideoProfile[];
 }

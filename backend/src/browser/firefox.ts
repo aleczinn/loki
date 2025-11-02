@@ -7,9 +7,6 @@ export class Firefox extends Browser {
         this.container = ['mp4', 'webm', 'mkv'];
 
         // Video
-        if (this.version >= 3) {
-            this.videoCodecs.push('theora', 'ogg');
-        }
         if (this.version >= 4) {
             this.videoCodecs.push('vp8');
         }
@@ -17,7 +14,7 @@ export class Firefox extends Browser {
             this.videoCodecs.push('vp9');
         }
         if (this.version >= 35) {
-            this.videoCodecs.push('avc', 'h264');
+            this.videoCodecs.push('h264');
         }
         if (this.version >= 67) {
             this.videoCodecs.push('av1');

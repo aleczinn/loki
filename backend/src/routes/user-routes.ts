@@ -8,10 +8,10 @@ const router = Router();
  * Register a new client and create a token if none is provided.
  */
 router.post('/api/user/register', async (req: Request, res: Response) => {
-        const { token } = req.body;
+        const { token, capabilities } = req.body;
         const userAgent = req.get('User-Agent') || 'Unknown';
 
-        const newToken = userManager.registerClient(token, userAgent);
+        const newToken = userManager.registerClient(token, userAgent, capabilities);
     return res.status(200).json({ token: newToken  });
 });
 

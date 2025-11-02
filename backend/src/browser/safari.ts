@@ -7,13 +7,13 @@ export class Safari extends Browser {
         this.container = ['mp4', 'webm', 'mkv'];
 
         // Video
-        this.videoCodecs.push('mpeg-1', 'mpeg-2');
+        this.videoCodecs.push('mpeg2');
 
         if (this.version >= 3) {
-            this.videoCodecs.push('avc', 'h264');
+            this.videoCodecs.push('h264');
         }
         if (this.version >= 11) {
-            this.videoCodecs.push('hevc', 'h265');
+            this.videoCodecs.push('hevc');
         }
 
         // Audio codecs

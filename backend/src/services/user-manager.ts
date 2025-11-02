@@ -8,7 +8,7 @@ class UserManager {
 
     private clients: Map<string, ClientInfo> = new Map();
 
-    registerClient(token: string | null, userAgent: string): string {
+    registerClient(token: string | null, userAgent: string, caps: any): string {
         const browser: Browser = BrowserFactory.create(userAgent);
         const capabilities: ClientCapabilities = this.extractCapabilities(browser, userAgent);
 
@@ -61,18 +61,13 @@ class UserManager {
 
     private extractCapabilities(browser: Browser, userAgent: string): ClientCapabilities {
         return {
+            maxResolutionWidth: 1920,
+            maxResolutionHeight: 1080,
             containers: browser.getContainer(),
             videoCodecs: browser.getVideoCodecs(),
             audioCodecs: browser.getAudioCodecs(),
-            maxResolution: this.detectMaxResolution(userAgent),
-            supportsDolbyVision: browser.supportsDolbyVision(),
-            supportsHDR10: browser.supportsHDR10(),
-            supportsHDR10Plus: browser.supportsHDR10Plus()
+            hdrFormats: []
         };
-    }
-
-    private detectMaxResolution(userAgent: string): string {
-        return '1080p';
     }
 }
 

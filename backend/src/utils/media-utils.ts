@@ -4,10 +4,10 @@ import path from 'path'
 import ffmpeg from 'fluent-ffmpeg'
 import { MediaMetadata } from "../types/media-metadata";
 import { GeneralTrack } from "../types/general-track";
-import { VideoTrack } from "../types/video-track";
-import { SubtitleTrack } from "../types/subtitle-track";
-import { BaseTrack } from "../types/base-track";
-import { AudioTrack } from "../types/audio-track";
+import { VideoTrack } from "../types/mediainfo/video-track";
+import { SubtitleTrack } from "../types/mediainfo/subtitle-track";
+import { BaseTrack } from "../types/mediainfo/base-track";
+import { AudioTrack } from "../types/mediainfo/audio-track";
 import { MediaFile } from "../types/media-file";
 import { scanMediaDirectory } from "./utils";
 import { MEDIA_PATH } from "../app";

@@ -7,16 +7,14 @@ export class Edge extends Browser {
         this.container = ['mp4', 'webm', 'mkv'];
 
         // Video
-        this.videoCodecs.push('theora', 'ogg');
-
         if (this.version >= 12) {
-            this.videoCodecs.push('avc', 'h264');
+            this.videoCodecs.push('h264');
         }
         if (this.version >= 14) {
             this.videoCodecs.push('vp8', 'vp9');
         }
         if (this.version >= 18) {
-            this.videoCodecs.push('hevc', 'h265');
+            this.videoCodecs.push('hevc');
         }
         if (this.version >= 75) {
             this.videoCodecs.push('av1');

@@ -4,7 +4,7 @@ export class DefaultBrowser extends Browser {
 
     detectCapabilities(): void {
         this.container = ['mp4', 'webm'];
-        this.videoCodecs = [];
-        this.audioCodecs = [];
+        this.videoCodecs = ['h264'];
+        this.audioCodecs = ['aac'];
     }
 }

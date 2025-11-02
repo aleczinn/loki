@@ -8,13 +8,13 @@ export class Opera extends Browser {
 
         // Video
         if (this.version >= 10) {
-            this.videoCodecs.push('theora', 'vp9');
+            this.videoCodecs.push('vp9');
         }
         if (this.version >= 16) {
             this.videoCodecs.push('vp8');
         }
         if (this.version >= 25) {
-            this.videoCodecs.push('avc', 'h264');
+            this.videoCodecs.push('h264');
         }
         if (this.version >= 57) {
             this.videoCodecs.push('av1');

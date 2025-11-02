@@ -1,4 +1,7 @@
-type VideoProfile = 'hdr10' | 'hdr10+' | 'dolby vision' | 'hlg';
+export type MediaContainer = 'mp4' | 'webm' | 'mkv' | 'avi' | 'm4v' | 'mov';
+export type MediaVideoProfile = 'hdr10' | 'hdr10+' | 'dolby vision' | 'hlg';
+export type MediaVideoCodec = 'h264' | 'hevc' | 'mpeg2' | 'vc1' | 'vp8' | 'vp9' | 'av1';
+export type MediaAudioCodec = 'opus' | 'flac' | 'pcm' | 'ogg' | 'vorbis' | 'aac' | 'ac3' | 'eac3' | 'mp3' | 'wav' | 'dts' | 'truehd';
 
 export abstract class Browser {
 
@@ -6,11 +9,11 @@ export abstract class Browser {
     protected version: number;
     protected platform: string;
 
-    protected container: string[] = [];
-    protected videoCodecs: string[] = [];
-    protected audioCodecs: string[] = [];
+    protected container: MediaContainer[] = [];
+    protected videoCodecs: MediaVideoCodec[] = [];
+    protected audioCodecs: MediaAudioCodec[] = [];
 
-    protected profiles: VideoProfile[] = [];
+    protected profiles: MediaVideoProfile[] = [];
 
     constructor(name: string, version: number, platform: string) {
         this.name = name;
@@ -22,16 +25,16 @@ export abstract class Browser {
 
     protected abstract detectCapabilities(): void;
 
-    isContainerSupported(codec: string): boolean {
-        return this.container.includes(codec.toLowerCase());
+    isContainerSupported(codec: MediaContainer): boolean {
+        return this.container.includes(codec);
     }
 
-    isVideoSupported(codec: string): boolean {
-        return this.videoCodecs.includes(codec.toLowerCase());
+    isVideoSupported(codec: MediaVideoCodec): boolean {
+        return this.videoCodecs.includes(codec);
     }
 
-    isAudioSupported(codec: string): boolean {
-        return this.audioCodecs.includes(codec.toLowerCase());
+    isAudioSupported(codec: MediaAudioCodec): boolean {
+        return this.audioCodecs.includes(codec);
     }
 
     getName(): string {
@@ -46,19 +49,19 @@ export abstract class Browser {
         return this.platform;
     }
 
-    getContainer(): string[] {
+    getContainer(): MediaContainer[] {
         return this.container;
     }
 
-    getVideoCodecs(): string[] {
+    getVideoCodecs(): MediaVideoCodec[] {
         return this.videoCodecs;
     }
 
-    getAudioCodecs(): string[] {
+    getAudioCodecs(): MediaAudioCodec[] {
         return this.audioCodecs;
     }
 
-    getProfiles(): VideoProfile[] {
+    getProfiles(): MediaVideoProfile[] {
         return this.profiles;
     }
 

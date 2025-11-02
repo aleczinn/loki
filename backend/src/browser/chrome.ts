@@ -7,11 +7,8 @@ export class Chrome extends Browser {
         this.container = ['mp4', 'webm', 'mkv'];
 
         // Video
-        if (this.version >= 3) {
-            this.videoCodecs.push('theora');
-        }
         if (this.version >= 4) {
-            this.videoCodecs.push('avc', 'h264', 'ogg');
+            this.videoCodecs.push('h264');
         }
         if (this.version >= 25) {
             this.videoCodecs.push('vp8');
@@ -23,7 +20,7 @@ export class Chrome extends Browser {
             this.videoCodecs.push('av1');
         }
         if (this.version >= 107) {
-            this.videoCodecs.push('hevc', 'h265');
+            this.videoCodecs.push('hevc');
         }
 
         // Audio codecs
