@@ -32,7 +32,8 @@
                         <div class="relative">
                             <div class="flex justify-between">
                                 <div class="flex flex-row gap-2 items-center">
-                                    <loki-player-button :title="$t('player.back')">
+                                    <loki-player-button @click="closePlayer"
+                                                        :title="$t('player.back')">
                                         <icon-arrow-left class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
 
@@ -40,7 +41,8 @@
                                 </div>
 
                                 <div class="flex gap-6">
-                                    <loki-player-button :title="$t('player.chromecast')">
+                                    <loki-player-button @click=""
+                                                        :title="$t('player.chromecast')">
                                         <icon-chromecast class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
                                 </div>
