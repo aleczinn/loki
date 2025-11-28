@@ -28,7 +28,7 @@ app.use(cors({
         : 'http://localhost:5173',  // development frontend server
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['X-Stream-Token', 'Content-Type', 'Authorization']
+    allowedHeaders: ['X-Client-Token', 'Content-Type', 'Authorization']
 }));
 
 app.use(bodyParser.json());
