@@ -1,7 +1,7 @@
 import { GeneralTrack } from "./general-track";
-import { VideoTrack } from "./video-track";
-import { AudioTrack } from "./audio-track";
-import { SubtitleTrack } from "./subtitle-track";
+import { VideoTrack } from "./mediainfo/video-track";
+import { AudioTrack } from "./mediainfo/audio-track";
+import { SubtitleTrack } from "./mediainfo/subtitle-track";
 
 export interface MediaMetadata {
     general: GeneralTrack;

@@ -3,7 +3,7 @@
               to="body">
         <section class="fixed inset-0 bg-black z-videoplayer">
             <div class="relative flex flex-row justify-center w-full h-full">
-                <div class="aspect-video bg-black">
+                <div class="aspect-video bg-black w-full">
                     <video ref="videoRef"
                            class="w-full h-full"
                            @play="isPlaying = true"
@@ -32,7 +32,8 @@
                         <div class="relative">
                             <div class="flex justify-between">
                                 <div class="flex flex-row gap-2 items-center">
-                                    <loki-player-button :title="$t('player.back')">
+                                    <loki-player-button @click="closePlayer"
+                                                        :title="$t('player.back')">
                                         <icon-arrow-left class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
 
@@ -40,7 +41,8 @@
                                 </div>
 
                                 <div class="flex gap-6">
-                                    <loki-player-button :title="$t('player.chromecast')">
+                                    <loki-player-button @click=""
+                                                        :title="$t('player.chromecast')">
                                         <icon-chromecast class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
                                 </div>
@@ -53,7 +55,7 @@
                         <!-- Bottom Bar -->
                         <div class="">
                             <!-- Timeline -->
-                            <div class="flex flex-row items-center gap-3 text-white text-sm mb-4">
+                            <div class="flex flex-row items-center gap-3 text-white text-sm p-2 mb-2">
                                 <span class="text-left">{{ formatTime(currentTime) }}</span>
 
                                 <loki-progress-bar class="w-full h-1"
@@ -70,16 +72,17 @@
                             </div>
 
                             <!-- Buttons -->
-                            <div class="grid grid-cols-3">
-                                <div class="flex flex-col justify-start select-none">
+                            <div class="flex flex-row">
+                                <div class="flex-1 hidden lg:flex flex-col justify-start select-none">
                                     <span class="text-sm text-white">{{ currentFile?.name || 'Video' }}</span>
                                     <span class="text-sm text-gray mb-1">2007</span>
                                     <span class="text-sm text-gray">{{ $t('player.ends-at') }}: {{ endTime }}</span>
                                 </div>
 
-                                <div class="flex flex-row gap-2 justify-center items-center">
+                                <div class="flex-1 flex flex-row gap-2 justify-start lg:justify-center items-center">
                                     <loki-player-button @click=""
                                                         :title="$t('player.chapter.previous')"
+                                                        class="hidden md:flex"
                                     >
                                         <icon-player-rewind class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
@@ -87,6 +90,7 @@
                                     <loki-player-button @click="skip(-10)"
                                                         :title="$t('player.rewind.title')"
                                                         :aria-label="$t('player.rewind.label')"
+                                                        class="hidden md:flex"
                                     >
                                         <icon-player-rewind10 class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
@@ -102,18 +106,20 @@
                                     <loki-player-button @click="skip(30)"
                                                         :title="$t('player.forward.title')"
                                                         :aria-label="$t('player.forward.label')"
+                                                        class="hidden md:flex"
                                     >
                                         <icon-player-forward30 class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
 
                                     <loki-player-button @click=""
                                                         :title="$t('player.chapter.next')"
+                                                        class="hidden md:flex"
                                     >
                                         <icon-player-forward class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
                                 </div>
 
-                                <div class="flex flex-row gap-2 justify-end items-center">
+                                <div class="flex-1 flex flex-row gap-2 justify-end items-center">
                                     <loki-player-button @click=""
                                                         :title="$t('player.soundtrack')"
                                     >
@@ -129,13 +135,14 @@
                                     <loki-player-button @click="toggleMute"
                                                         :title="$t(videoRef?.muted ? 'player.unmute.title' : 'player.mute.title')"
                                                         :aria-label="$t(videoRef?.muted ? 'player.unmute.label' : 'player.mute.label')"
+                                                        class="hidden sm:flex"
                                     >
                                         <icon-player-volume v-if="! videoRef?.muted" lass="w-6 h-6" aria-hidden="true"/>
                                         <icon-player-muted v-if="videoRef?.muted" lass="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
 
                                     <!-- Volume -->
-                                    <loki-progress-bar class="w-32 h-1"
+                                    <loki-progress-bar class="w-32 h-1 hidden sm:flex"
                                                        :value="volume"
                                                        :min-value="0"
                                                        :max-value="1"
@@ -169,6 +176,10 @@
                     <icon-player-pause class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/20 w-30 h-30 pointer-events-none opacity-0 transition-opacity duration-300 ease-in-out" :class="{'opacity-100': !isPlaying && !isBuffering && !isLoading}"></icon-player-pause>
                 </div>
             </div>
+
+<!--            <div class="fixed top- bg-[#ff0000] z-popup">-->
+
+<!--            </div>-->
         </section>
     </Teleport>
 </template>
