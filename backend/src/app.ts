@@ -5,7 +5,7 @@ import { AddressInfo } from 'net';
 import errorHandler from "./middleware/error-handler";
 import dotenv from "dotenv";
 import * as path from 'path';
-import userRoutes from "./routes/user-routes";
+import clientRoutes from "./routes/client-routes";
 import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import sessionRoutes from "./routes/session-routes";
@@ -43,7 +43,7 @@ app.get('/health', (req, res) => {
     });
 });
 
-app.use(userRoutes);
+app.use(clientRoutes);
 app.use(mediaRoutes);
 app.use(streamingRoutes);
 app.use(sessionRoutes);

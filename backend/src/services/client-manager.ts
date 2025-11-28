@@ -1,17 +1,12 @@
 import { generateToken } from "../utils/utils";
 import { ClientInfo } from "../types/client-info";
-import { BrowserFactory } from "../browser/browser-factory";
-import { ClientCapabilities } from "../types/client-capabilities";
-import { Browser } from "../browser/browser";
+import { ClientCapabilities } from "../types/capabilities/client-capabilities";
 
-class UserManager {
+class ClientManager {
 
     private clients: Map<string, ClientInfo> = new Map();
 
-    registerClient(token: string | null, userAgent: string, caps: any): string {
-        const browser: Browser = BrowserFactory.create(userAgent);
-        const capabilities: ClientCapabilities = this.extractCapabilities(browser, userAgent);
-
+    registerClient(token: string | null, capabilities: ClientCapabilities): string {
         if (!token) {
             token = generateToken();
         }
@@ -22,13 +17,9 @@ class UserManager {
         } else {
             const clientInfo: ClientInfo = {
                 token,
-                userAgent,
-                browser: browser.getName(),
-                browserVersion: browser.getVersion(),
-                platform: browser.getPlatform(),
+                capabilities,
                 createdAt: new Date(),
-                lastSeen: new Date(),
-                capabilities
+                lastSeen: new Date()
             };
 
             this.clients.set(token, clientInfo);
@@ -58,20 +49,9 @@ class UserManager {
             client.lastSeen = new Date();
         }
     }
-
-    private extractCapabilities(browser: Browser, userAgent: string): ClientCapabilities {
-        return {
-            maxResolutionWidth: 1920,
-            maxResolutionHeight: 1080,
-            containers: browser.getContainer(),
-            videoCodecs: browser.getVideoCodecs(),
-            audioCodecs: browser.getAudioCodecs(),
-            hdrFormats: []
-        };
-    }
 }
 
-const userManager = new UserManager();
+const clientManager = new ClientManager();
 
-export default userManager;
-export { UserManager };
+export default clientManager;
+export { ClientManager };
