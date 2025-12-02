@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import clientManager from "../services/client-manager";
 import { ClientInfo } from "../types/client-info";
+import { ClientCapabilities } from "../types/capabilities/client-capabilities";
 
 const router = Router();
 
@@ -10,10 +11,20 @@ const router = Router();
 router.post('/api/client/register', async (req: Request, res: Response) => {
         const { token, capabilities } = req.body as {
             token: string | null;
-            capabilities: any;
+            capabilities: ClientCapabilities;
         };
 
         const newToken = clientManager.registerClient(token, capabilities);
+    return res.status(200).json({ token: newToken  });
+});
+
+router.post('/api/client/update', async (req: Request, res: Response) => {
+    const { token, capabilities } = req.body as {
+        token: string | null;
+        capabilities: ClientCapabilities;
+    };
+
+    const newToken = clientManager.registerClient(token, capabilities);
     return res.status(200).json({ token: newToken  });
 });
 

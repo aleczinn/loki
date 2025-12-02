@@ -8,6 +8,7 @@ import { clearDir, deleteFile, ensureDir, ensureDirSync, pathExists, readFile, w
 import { BLUE, CYAN, GREEN, MAGENTA, RED, RESET, sleep, YELLOW } from "../utils/utils";
 import { spawn, ChildProcess } from 'child_process';
 import ffmpegStatic from 'ffmpeg-static';
+import clientManager from "./client-manager";
 
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
 export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
@@ -228,6 +229,8 @@ class StreamingService {
         if (!qualityOptions) {
             throw new Error('FATAL: Something is wrong with the provided quality option!');
         }
+
+        const client = clientManager.getClient(session.token);
 
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
