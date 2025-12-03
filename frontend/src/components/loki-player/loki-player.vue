@@ -120,13 +120,15 @@
                                 </div>
 
                                 <div class="flex-1 flex flex-row gap-2 justify-end items-center">
-                                    <loki-player-button @click=""
+                                    <loki-player-button ref="audioTrackButtonRef"
+                                                        @click="audioDialog?.showModal()"
                                                         :title="$t('player.soundtrack')"
                                     >
                                         <icon-music-note class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
 
-                                    <loki-player-button @click=""
+                                    <loki-player-button ref="subtitleTrackButtonRef"
+                                                        @click="subtitleDialog?.showModal()"
                                                         :title="$t('player.captions')"
                                     >
                                         <icon-captions class="w-6 h-6" aria-hidden="true"/>
@@ -175,11 +177,59 @@
 
                     <icon-player-pause class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/20 w-30 h-30 pointer-events-none opacity-0 transition-opacity duration-300 ease-in-out" :class="{'opacity-100': !isPlaying && !isBuffering && !isLoading}"></icon-player-pause>
                 </div>
+
+                <!-- POPUP - Audio Tracks -->
+                <dialog ref="audioDialog"
+                        class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg z-popup p-4 dialog-backdrop"
+                        style="left: 50%;"
+                        @click.self="audioDialog?.close();"
+                >
+                    <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
+                    <div class="flex flex-col text-gray">
+                        <button v-for="(track, index) in audioTracks"
+                                :key="index"
+                                class="w-full px-4 py-2 text-left text-gray hover:bg-white/10 transition-colors flex gap-3 cursor-pointer"
+                                :class="{ 'bg-white/5': index === currentAudioTrack }"
+                                @click="selectAudioTrack(index)"
+                        >
+                            <span class="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <icon-checkmark v-if="index === currentAudioTrack"
+                                              class="text-primary"
+                                              aria-hidden="true"
+                              />
+                            </span>
+                            <span class="text-base whitespace-nowrap">{{ track.name }}</span>
+                        </button>
+                    </div>
+                </dialog>
+
+                <!-- POPUP - Subtitle Tracks -->
+                <dialog ref="subtitleDialog"
+                        class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg z-popup p-4 dialog-backdrop"
+                        style="left: 50%;"
+                        @click.self="subtitleDialog?.close();"
+                >
+                    <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
+                    <div class="flex flex-col text-gray">
+                        <button v-for="(track, index) in subtitleTracks"
+                                :key="index"
+                                class="w-full px-4 py-2 text-left text-gray hover:bg-white/10 transition-colors flex gap-3 cursor-pointer"
+                                :class="{ 'bg-white/5': index === currentSubtitleTrack }"
+                                @click="selectSubtitleTrack(index)"
+                        >
+                            <span class="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <icon-checkmark v-if="index === currentSubtitleTrack"
+                                              class="text-primary"
+                                              aria-hidden="true"
+                              />
+                            </span>
+                            <span class="text-base whitespace-nowrap">
+                                {{ track.name }}<span v-if="track.format" class="text-gray/30"> - {{ track.format }}</span>
+                            </span>
+                        </button>
+                    </div>
+                </dialog>
             </div>
-
-<!--            <div class="fixed top- bg-[#ff0000] z-popup">-->
-
-<!--            </div>-->
         </section>
     </Teleport>
 </template>
@@ -207,6 +257,7 @@ import IconCaptions from "../../icons/icon-captions.vue";
 import IconMusicNote from "../../icons/icon-music-note.vue";
 import { LOKI_TOKEN, LOKI_VOLUME } from "../../variables.ts";
 import { LokiPlayerButton } from "../loki-player-button";
+import IconCheckmark from "../../icons/icon-checkmark.vue";
 
 interface VideoPlayerProps {
     quality?: string;
@@ -246,6 +297,52 @@ const volume = ref(1);
 const hls = ref<Hls | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null);
 const currentFile = ref<MediaFile | null>(null);
+
+// Popups
+const audioDialog = ref<HTMLDialogElement | null>(null);
+const audioTButtonRef = ref<HTMLElement | null>(null);
+const currentAudioTrack = ref(0);
+
+const subtitleDialog = ref<HTMLDialogElement | null>(null);
+const subtitleTButtonRef = ref<HTMLElement | null>(null);
+const currentSubtitleTrack = ref(0);
+
+// TEMP
+const audioTracks = ref([
+    { name: 'DTS-HD MA 7.1 [SKELLETON Mix]', language: 'German', codec: 'Standard' },
+    { name: 'DTS-HD MA 5.1', language: 'German', codec: '' },
+    { name: 'DTS-HD MA 7.1', language: 'English', codec: '' },
+    { name: 'Audiokommentar m. Regisseur Chris Weitz DTS Stereo', language: 'English', codec: '' },
+]);
+
+const subtitleTracks = ref([
+    { name: 'Aus' },
+    { name: 'Deutsch Erzwungen', language: 'de', format: 'SubRip' },
+    { name: 'Deutsch', language: 'de', format: 'PGS' },
+    { name: 'Deutsch SDH', language: 'de', format: 'PGS' },
+    { name: 'English Forced', language: 'en', format: 'SubRip' },
+    { name: 'English', language: 'en', format: 'PGS' },
+    { name: 'English SDH', language: 'en', format: 'PGS' },
+    { name: 'French', language: 'fr', format: 'VobSub' }
+]);
+
+function selectAudioTrack(index: number) {
+    currentAudioTrack.value = index;
+
+    // HLS Audio Track wechseln
+    if (hls.value) {
+        // hls.value.audioTrack = index;
+    }
+}
+
+function selectSubtitleTrack(index: number) {
+    currentSubtitleTrack.value = index;
+
+    // HLS Audio Track wechseln
+    if (hls.value) {
+        // hls.value.audioTrack = index;
+    }
+}
 
 // Computed end time
 const endTime = computed(() => {
@@ -428,6 +525,9 @@ function handleKeyboard(e: KeyboardEvent) {
             toggleFullscreen();
             break;
         case 'Escape':
+            audioDialog.value?.close();
+            subtitleDialog.value?.close();
+
             if (document.fullscreenElement) {
                 document.exitFullscreen();
             } else {
@@ -590,5 +690,11 @@ defineExpose({
 </script>
 
 <style scoped lang="css">
+.dialog-backdrop::backdrop {
 
+}
+
+.dialog-backdrop[open]::backdrop {
+
+}
 </style>
