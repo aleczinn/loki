@@ -120,15 +120,15 @@
                                 </div>
 
                                 <div class="flex-1 flex flex-row gap-2 justify-end items-center">
-                                    <loki-player-button ref="audioTrackButtonRef"
-                                                        @click="audioDialog?.showModal()"
+                                    <loki-player-button ref="audioButtonRef"
+                                                        @click="openAudioDialog()"
                                                         :title="$t('player.soundtrack')"
                                     >
                                         <icon-music-note class="w-6 h-6" aria-hidden="true"/>
                                     </loki-player-button>
 
-                                    <loki-player-button ref="subtitleTrackButtonRef"
-                                                        @click="subtitleDialog?.showModal()"
+                                    <loki-player-button ref="subtitleButtonRef"
+                                                        @click="openSubtitleDialog"
                                                         :title="$t('player.captions')"
                                     >
                                         <icon-captions class="w-6 h-6" aria-hidden="true"/>
@@ -180,8 +180,7 @@
 
                 <!-- POPUP - Audio Tracks -->
                 <dialog ref="audioDialog"
-                        class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg z-popup p-4 dialog-backdrop"
-                        style="left: 50%;"
+                        class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg p-4 dialog-backdrop"
                         @click.self="audioDialog?.close();"
                 >
                     <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
@@ -205,8 +204,7 @@
 
                 <!-- POPUP - Subtitle Tracks -->
                 <dialog ref="subtitleDialog"
-                        class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg z-popup p-4 dialog-backdrop"
-                        style="left: 50%;"
+                        class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg p-4 dialog-backdrop"
                         @click.self="subtitleDialog?.close();"
                 >
                     <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
@@ -300,11 +298,11 @@ const currentFile = ref<MediaFile | null>(null);
 
 // Popups
 const audioDialog = ref<HTMLDialogElement | null>(null);
-const audioTButtonRef = ref<HTMLElement | null>(null);
+const audioButtonRef = ref<HTMLElement | null>(null);
 const currentAudioTrack = ref(0);
 
 const subtitleDialog = ref<HTMLDialogElement | null>(null);
-const subtitleTButtonRef = ref<HTMLElement | null>(null);
+const subtitleButtonRef = ref<HTMLElement | null>(null);
 const currentSubtitleTrack = ref(0);
 
 // TEMP
@@ -501,6 +499,26 @@ function formatTime(seconds: number): string {
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
+function handleResize() {
+    if (audioButtonRef.value && audioDialog.value) {
+        const dialog = audioDialog.value;
+        const el = (audioButtonRef.value as any)?.$el;
+        const rect = el.getBoundingClientRect();
+        const centerX = rect.left + (rect.width / 2);
+
+        dialog.style.left = `${centerX}px`;
+    }
+
+    if (subtitleButtonRef.value && subtitleDialog.value) {
+        const dialog = subtitleDialog.value;
+        const el = (subtitleButtonRef.value as any)?.$el;
+        const rect = el.getBoundingClientRect();
+        const centerX = rect.left + (rect.width / 2);
+
+        dialog.style.left = `${centerX}px`;
+    }
+}
+
 // Keyboard navigation
 function handleKeyboard(e: KeyboardEvent) {
     // Ignore if typing in input
@@ -597,6 +615,16 @@ function showControls() {
     }
 }
 
+function openAudioDialog() {
+    audioDialog.value?.showModal();
+    handleResize();
+}
+
+function openSubtitleDialog() {
+    subtitleDialog.value?.showModal();
+    handleResize();
+}
+
 // Window focus handling
 function handleWindowBlur() {
     // Instant hide
@@ -621,6 +649,7 @@ function onVideoEnd() {
 // Lifecycle
 onMounted(() => {
     document.addEventListener('keydown', handleKeyboard);
+    window.addEventListener('resize', handleResize);
     window.addEventListener('blur', handleWindowBlur);
     window.addEventListener('focus', handleWindowFocus);
 
@@ -634,6 +663,7 @@ onMounted(() => {
 
 onUnmounted(() => {
     document.removeEventListener('keydown', handleKeyboard);
+    window.removeEventListener('resize', handleResize);
     window.removeEventListener('blur', handleWindowBlur);
     window.removeEventListener('focus', handleWindowFocus);
 
