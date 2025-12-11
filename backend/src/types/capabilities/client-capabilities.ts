@@ -65,6 +65,7 @@ export interface DisplayCapability {
 // CLIENT
 export interface Client {
     userAgent: string;
+    ipAddress?: string;
     deviceModel: {
         name: string;       // "NVIDIA Shield", "Samsung Galaxy S23", etc.
         version?: string;    // specific device model or browser version
