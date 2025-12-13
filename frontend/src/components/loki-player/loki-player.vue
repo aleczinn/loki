@@ -30,14 +30,14 @@
                     <div>Mode: {{ playbackInfo.mode }}</div>
 
                     <div>Container: {{ playbackInfo.decision.container.sourceContainer }}</div>
-                    <div>Video: {{ playbackInfo.decision.video.action }} {{ playbackInfo.decision.video.sourceCodec }}</div>
+                    <div>Video: {{ playbackInfo.decision.video.action }} {{ playbackInfo.decision.video.sourceCodec }} <span v-if="playbackInfo.decision.video.targetCodec"> ->{{ playbackInfo.decision.video.targetCodec }}</span></div>
                     <div v-if="playbackInfo.decision.video.hwAccel" class="mb-2">
                         HW Accel: {{ playbackInfo.decision.video.hwAccel.toUpperCase() }}
                     </div>
-                    <div>
-                        Audio: {{ playbackInfo.decision.audio.action }} {{ playbackInfo.decision.audio.sourceCodec }}
-                        <span v-if="playbackInfo.decision.audio.reason">{{ playbackInfo.decision.audio.reason }}</span>
-                    </div>
+                    <span v-if="playbackInfo.decision.video.reason" class="ml-4 text-gray">{{ playbackInfo.decision.video.reason }}</span>
+
+                    <div>Audio: {{ playbackInfo.decision.audio.action }} {{ playbackInfo.decision.audio.sourceCodec }} <span v-if="playbackInfo.decision.audio.targetCodec"> ->{{ playbackInfo.decision.audio.targetCodec }}</span></div>
+                    <span v-if="playbackInfo.decision.audio.reason" class="ml-4 text-gray">{{ playbackInfo.decision.audio.reason }}</span>
                 </div>
 
                 <!-- Controls -->
@@ -412,11 +412,21 @@ async function openPlayer(file: MediaFile) {
     }
 }
 
-function closePlayer() {
+async function closePlayer() {
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
     }
+
+    // const mediaId = currentFile.value?.id;
+    //
+    // try {
+    //     console.log(`Try killing transcode with id ${mediaId}`);
+    //     const response = await axios?.get<MediaFile[]>(`/streaming/${mediaId}/kill`);
+    //     console.log("Killing session... ", response);
+    // } catch (err) {
+    //     console.error('Failed to load media files:', err);
+    // }
 
     isOpen.value = false;
     currentFile.value = null;

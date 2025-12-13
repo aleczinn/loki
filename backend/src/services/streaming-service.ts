@@ -47,7 +47,11 @@ interface QualityOptions {
 
 class StreamingService {
 
-    private hwAccelInfo: HWAccelInfo | null = null;
+    private hwAccelInfo: HWAccelInfo = {
+        available: ['cpu'],
+        preferred: 'cpu',
+        encoders: { h264: 'libx264', hevc: 'libx265' }
+    };
 
     private sessions: Map<string, StreamSession> = new Map();
     private activeJobs: Map<string, TranscodeJob> = new Map();
@@ -72,11 +76,6 @@ class StreamingService {
             this.hwAccelInfo = await hwAccelDetector.detect();
         } catch (error) {
             logger.ERROR(`Failed to detect hardware acceleration: ${error}`);
-            this.hwAccelInfo = {
-                available: ['cpu'],
-                preferred: 'cpu',
-                encoders: { h264: 'libx264', hevc: 'libx265' }
-            };
         }
     }
 
@@ -239,10 +238,17 @@ class StreamingService {
             throw new Error('FATAL: Something is wrong with the provided quality option!');
         }
 
-        const client = clientManager.getClient(session.token);
-
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
+
+        // Determine video encoder based on HW acceleration
+        const client = clientManager.getClient(session.token);
+        const hwType = this.hwAccelInfo?.preferred;
+        const videoEncoder = this.hwAccelInfo?.encoders.h264;
+        const preset = hwAccelDetector.getPreset(hwType, 'balanced');
+
+        logger.INFO(`Using ${hwType.toUpperCase()} encoder: ${videoEncoder}`);
+        logger.DEBUG(preset);
 
         // FFmpeg Arguments als Array
         const args = [
@@ -487,6 +493,10 @@ class StreamingService {
 
     getSessions(): Map<string, StreamSession> {
         return this.sessions;
+    }
+
+    getSession(sessionId: string) {
+        return this.sessions.get(sessionId);
     }
 
     /**
