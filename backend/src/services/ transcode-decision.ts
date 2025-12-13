@@ -68,7 +68,7 @@ export class TranscodeDecisionService {
 
         if (containerDecision.needsRemux && audioDecision.action === 'copy') {
             mode = 'direct_stream';
-        } else {
+        } else if (videoDecision.action === 'transcode' || audioDecision.action === 'transcode') {
             mode = 'transcode';
         }
 
