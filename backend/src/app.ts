@@ -15,7 +15,6 @@ import { logger } from "./logger";
 import { ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
 
-
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
 export const MEDIA_PATH = process.env.MEDIA_PATH ||  path.join(__dirname, '../../loki/media');
