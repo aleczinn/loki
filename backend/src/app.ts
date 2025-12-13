@@ -5,16 +5,16 @@ import { AddressInfo } from 'net';
 import errorHandler from "./middleware/error-handler";
 import dotenv from "dotenv";
 import * as path from 'path';
-import clientRoutes from "./routes/client-routes";
-import mediaRoutes from "./routes/media-routes";
-import streamingRoutes from "./routes/streaming-routes";
-import sessionRoutes from "./routes/session-routes";
 import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
 import { ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
-
+import clientRoutes from "./routes/client-routes";
+import mediaRoutes from "./routes/media-routes";
+import streamingRoutes from "./routes/streaming-routes";
+import sessionRoutes from "./routes/session-routes";
+import playbackRoutes from "./routes/playback-routes";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -47,6 +47,7 @@ app.use(clientRoutes);
 app.use(mediaRoutes);
 app.use(streamingRoutes);
 app.use(sessionRoutes);
+app.use(playbackRoutes);
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

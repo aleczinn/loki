@@ -7,8 +7,9 @@ import AsyncLock from "async-lock";
 import { clearDir, deleteFile, ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
 import { BLUE, CYAN, GREEN, MAGENTA, RED, RESET, sleep, YELLOW } from "../utils/utils";
 import { spawn, ChildProcess } from 'child_process';
-import ffmpegStatic from 'ffmpeg-static';
 import clientManager from "./client-manager";
+import hwAccelDetector, { HWAccelInfo } from "../utils/hardware-acceleration";
+import { FFMPEG_PATH } from "../utils/ffmpeg";
 
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
 export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
@@ -46,6 +47,12 @@ interface QualityOptions {
 
 class StreamingService {
 
+    private hwAccelInfo: HWAccelInfo = {
+        available: ['cpu'],
+        preferred: 'cpu',
+        encoders: { h264: 'libx264', hevc: 'libx265' }
+    };
+
     private sessions: Map<string, StreamSession> = new Map();
     private activeJobs: Map<string, TranscodeJob> = new Map();
 
@@ -60,6 +67,16 @@ class StreamingService {
 
         // TODO : Temp to clear transcode folder
         clearDir(TRANSCODE_PATH);
+
+        this.initHardwareAcceleration();
+    }
+
+    private async initHardwareAcceleration() {
+        try {
+            this.hwAccelInfo = await hwAccelDetector.detect();
+        } catch (error) {
+            logger.ERROR(`Failed to detect hardware acceleration: ${error}`);
+        }
     }
 
     async getOrCreateSession(file: MediaFile, quality: string, token?: string): Promise<StreamSession> {
@@ -198,13 +215,6 @@ class StreamingService {
     }
 
     private async startTranscode(session: StreamSession, startSegment: number): Promise<void> {
-        // Type-Check für ffmpegPath
-        if (!ffmpegStatic) {
-            throw new Error('FFmpeg binary not found. Please ensure ffmpeg-static is properly installed.');
-        }
-
-        const ffmpegPath: string = ffmpegStatic;
-
         const file = session.file;
         const jobId = crypto.randomBytes(8).toString('hex');
 
@@ -228,10 +238,17 @@ class StreamingService {
             throw new Error('FATAL: Something is wrong with the provided quality option!');
         }
 
-        const client = clientManager.getClient(session.token);
-
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
+
+        // Determine video encoder based on HW acceleration
+        const client = clientManager.getClient(session.token);
+        const hwType = this.hwAccelInfo?.preferred;
+        const videoEncoder = this.hwAccelInfo?.encoders.h264;
+        const preset = hwAccelDetector.getPreset(hwType, 'balanced');
+
+        logger.INFO(`Using ${hwType.toUpperCase()} encoder: ${videoEncoder}`);
+        logger.DEBUG(preset);
 
         // FFmpeg Arguments als Array
         const args = [
@@ -282,7 +299,7 @@ class StreamingService {
         };
 
         // FFmpeg spawnen
-        const ffmpegProcess: ChildProcess = spawn(ffmpegPath, args);
+        const ffmpegProcess: ChildProcess = spawn(FFMPEG_PATH, args);
         job.process = ffmpegProcess;
 
         logger.INFO(`${GREEN}Transcode started - start segment ${startSegment} [${session.id}]${RESET}`);
@@ -476,6 +493,10 @@ class StreamingService {
 
     getSessions(): Map<string, StreamSession> {
         return this.sessions;
+    }
+
+    getSession(sessionId: string) {
+        return this.sessions.get(sessionId);
     }
 
     /**

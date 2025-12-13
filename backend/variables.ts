@@ -1,0 +1,1 @@
+export const LOKI_TOKEN = 'X-Client-Token';

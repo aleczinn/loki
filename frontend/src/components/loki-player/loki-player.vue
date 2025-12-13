@@ -23,6 +23,23 @@
                     <p class="text-gray">Starte als Transkode</p>
                 </div>
 
+                <!-- Debug Info (optional, nur während Entwicklung) -->
+                <div v-if="playbackInfo"
+                     class="absolute top-20 left-4 bg-black/80 text-white p-4 rounded text-xs">
+                    <div class="font-bold mb-2">Playback Info</div>
+                    <div>Mode: {{ playbackInfo.mode }}</div>
+
+                    <div>Container: {{ playbackInfo.decision.container.sourceContainer }}</div>
+                    <div>Video: {{ playbackInfo.decision.video.action }} {{ playbackInfo.decision.video.sourceCodec }} <span v-if="playbackInfo.decision.video.targetCodec"> ->{{ playbackInfo.decision.video.targetCodec }}</span></div>
+                    <div v-if="playbackInfo.decision.video.hwAccel" class="mb-2">
+                        HW Accel: {{ playbackInfo.decision.video.hwAccel.toUpperCase() }}
+                    </div>
+                    <span v-if="playbackInfo.decision.video.reason" class="ml-4 text-gray">{{ playbackInfo.decision.video.reason }}</span>
+
+                    <div>Audio: {{ playbackInfo.decision.audio.action }} {{ playbackInfo.decision.audio.sourceCodec }} <span v-if="playbackInfo.decision.audio.targetCodec"> ->{{ playbackInfo.decision.audio.targetCodec }}</span></div>
+                    <span v-if="playbackInfo.decision.audio.reason" class="ml-4 text-gray">{{ playbackInfo.decision.audio.reason }}</span>
+                </div>
+
                 <!-- Controls -->
                 <div class="absolute inset-0"
                      :class="controlsVisible ? 'cursor-default' : 'cursor-none'"
@@ -239,7 +256,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -261,6 +278,8 @@ import IconMusicNote from "../../icons/icon-music-note.vue";
 import { LOKI_TOKEN, LOKI_VOLUME } from "../../variables.ts";
 import { LokiPlayerButton } from "../loki-player-button";
 import IconCheckmark from "../../icons/icon-checkmark.vue";
+import { type PlaybackInfo, PlaybackService } from "../../lib/playback-service.ts";
+import type { AxiosInstance } from "axios";
 
 interface VideoPlayerProps {
     quality?: string;
@@ -280,6 +299,11 @@ const emit = defineEmits<{
     closed: [];
     ended: [];
 }>();
+
+const playbackInfo = ref<PlaybackInfo | null>(null);
+const playbackMode = ref<'direct' | 'hls'>('hls');
+const axios = inject<AxiosInstance>('axios');
+const playbackService = new PlaybackService(axios!);
 
 // State
 const isOpen = ref(false);
@@ -361,6 +385,56 @@ const endTime = computed(() => {
     });
 });
 
+async function openPlayer(file: MediaFile) {
+    currentFile.value = file;
+    isOpen.value = true;
+
+    currentTime.value = 0;
+    buffered.value = 0;
+
+    try {
+        playbackInfo.value = await playbackService.getPlaybackInfo(file, props.quality);
+
+        const stats = playbackService.getTranscodeStatistics(playbackInfo.value);
+        console.log("Playback Statistics", stats);
+
+        playbackMode.value = playbackService.shouldUseHLS(playbackInfo.value) ? 'hls' : 'direct';
+
+        await nextTick();
+
+        if (playbackMode.value === 'hls') {
+            initHLS(playbackInfo.value.playbackUrl);
+        } else {
+            initDirectPlay(playbackInfo.value.playbackUrl);
+        }
+    } catch (error) {
+        console.error('Failed to get playback info:', error);
+    }
+}
+
+async function closePlayer() {
+    if (hls.value) {
+        hls.value.destroy();
+        hls.value = null;
+    }
+
+    // const mediaId = currentFile.value?.id;
+    //
+    // try {
+    //     console.log(`Try killing transcode with id ${mediaId}`);
+    //     const response = await axios?.get<MediaFile[]>(`/streaming/${mediaId}/kill`);
+    //     console.log("Killing session... ", response);
+    // } catch (err) {
+    //     console.error('Failed to load media files:', err);
+    // }
+
+    isOpen.value = false;
+    currentFile.value = null;
+    isPlaying.value = false;
+
+    emit('closed');
+}
+
 function initHLS(url: string) {
     if (hls.value) {
         hls.value.destroy();
@@ -408,30 +482,19 @@ function initHLS(url: string) {
     }
 }
 
-function openPlayer(file: MediaFile) {
-    currentFile.value = file;
-    isOpen.value = true;
+function initDirectPlay(url: string) {
+    if (!videoRef.value) return;
 
-    currentTime.value = 0;
-    buffered.value = 0;
-
-    nextTick(() => {
-        const url = `/api/streaming/${file.id}/${props.quality}/playlist.m3u8`
-        initHLS(url);
-    })
-}
-
-function closePlayer() {
+    // Clean up HLS if it exists
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
     }
 
-    isOpen.value = false;
-    currentFile.value = null;
-    isPlaying.value = false;
-
-    emit('closed');
+    // Use native video element
+    videoRef.value.src = url;
+    videoRef.value.volume = volume.value;
+    videoRef.value.play();
 }
 
 function togglePlayPause() {
