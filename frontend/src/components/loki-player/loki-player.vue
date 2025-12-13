@@ -18,6 +18,11 @@
                     </video>
                 </div>
 
+                <!-- Notification Widget -->
+                <div class="absolute top-8 left-1/2 -translate-1/2 w-fit bg-black-900 rounded-xl px-4 py-2 z-popup">
+                    <p class="text-gray">Starte als Transkode</p>
+                </div>
+
                 <!-- Controls -->
                 <div class="absolute inset-0"
                      :class="controlsVisible ? 'cursor-default' : 'cursor-none'"

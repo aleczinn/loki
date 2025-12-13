@@ -20,8 +20,6 @@ export const SEGMENT_PUFFER_LOOK_AHEAD = 3; // defined the number where to check
 export const SEGMENT_OVERLAP_THRESHOLD = 3; // segments distance to consider reusing a job
 export const SEEK_THRESHOLD = 3; // is the number in segments when to cancel a transcode while seeking
 
-let GLOBAL_INDEX = 0;
-
 interface TranscodeJob {
     id: string;
     sessionId: string;
