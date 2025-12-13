@@ -14,9 +14,7 @@ const router = Router();
 router.get('/api/streaming/:id/:quality/playlist.m3u8', async (req: Request, res: Response) => {
     try {
         const { id, quality } = req.params;
-        const token = req.headers['x-client-token'] as string
-            || req.query.token as string
-            || undefined;
+        const token = req.headers['x-client-token'] as string || req.query.token as string || undefined;
 
         const file = await findMediaFileById(id);
         if (!file) {
