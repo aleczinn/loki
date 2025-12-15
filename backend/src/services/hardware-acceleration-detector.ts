@@ -2,7 +2,7 @@
 
 import { ChildProcess, spawn } from 'child_process';
 import { logger } from '../logger';
-import { BLUE, GREEN, MAGENTA, RESET, WHITE, YELLOW } from "../utils/utils";
+import { BLUE, MAGENTA, RESET } from "../utils/utils";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
 import { FFMPEG_HWACCEL } from "../app";
 
