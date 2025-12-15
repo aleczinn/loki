@@ -18,7 +18,9 @@ import playbackRoutes from "./routes/playback-routes";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-export const MEDIA_PATH = process.env.MEDIA_PATH ||  path.join(__dirname, '../../loki/media');
+// export const MEDIA_PATH = process.env.MEDIA_PATH ||  path.join(__dirname, '../../loki/media');
+export const MEDIA_PATH = process.env.MEDIA_PATH ||  'unknown';
+export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'unknown';
 
 const app: Express = express();
 

@@ -4,6 +4,7 @@ import { ChildProcess, spawn } from 'child_process';
 import { logger } from '../logger';
 import { BLUE, GREEN, MAGENTA, RESET, WHITE, YELLOW } from "../utils/utils";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
+import { FFMPEG_HWACCEL } from "../app";
 
 export type HWAccelType = 'nvenc' | 'qsv' | 'vaapi' | 'amf' | 'cpu';
 export type VideoCodec = 'h264' | 'hevc' | 'av1' | 'vp8' | 'vp9';
@@ -227,7 +228,8 @@ export class HardwareAccelerationDetector {
      */
     private determinePreferred(available: HWAccelType[]): HWAccelType {
         // Check environment variable first
-        const envPref = process.env.FFMPEG_HWACCEL?.toLowerCase();
+        const envPref = FFMPEG_HWACCEL?.toLowerCase();
+
         if (envPref === 'nvenc' && available.includes('nvenc')) return 'nvenc';
         if (envPref === 'qsv' && available.includes('qsv')) return 'qsv';
         if (envPref === 'vaapi' && available.includes('vaapi')) return 'vaapi';
