@@ -1,5 +1,3 @@
-// backend/src/utils/hardware-acceleration.ts - FIXED PARSING
-
 import { ChildProcess, spawn } from 'child_process';
 import { logger } from '../logger';
 import { BLUE, MAGENTA, RESET } from "../utils/utils";
