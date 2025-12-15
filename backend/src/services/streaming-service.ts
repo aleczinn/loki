@@ -8,8 +8,8 @@ import { clearDir, deleteFile, ensureDir, ensureDirSync, pathExists, readFile, w
 import { BLUE, CYAN, GREEN, MAGENTA, RED, RESET, sleep, YELLOW } from "../utils/utils";
 import { spawn, ChildProcess } from 'child_process';
 import clientManager from "./client-manager";
-import hwAccelDetector, { HWAccelInfo } from "../utils/hardware-acceleration";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
+import hwAccelDetector, { HWAccelInfo } from "./hardware-acceleration-detector";
 
 export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
 export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
@@ -50,7 +50,13 @@ class StreamingService {
     private hwAccelInfo: HWAccelInfo = {
         available: ['cpu'],
         preferred: 'cpu',
-        encoders: { h264: 'libx264', hevc: 'libx265' }
+        encoders: {
+            cpu: {},
+            nvenc: {},
+            qsv: {},
+            vaapi: {},
+            amf: {}
+        }
     };
 
     private sessions: Map<string, StreamSession> = new Map();
@@ -243,12 +249,12 @@ class StreamingService {
 
         // Determine video encoder based on HW acceleration
         const client = clientManager.getClient(session.token);
-        const hwType = this.hwAccelInfo?.preferred;
-        const videoEncoder = this.hwAccelInfo?.encoders.h264;
-        const preset = hwAccelDetector.getPreset(hwType, 'balanced');
+        // const hwType = this.hwAccelInfo?.preferred;
+        // const videoEncoder = this.hwAccelInfo?.encoders.h264;
+        // const preset = hwAccelDetector.getPreset(hwType, 'balanced');
 
-        logger.INFO(`Using ${hwType.toUpperCase()} encoder: ${videoEncoder}`);
-        logger.DEBUG(preset);
+        // logger.INFO(`Using ${hwType.toUpperCase()} encoder: ${videoEncoder}`);
+        // logger.DEBUG(preset);
 
         // FFmpeg Arguments als Array
         const args = [

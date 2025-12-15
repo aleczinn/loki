@@ -93,6 +93,8 @@ router.get('/api/streaming/:id/kill', async (req: Request, res: Response) => {
             || req.query.token as string
             || undefined;
 
+        // streamingService.get
+
     } catch (error) {
         logger.ERROR(`Error killing session: ${error}`);
         res.status(500).json({ error: 'Failed to kill session' });
