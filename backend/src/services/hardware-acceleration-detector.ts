@@ -38,51 +38,55 @@ export class HardwareAccelerationDetector {
 
         logger.INFO('🔍 Detecting hardware acceleration capabilities...');
 
-        // Get all available encoders from FFmpeg
+        const available = await this.detectHWTypes();
         const allEncoders = await this.getAllEncoders();
 
-        const available: HWAccelType[] = ['cpu']; // CPU always available
-        const encodersByType: HWAccelInfo['encoders'] = {
-            cpu: {},
-            nvenc: {},
-            qsv: {},
-            vaapi: {},
-            amf: {}
-        };
+        const encodersByType = {
+            cpu:{}, nvenc:{}, qsv:{}, vaapi:{}, amf:{}
+        } as HWAccelInfo['encoders'];
 
-        // Categorize encoders by hardware type
-        for (const encoder of allEncoders) {
-            const hwType = this.detectHWType(encoder.name);
-            const codec = this.detectCodec(encoder.name);
-
-            if (hwType && codec) {
-                encoder.hwType = hwType;
-                encoder.codec = codec;
-                encodersByType[hwType][codec] = encoder;
-
-                // Mark hw type as available
-                if (hwType !== 'cpu' && !available.includes(hwType)) {
-                    available.push(hwType);
-                }
+        for (const enc of allEncoders) {
+            const hw = this.detectHWType(enc.name);
+            const codec = this.detectCodec(enc.name);
+            if (hw && codec && available.includes(hw)) {
+                enc.hwType = hw;
+                enc.codec = codec;
+                encodersByType[hw][codec] = enc;
             }
         }
 
-        // Log detected hardware
-        this.logDetectedHardware(available, encodersByType);
-
-        // Determine preferred hardware
         const preferred = this.determinePreferred(available);
 
-        const info: HWAccelInfo = {
-            available,
-            preferred,
-            encoders: encodersByType
-        };
+        this.cachedInfo = { available, preferred, encoders: encodersByType };
 
-        this.cachedInfo = info;
-        logger.INFO(`✅ Hardware Acceleration: Using ${preferred.toUpperCase()}`);
+        this.logDetectedHardware(available, encodersByType);
+        logger.INFO(`✅ Using ${preferred.toUpperCase()}`);
 
-        return info;
+        return this.cachedInfo;
+    }
+
+    private logEncoderFailure(
+        hwType: HWAccelType,
+        encoder: string,
+        stderr: string
+    ) {
+        const out = stderr.toLowerCase();
+
+        let reason = 'hardware not available';
+
+        if (out.includes('unknown encoder')) {
+            reason = 'encoder not compiled into ffmpeg';
+        } else if (out.includes('no device') || out.includes('no capable device')) {
+            reason = 'no compatible hardware device found';
+        } else if (out.includes('failed to initialize') || out.includes('init failed')) {
+            reason = 'failed to initialize hardware encoder';
+        } else if (out.includes('not supported')) {
+            reason = 'encoder not supported by this hardware';
+        }
+
+        logger.WARNING(
+            `${hwType.toUpperCase()} test failed for ${encoder}: ${reason}`
+        );
     }
 
     /**
@@ -165,6 +169,66 @@ export class HardwareAccelerationDetector {
                     resolve(encoders);
                 }
             }, 5000);
+        });
+    }
+
+    private async detectHWTypes(): Promise<HWAccelType[]> {
+        const available: HWAccelType[] = ['cpu'];
+
+        const tests: Record<HWAccelType, string> = {
+            nvenc: 'h264_nvenc',
+            qsv:   'h264_qsv',
+            vaapi:'h264_vaapi',
+            amf:  'h264_amf',
+            cpu:  'libx264'
+        };
+
+        for (const [hw, encoder] of Object.entries(tests)) {
+            if (hw === 'cpu') continue;
+
+            const ok = await this.testEncoder(encoder, hw as HWAccelType);
+            if (ok) available.push(hw as HWAccelType);
+        }
+
+        return available;
+    }
+
+    private async testEncoder(encoder: string, hwType: HWAccelType): Promise<boolean> {
+        return new Promise(resolve => {
+            const args = [
+                '-f','lavfi',
+                '-i','testsrc=duration=0.1:size=512x512:rate=1',
+                '-frames:v','1',
+                '-c:v', encoder,
+                '-f','null','-'
+            ];
+
+            const p = spawn(FFMPEG_PATH, args);
+            let stderr = '';
+
+            p.stderr?.on('data', d => stderr += d.toString());
+
+            p.on('close', code => {
+                if (code !== 0) {
+                    this.logEncoderFailure(hwType, encoder, stderr);
+                    return resolve(false);
+                }
+
+                const fatal = [
+                    'not supported',
+                    'no device',
+                    'failed to initialize',
+                    'no amf capable device',
+                    'unknown encoder'
+                ];
+
+                resolve(!fatal.some(f => stderr.toLowerCase().includes(f)));
+            });
+
+            setTimeout(() => {
+                if (!p.killed) p.kill();
+                resolve(false);
+            }, 2500);
         });
     }
 
