@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'child_process';
 import { logger } from '../logger';
-import { BLUE, MAGENTA, RESET } from "../utils/utils";
+import { BLUE, MAGENTA, RESET, WHITE } from "../utils/utils";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
 import { FFMPEG_HWACCEL } from "../app";
 
@@ -60,7 +60,7 @@ export class HardwareAccelerationDetector {
         this.cachedInfo = { available, preferred, encoders: encodersByType };
 
         this.logDetectedHardware(available, encodersByType);
-        logger.INFO(`✅ Using ${preferred.toUpperCase()}`);
+        logger.INFO(`${WHITE}Using ${preferred.toUpperCase()}${RESET}`);
 
         return this.cachedInfo;
     }
