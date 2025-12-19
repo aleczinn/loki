@@ -256,7 +256,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -385,30 +385,34 @@ const endTime = computed(() => {
     });
 });
 
-async function openPlayer(file: MediaFile) {
+async function openPlayer(file: MediaFile, quality: string = 'original') {
     currentFile.value = file;
     isOpen.value = true;
 
     currentTime.value = 0;
     buffered.value = 0;
 
-    try {
-        playbackInfo.value = await playbackService.getPlaybackInfo(file, props.quality);
+    const response = await axios?.get(`/playback/${file.id}/${quality}/start`);
+    const session = response?.data;
 
-        const stats = playbackService.getTranscodeStatistics(playbackInfo.value);
-        console.log("Playback Statistics", stats);
+    console.log(session);
 
-        playbackMode.value = playbackService.shouldUseHLS(playbackInfo.value) ? 'hls' : 'direct';
+    const token = sessionStorage.getItem(LOKI_TOKEN);
+    const url = `${session.streamUrl}?token=${token}`;
 
-        await nextTick();
-
-        if (playbackMode.value === 'hls') {
-            initHLS(playbackInfo.value.playbackUrl);
-        } else {
-            initDirectPlay(playbackInfo.value.playbackUrl);
+    switch (session.mode) {
+        case 'direct_play':
+        case 'direct_remux':
+            // Native <video> Element
+            initNativePlayer(url);
+            break;
+        case 'transcode':
+            // HLS.js Player
+            initHLSPlayer(url);
+            break;
+        default: {
+            console.error("No player mode defined!");
         }
-    } catch (error) {
-        console.error('Failed to get playback info:', error);
     }
 }
 
@@ -435,7 +439,25 @@ async function closePlayer() {
     emit('closed');
 }
 
-function initHLS(url: string) {
+function initNativePlayer(url: string) {
+    if (!videoRef.value) return;
+
+    // Clean up HLS if it exists
+    if (hls.value) {
+        hls.value.destroy();
+        hls.value = null;
+    }
+
+    // Token an URL anhängen
+    // Use native video element
+    videoRef.value.src = url;
+    videoRef.value.volume = volume.value;
+    videoRef.value.play();
+
+    console.log("init native player");
+}
+
+function initHLSPlayer(url: string) {
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
@@ -480,21 +502,6 @@ function initHLS(url: string) {
         videoRef.value.src = url;
         videoRef.value.play();
     }
-}
-
-function initDirectPlay(url: string) {
-    if (!videoRef.value) return;
-
-    // Clean up HLS if it exists
-    if (hls.value) {
-        hls.value.destroy();
-        hls.value = null;
-    }
-
-    // Use native video element
-    videoRef.value.src = url;
-    videoRef.value.volume = volume.value;
-    videoRef.value.play();
 }
 
 function togglePlayPause() {
@@ -765,7 +772,7 @@ watch(volume, (newVal) => {
 
 defineExpose({
     play(file: MediaFile) {
-        openPlayer(file);
+        openPlayer(file, 'original');
     },
     pause() {
         videoRef.value?.pause();

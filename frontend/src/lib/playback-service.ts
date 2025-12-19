@@ -3,7 +3,7 @@ import type { MediaFile } from "../types/media.ts";
 
 export interface PlaybackInfo {
     mediaId: string;
-    mode: 'direct_play' | 'direct_stream' | 'transcode';
+    mode: 'direct_play' | 'direct_remux' | 'transcode';
     playbackUrl: string;
     decision: {
         video: {
@@ -72,7 +72,7 @@ export class PlaybackService {
         if (info.mode === 'direct_play') {
             stats.push('✓ Direct Play - No transcoding needed');
             stats.push(...info.statistics.directPlayReasons);
-        } else if (info.mode === 'direct_stream') {
+        } else if (info.mode === 'direct_remux') {
             stats.push('⚡ Direct Stream - Container remux only');
             stats.push(...info.statistics.remuxReasons);
         } else {

@@ -1,7 +1,7 @@
 import { MediaFile } from "../types/media-file";
 import { ClientCapabilities, MediaVideoCodec, MediaAudioCodec } from "../types/capabilities/client-capabilities";
 
-export type StreamMode = 'direct_play' | 'direct_stream' | 'transcode';
+export type StreamMode = 'direct_play' | 'direct_remux' | 'transcode';
 export type GenericStreamingType = 'copy' | 'transcode';
 export type SubtitleStreamingType = 'copy' | 'burn_in' | 'none';
 
@@ -67,7 +67,7 @@ export class TranscodeDecisionService {
         let mode: StreamMode = 'direct_play';
 
         if (containerDecision.needsRemux && audioDecision.action === 'copy') {
-            mode = 'direct_stream';
+            mode = 'direct_remux';
         } else if (videoDecision.action === 'transcode' || audioDecision.action === 'transcode') {
             mode = 'transcode';
         }

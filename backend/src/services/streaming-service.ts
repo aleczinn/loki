@@ -405,6 +405,11 @@ class StreamingService {
      * Get quality settings based on preset
      */
     private getQualityOptions(quality: string): QualityOptions | null {
+        if (quality == 'original') {
+            quality = '1080p_20mbps';
+            logger.WARNING("Adjust quality 'original' to 1080p_20mbps!");
+        }
+
         const settings: Record<string, QualityOptions> = {
             '1080p_20mbps': {
                 videoOptions: [
