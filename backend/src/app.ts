@@ -8,7 +8,7 @@ import * as path from 'path';
 import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
-import { ensureDirSync } from "./utils/file-utils";
+import { clearDir, clearDirSync, ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
 import clientRoutes from "./routes/client-routes";
 import mediaRoutes from "./routes/media-routes";
@@ -18,7 +18,10 @@ import playbackRoutes from "./routes/playback-routes";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-export const MEDIA_PATH = process.env.MEDIA_PATH ||  path.join(__dirname, '../../loki/media');
+export const MEDIA_PATH = process.env.MEDIA_PATH || path.join(__dirname, '../../../loki/media');
+export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
+export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
+export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'unknown';
 
 const app: Express = express();
 
@@ -74,8 +77,16 @@ const server = app.listen(3000, () => {
         const port: number = address.port;
 
         console.log(`Listening on http://${host}:${port}`);
+
         logger.INFO(`Media path: ${MEDIA_PATH}`);
         ensureDirSync(MEDIA_PATH);
+
+        logger.INFO(`Transcode path: ${TRANSCODE_PATH}`);
+        ensureDirSync(TRANSCODE_PATH);
+
+        logger.INFO(`Metadata path: ${METADATA_PATH}`);
+        ensureDirSync(METADATA_PATH);
+        clearDirSync(TRANSCODE_PATH);
     }
 });
 
