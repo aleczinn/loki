@@ -1,4 +1,4 @@
-import { BaseTrack } from './mediainfo/base-track'
+import { BaseTrack } from './base-track'
 
 export interface GeneralTrack extends BaseTrack {
     '@type': 'General';

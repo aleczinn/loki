@@ -4,16 +4,13 @@ import ffmpeg from 'fluent-ffmpeg';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
-import { clearDir, deleteFile, ensureDir, ensureDirSync, pathExists, readFile, writeFile } from "../utils/file-utils";
-import { BLUE, CYAN, GREEN, MAGENTA, RED, RESET, sleep, YELLOW } from "../utils/utils";
+import { deleteFile, ensureDir, pathExists, readFile, writeFile } from "../utils/file-utils";
+import { BLUE, GREEN, MAGENTA, RESET, sleep, YELLOW } from "../utils/utils";
 import { spawn, ChildProcess } from 'child_process';
 import clientManager from "./client-manager";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
-import hwAccelDetector, { HWAccelInfo } from "./hardware-acceleration-detector";
-
-export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
-export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
-export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'auto';
+import hwAccelDetector, { DEFAULT_HWACCELINFO, HWAccelInfo } from "./hardware-acceleration-detector";
+import { TRANSCODE_PATH } from "../app";
 
 export const SEGMENT_DURATION = 4; // seconds per segment
 export const SEGMENT_PUFFER_COUNT = 10; // is the number how many segments could technically be created in one transcoding call
@@ -47,17 +44,7 @@ interface QualityOptions {
 
 class StreamingService {
 
-    private hwAccelInfo: HWAccelInfo = {
-        available: ['cpu'],
-        preferred: 'cpu',
-        encoders: {
-            cpu: {},
-            nvenc: {},
-            qsv: {},
-            vaapi: {},
-            amf: {}
-        }
-    };
+    private hwAccelInfo: HWAccelInfo = DEFAULT_HWACCELINFO;
 
     private sessions: Map<string, StreamSession> = new Map();
     private activeJobs: Map<string, TranscodeJob> = new Map();
@@ -65,15 +52,6 @@ class StreamingService {
     private lock = new AsyncLock();
 
     constructor() {
-        logger.INFO(`Transcode path: ${TRANSCODE_PATH}`);
-        logger.INFO(`Metadata path: ${METADATA_PATH}`);
-
-        ensureDirSync(TRANSCODE_PATH);
-        ensureDirSync(METADATA_PATH);
-
-        // TODO : Temp to clear transcode folder
-        clearDir(TRANSCODE_PATH);
-
         this.initHardwareAcceleration();
     }
 

@@ -6,7 +6,7 @@ import { pathExists, stat } from "../utils/file-utils";
 import fs from "fs";
 import clientManager from "../services/client-manager";
 import { spawn } from "child_process";
-import transcodeDecisionService from "../services/ transcode-decision";
+import transcodeDecisionService from "../services/transcode-decision";
 
 const router = Router();
 

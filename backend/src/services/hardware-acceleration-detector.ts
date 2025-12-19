@@ -24,6 +24,18 @@ export interface HWAccelInfo {
     };
 }
 
+export const DEFAULT_HWACCELINFO: HWAccelInfo = {
+    available: ['cpu'],
+    preferred: 'cpu',
+    encoders: {
+        cpu: {},
+        nvenc: {},
+        qsv: {},
+        vaapi: {},
+        amf: {}
+    }
+}
+
 export class HardwareAccelerationDetector {
 
     private cachedInfo: HWAccelInfo | null = null;
@@ -36,7 +48,7 @@ export class HardwareAccelerationDetector {
             return this.cachedInfo;
         }
 
-        logger.INFO('🔍 Detecting hardware acceleration capabilities...');
+        logger.INFO('Detecting hardware acceleration capabilities...');
 
         const available = await this.detectHWTypes();
         const allEncoders = await this.getAllEncoders();
@@ -60,16 +72,12 @@ export class HardwareAccelerationDetector {
         this.cachedInfo = { available, preferred, encoders: encodersByType };
 
         this.logDetectedHardware(available, encodersByType);
-        logger.INFO(`${WHITE}Using ${preferred.toUpperCase()}${RESET}`);
+        logger.INFO(`${WHITE}Preferred encoder: ${preferred.toUpperCase()}${RESET}`);
 
         return this.cachedInfo;
     }
 
-    private logEncoderFailure(
-        hwType: HWAccelType,
-        encoder: string,
-        stderr: string
-    ) {
+    private logEncoderFailure(hwType: HWAccelType, encoder: string, stderr: string) {
         const out = stderr.toLowerCase();
 
         let reason = 'hardware not available';
@@ -152,7 +160,7 @@ export class HardwareAccelerationDetector {
                 }
 
                 finished = true;
-                logger.DEBUG(`Found ${encoders.length} relevant encoders`);
+                logger.INFO(`Found ${encoders.length} relevant encoders`);
                 resolve(encoders);
             });
 
@@ -478,3 +486,6 @@ export class HardwareAccelerationDetector {
 
 const hwAccelDetector = new HardwareAccelerationDetector();
 export default hwAccelDetector;
+
+export class DEFAULT {
+}

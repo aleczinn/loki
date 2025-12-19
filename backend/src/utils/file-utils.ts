@@ -78,6 +78,15 @@ export async function clearDir(path: string) {
     }
 }
 
+export function clearDirSync(path: string) {
+    try {
+        fs.rmSync(path, { recursive: true, force: true });
+        fs.mkdirSync(path, { recursive: true });
+    } catch (error) {
+        logger.ERROR(`${RED}Error: ${error}${RESET}`);
+    }
+}
+
 /**
  * Deletes a file if it exists.
  */

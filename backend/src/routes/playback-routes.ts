@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { findMediaFileById } from "../utils/media-utils";
 import { logger } from "../logger";
 import clientManager from "../services/client-manager";
-import transcodeDecisionService from "../services/ transcode-decision";
+import transcodeDecisionService from "../services/transcode-decision";
 
 const router = Router();
 

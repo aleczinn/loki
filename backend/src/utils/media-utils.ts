@@ -2,8 +2,8 @@ import mediaInfoFactory from 'mediainfo.js'
 import fs from 'fs'
 import path from 'path'
 import ffmpeg from 'fluent-ffmpeg'
-import { MediaMetadata } from "../types/media-metadata";
-import { GeneralTrack } from "../types/general-track";
+import { Mediainfo } from "../types/mediainfo/mediainfo";
+import { GeneralTrack } from "../types/mediainfo/general-track";
 import { VideoTrack } from "../types/mediainfo/video-track";
 import { SubtitleTrack } from "../types/mediainfo/subtitle-track";
 import { BaseTrack } from "../types/mediainfo/base-track";
@@ -66,7 +66,7 @@ export async function getMetaDataFFprobe(path: string): Promise<string> {
     })
 }
 
-export async function getCombinedMetadata(path: string): Promise<MediaMetadata | null> {
+export async function getCombinedMetadata(path: string): Promise<Mediainfo | null> {
     const [mediaInfoData, ffprobeDataString] = await Promise.all([
         getMetaDataMediaInfo(path),
         getMetaDataFFprobe(path)

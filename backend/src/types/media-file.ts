@@ -1,4 +1,4 @@
-import { MediaMetadata } from "./media-metadata";
+import { Mediainfo } from "./mediainfo/mediainfo";
 
 export interface MediaFile {
     id: string;
@@ -6,6 +6,6 @@ export interface MediaFile {
     path: string;
     size: number;
     extension: string;
-    metadata: MediaMetadata | null;
+    metadata: Mediainfo | null;
     modified: Date;
 }
