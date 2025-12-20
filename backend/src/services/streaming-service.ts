@@ -44,24 +44,10 @@ interface QualityOptions {
 
 class StreamingService {
 
-    private hwAccelInfo: HWAccelInfo = DEFAULT_HWACCELINFO;
-
     private sessions: Map<string, StreamSession> = new Map();
     private activeJobs: Map<string, TranscodeJob> = new Map();
 
     private lock = new AsyncLock();
-
-    constructor() {
-        this.initHardwareAcceleration();
-    }
-
-    private async initHardwareAcceleration() {
-        try {
-            this.hwAccelInfo = await hwAccelDetector.detect();
-        } catch (error) {
-            logger.ERROR(`Failed to detect hardware acceleration: ${error}`);
-        }
-    }
 
     async getOrCreateSession(file: MediaFile, quality: string, token?: string): Promise<StreamSession> {
         const sessionToken = token || 'no-token-found';

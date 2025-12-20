@@ -15,6 +15,7 @@ import mediaRoutes from "./routes/media-routes";
 import streamingRoutes from "./routes/streaming-routes";
 import sessionRoutes from "./routes/session-routes";
 import playbackRoutes from "./routes/playback-routes";
+import hwAccelDetector from "./services/hardware-acceleration-detector";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -68,7 +69,7 @@ process.on('SIGINT', async () => {
 app.use(undefinedRouteHandler);
 app.use(errorHandler);
 
-const server = app.listen(3000, () => {
+const server = app.listen(3000, async () => {
     const address = server.address() as AddressInfo;
 
     if (address && 'address' in address) {
@@ -87,6 +88,8 @@ const server = app.listen(3000, () => {
         logger.INFO(`Metadata path: ${METADATA_PATH}`);
         ensureDirSync(METADATA_PATH);
         clearDirSync(TRANSCODE_PATH);
+
+        await hwAccelDetector.detect();
     }
 });
 
