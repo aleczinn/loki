@@ -3,9 +3,9 @@ import { logger } from '../logger';
 import { BLUE, MAGENTA, RESET, WHITE } from "../utils/utils";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
 import { FFMPEG_HWACCEL } from "../app";
+import { VideoCodec } from "../types/media";
 
 export type HWAccelType = 'nvenc' | 'qsv' | 'vaapi' | 'amf' | 'cpu';
-export type VideoCodec = 'h264' | 'hevc' | 'av1' | 'vp8' | 'vp9';
 
 export interface EncoderInfo {
     name: string;           // e.g., "h264_nvenc"

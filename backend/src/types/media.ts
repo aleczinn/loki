@@ -1,0 +1,1 @@
+export type VideoCodec = 'h264' | 'hevc' | 'hevc_10bit' | 'vc1' | 'mpeg2' | 'vp8' | 'vp9' | 'vp9_10bit' | 'av1';

@@ -1,8 +1,8 @@
 import { MediaVideoCodec } from "./types/capabilities/client-capabilities";
+import { VideoCodec } from "./types/media";
 
 export type HardwareAcceleration = 'none' | 'intel_quick_sync' | 'nvidia_nvenc';
 export const renderDevice = '/dev/dri/renderD128';
-export type VideoCodec = 'h264' | 'hevc' | 'hevc_10bit' | 'vc1' | 'mpeg2' | 'vp8' | 'vp9' | 'vp9_10bit' | 'av1';
 export const supportedCodecsForHardwareAcceleration: VideoCodec[] = ['h264', 'hevc', 'hevc_10bit', 'vp9', 'vp9_10bit', 'av1'];
 
 export const supportEncodingInHEVC: boolean = true;
