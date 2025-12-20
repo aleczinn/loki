@@ -19,9 +19,9 @@ import hwAccelDetector from "./services/hardware-acceleration-detector";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
-export const MEDIA_PATH = process.env.MEDIA_PATH || path.join(__dirname, '../../../loki/media');
-export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/transcode');
-export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/metadata');
+export const MEDIA_PATH = process.env.MEDIA_PATH || path.join(__dirname, '../../../loki/loki/media');
+export const TRANSCODE_PATH = process.env.TRANSCODE_PATH || path.join(__dirname, '../../../loki/loki/transcode');
+export const METADATA_PATH = process.env.METADATA_PATH || path.join(__dirname, '../../../loki/loki/metadata');
 export const FFMPEG_HWACCEL = process.env.FFMPEG_HWACCEL || 'unknown';
 
 const app: Express = express();
