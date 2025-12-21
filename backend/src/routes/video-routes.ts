@@ -5,6 +5,7 @@ import clientManager from "../services/client-manager";
 import { pathExists, stat } from "../utils/file-utils";
 import streamingService from "../services/streaming-service";
 import fs from "fs";
+import { spawn } from "child_process";
 
 const router = Router();
 
@@ -47,7 +48,7 @@ router.get('/api/videos/:id/master.m3u8', async (req: Request, res: Response) =>
                 return await handleDirectPlay(req, res, file, range);
             case 'direct_remux':
                 console.log("use direct remux");
-                break;
+                return await handleDirectRemux(req, res, file);
             case 'transcode':
                 console.log("use transcode");
                 break;
@@ -157,6 +158,62 @@ async function handleDirectPlay(req: Request, res: Response, file: any, range?: 
             }
         });
     }
+}
+
+/**
+ * Handle Direct Remux - remux container on-the-fly using FFmpeg
+ * No video/audio transcoding, just container conversion (e.g., MKV → MP4)
+ */
+async function handleDirectRemux(req: Request, res: Response, file: any): Promise<void> {
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
+
+    // FFmpeg command for remuxing (no transcoding)
+    const ffmpeg = spawn('ffmpeg', [
+        '-i', file.path,
+
+        // Copy streams without re-encoding
+        '-c:v', 'copy',
+        '-c:a', 'copy',
+        '-c:s', 'copy',
+
+        // Output format
+        '-f', 'mp4',
+        '-movflags', 'frag_keyframe+empty_moov+faststart',
+
+        // Pipe to stdout
+        'pipe:1'
+    ]);
+
+    // Pipe FFmpeg output to response
+    ffmpeg.stdout.pipe(res);
+
+    // Handle errors
+    ffmpeg.stderr.on('data', (data: any) => {
+        logger.DEBUG(`FFmpeg remux: ${data.toString()}`);
+    });
+
+    ffmpeg.on('error', (error: any) => {
+        logger.ERROR(`FFmpeg remux error: ${error}`);
+        if (!res.headersSent) {
+            res.status(500).end();
+        }
+    });
+
+    ffmpeg.on('close', (code: any) => {
+        if (code !== 0) {
+            logger.ERROR(`FFmpeg remux exited with code ${code}`);
+        } else {
+            logger.DEBUG(`Direct Remux completed for ${file.name}`);
+        }
+    });
+
+    // Handle client disconnect
+    req.on('close', () => {
+        logger.DEBUG('Client disconnected, killing FFmpeg remux');
+        ffmpeg.kill('SIGKILL');
+    });
 }
 
 /**
