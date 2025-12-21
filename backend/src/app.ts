@@ -12,10 +12,12 @@ import { clearDir, clearDirSync, ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
 import clientRoutes from "./routes/client-routes";
 import mediaRoutes from "./routes/media-routes";
+import videoRoutes from "./routes/video-routes";
+
 import streamingRoutes from "./routes/streaming-routes";
 import sessionRoutes from "./routes/session-routes";
-import playbackRoutes from "./routes/playback-routes";
 import hwAccelDetector from "./services/hardware-acceleration-detector";
+
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -49,9 +51,11 @@ app.get('/health', (req, res) => {
 
 app.use(clientRoutes);
 app.use(mediaRoutes);
+app.use(videoRoutes);
+
+// TODO : REMOVE
 app.use(streamingRoutes);
 app.use(sessionRoutes);
-app.use(playbackRoutes);
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

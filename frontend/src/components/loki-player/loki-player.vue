@@ -256,7 +256,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -385,35 +385,47 @@ const endTime = computed(() => {
     });
 });
 
-async function openPlayer(file: MediaFile, quality: string = 'original') {
+async function openPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
 
     currentTime.value = 0;
     buffered.value = 0;
 
-    const response = await axios?.get(`/playback/${file.id}/${quality}/start`);
-    const session = response?.data;
+    await nextTick();
 
-    console.log(session);
-
-    const token = sessionStorage.getItem(LOKI_TOKEN);
-    const url = `${session.streamUrl}?token=${token}`;
-
-    switch (session.mode) {
-        case 'direct_play':
-        case 'direct_remux':
-            // Native <video> Element
-            initNativePlayer(url);
-            break;
-        case 'transcode':
-            // HLS.js Player
-            initHLSPlayer(url);
-            break;
-        default: {
-            console.error("No player mode defined!");
-        }
+    if (!videoRef.value) {
+        console.error("videoRef still null after nextTick()");
+        return;
     }
+
+    const profile = 'original';
+    const token = sessionStorage.getItem(LOKI_TOKEN);
+    const url = `/videos/${file.id}/master.m3u8?token=${token}&profile=${profile}`;
+    const nativeURL = `/api/${url}`;
+
+    cleanup();
+
+    videoRef.value.src = nativeURL;
+    videoRef.value.volume = volume.value;
+
+    videoRef.value.play().catch(() => {
+        console.log("Abspielen mit native player fehlgeschlagen! Wechsle zu HLS");
+        initHLSPlayer(url);
+    });
+}
+
+function cleanup() {
+    if (hls.value) {
+        hls.value.destroy();
+        hls.value = null;
+    }
+
+    // if (videoRef.value) {
+    //     videoRef.value.pause();
+    //     videoRef.value.removeAttribute("src");
+    //     videoRef.value.load();
+    // }
 }
 
 async function closePlayer() {
@@ -422,39 +434,11 @@ async function closePlayer() {
         hls.value = null;
     }
 
-    // const mediaId = currentFile.value?.id;
-    //
-    // try {
-    //     console.log(`Try killing transcode with id ${mediaId}`);
-    //     const response = await axios?.get<MediaFile[]>(`/streaming/${mediaId}/kill`);
-    //     console.log("Killing session... ", response);
-    // } catch (err) {
-    //     console.error('Failed to load media files:', err);
-    // }
-
     isOpen.value = false;
     currentFile.value = null;
     isPlaying.value = false;
 
     emit('closed');
-}
-
-function initNativePlayer(url: string) {
-    if (!videoRef.value) return;
-
-    // Clean up HLS if it exists
-    if (hls.value) {
-        hls.value.destroy();
-        hls.value = null;
-    }
-
-    // Token an URL anhängen
-    // Use native video element
-    videoRef.value.src = url;
-    videoRef.value.volume = volume.value;
-    videoRef.value.play();
-
-    console.log("init native player");
 }
 
 function initHLSPlayer(url: string) {
@@ -465,42 +449,42 @@ function initHLSPlayer(url: string) {
 
     if (!videoRef.value) return;
 
-    if (Hls.isSupported()) {
-        hls.value = new Hls({
-            debug: false,
-            enableWorker: true,
-            lowLatencyMode: false,
-            backBufferLength: 60,
-            maxBufferLength: 60,
-            autoStartLoad: true,
-            xhrSetup: (xhr: XMLHttpRequest, _: string) => {
-                const token = sessionStorage.getItem(LOKI_TOKEN);
+    if (!Hls.isSupported()) {
+        console.error("HLS not supported");
+        return;
+    }
 
-                if (token) {
-                    xhr.setRequestHeader('X-Client-Token', token);
-                }
+    hls.value = new Hls({
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 60,
+        maxBufferLength: 60,
+        autoStartLoad: true,
+        xhrSetup: (xhr: XMLHttpRequest, _: string) => {
+            const token = sessionStorage.getItem(LOKI_TOKEN);
+
+            if (token) {
+                xhr.setRequestHeader('X-Client-Token', token);
             }
-        });
-
-        hls.value.loadSource(url);
-        hls.value.attachMedia(videoRef.value);
-        hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoRef.value!.play();
-        });
-
-        // Handle HLS errors
-        hls.value.on(Hls.Events.ERROR, (_, data) => {
-            if (data.fatal) {
-                console.error('Fatal HLS error:', data);
-            }
-        });
-
-        if (videoRef.value) {
-            videoRef.value.volume = volume.value;
         }
-    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
-        videoRef.value.src = url;
-        videoRef.value.play();
+    });
+
+    hls.value.loadSource(url);
+    hls.value.attachMedia(videoRef.value);
+    hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+        videoRef.value!.play();
+    });
+
+    // Handle HLS errors
+    hls.value.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+            console.error('Fatal HLS error:', data);
+        }
+    });
+
+    if (videoRef.value) {
+        videoRef.value.volume = volume.value;
     }
 }
 

@@ -44,7 +44,7 @@ export class TranscodeDecisionService {
     /**
      * Main decision function - determines how to stream media
      */
-    public decide(file: MediaFile, capabilities: ClientCapabilities): TranscodeDecision {
+    public decide(file: MediaFile, capabilities: ClientCapabilities, profile?: string): TranscodeDecision {
         const stats = {
             directPlayReasons: [] as string[],
             transcodeReasons: [] as string[],
@@ -85,11 +85,7 @@ export class TranscodeDecisionService {
     /**
      * Check if container is compatible
      */
-    private checkContainer(
-        file: MediaFile,
-        capabilities: ClientCapabilities,
-        stats: TranscodeDecision['statistics']
-    ): TranscodeDecision['container'] {
+    private checkContainer(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['container'] {
         const sourceContainer = file.extension.replace('.', '') as any;
         const supportedContainers = capabilities.containers;
 
@@ -124,11 +120,7 @@ export class TranscodeDecisionService {
     /**
      * Check video codec compatibility
      */
-    private checkVideoCodec(
-        file: MediaFile,
-        capabilities: ClientCapabilities,
-        stats: TranscodeDecision['statistics']
-    ): TranscodeDecision['video'] {
+    private checkVideoCodec(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['video'] {
         if (!file.metadata?.video?.[0]) {
             return { action: 'copy' };
         }
@@ -187,11 +179,7 @@ export class TranscodeDecisionService {
     /**
      * Check audio codec compatibility
      */
-    private checkAudioCodec(
-        file: MediaFile,
-        capabilities: ClientCapabilities,
-        stats: TranscodeDecision['statistics']
-    ): TranscodeDecision['audio'] {
+    private checkAudioCodec(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['audio'] {
         if (!file.metadata?.audio?.[0]) {
             return { action: 'copy' };
         }
@@ -236,11 +224,7 @@ export class TranscodeDecisionService {
     /**
      * Check subtitle requirements
      */
-    private checkSubtitles(
-        file: MediaFile,
-        capabilities: ClientCapabilities,
-        stats: TranscodeDecision['statistics']
-    ): TranscodeDecision['subtitle'] {
+    private checkSubtitles(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['subtitle'] {
         if (!file.metadata?.subtitle?.length) {
             return { action: 'none' };
         }
