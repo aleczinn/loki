@@ -8,12 +8,17 @@ export type SubtitleStreamingType = 'copy' | 'burn_in' | 'none';
 
 export interface TranscodeDecision {
     mode: StreamMode;
+    container: {
+        needsRemux: boolean;
+        reason?: string;
+        sourceContainer: string;
+        targetContainer?: string;
+    };
     video: {
         action: GenericStreamingType;
         reason?: string;
         sourceCodec?: string;
         targetCodec?: MediaVideoCodec;
-        hwAccel?: 'nvenc' | 'qsv' | 'cpu';
     };
     audio: {
         action: GenericStreamingType;
@@ -26,17 +31,6 @@ export interface TranscodeDecision {
         action: SubtitleStreamingType;
         reason?: string;
         trackIndex?: number;
-    };
-    container: {
-        needsRemux: boolean;
-        reason?: string;
-        sourceContainer: string;
-        targetContainer?: string;
-    };
-    statistics: {
-        directPlayReasons: string[];
-        transcodeReasons: string[];
-        remuxReasons: string[];
     };
 }
 
@@ -53,16 +47,16 @@ export class TranscodeDecisionService {
         };
 
         // Check container compatibility
-        const containerDecision = this.checkContainer(file, capabilities, stats);
+        const containerDecision = this.checkContainer(file, capabilities);
 
         // Check video codec compatibility
-        const videoDecision = this.checkVideoCodec(file, capabilities, stats);
+        const videoDecision = this.checkVideoCodec(file, capabilities);
 
         // Check audio codec compatibility
-        const audioDecision = this.checkAudioCodec(file, capabilities, stats);
+        const audioDecision = this.checkAudioCodec(file, capabilities);
 
         // Check subtitle requirements
-        const subtitleDecision = this.checkSubtitles(file, capabilities, stats);
+        const subtitleDecision = this.checkSubtitles(file, capabilities);
 
         // Determine final mode
         let mode: StreamMode = 'direct_play';
@@ -83,23 +77,21 @@ export class TranscodeDecisionService {
 
         return {
             mode,
+            container: containerDecision,
             video: videoDecision,
             audio: audioDecision,
-            subtitle: subtitleDecision,
-            container: containerDecision,
-            statistics: stats
+            subtitle: subtitleDecision
         };
     }
 
     /**
      * Check if container is compatible
      */
-    private checkContainer(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['container'] {
+    private checkContainer(file: MediaFile, capabilities: ClientCapabilities): TranscodeDecision['container'] {
         const sourceContainer = file.extension.replace('.', '') as any;
         const supportedContainers = capabilities.containers;
 
         if (supportedContainers.includes(sourceContainer)) {
-            stats.directPlayReasons.push(`Container ${sourceContainer} is supported`);
             return {
                 needsRemux: false,
                 sourceContainer
@@ -108,7 +100,6 @@ export class TranscodeDecisionService {
 
         // MKV needs remux to MP4 for browsers
         if (sourceContainer === 'mkv' && supportedContainers.includes('mp4')) {
-            stats.remuxReasons.push(`Container ${sourceContainer} needs remux to mp4`);
             return {
                 needsRemux: true,
                 reason: `Container ${sourceContainer} not supported, remuxing to mp4`,
@@ -117,7 +108,6 @@ export class TranscodeDecisionService {
             };
         }
 
-        stats.transcodeReasons.push(`Container ${sourceContainer} not supported`);
         return {
             needsRemux: true,
             reason: `Container ${sourceContainer} not supported`,
@@ -129,7 +119,7 @@ export class TranscodeDecisionService {
     /**
      * Check video codec compatibility
      */
-    private checkVideoCodec(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['video'] {
+    private checkVideoCodec(file: MediaFile, capabilities: ClientCapabilities): TranscodeDecision['video'] {
         if (!file.metadata?.video?.[0]) {
             return { action: 'copy' };
         }
@@ -144,41 +134,34 @@ export class TranscodeDecisionService {
         const codecSupport = capabilities.videoCodecs.find(c => c.codec === sourceCodec);
 
         if (!codecSupport) {
-            stats.transcodeReasons.push(`Video codec ${sourceCodec} not supported`);
             return {
                 action: 'transcode',
-                reason: `Video codec ${sourceCodec} not supported by client`,
+                reason: `Video codec ${sourceCodec} not supported`,
                 sourceCodec,
                 targetCodec: this.selectBestVideoCodec(capabilities),
-                hwAccel: this.detectHardwareAcceleration()
             };
         }
 
         // Check bit depth
         if (!codecSupport.bitDepths.includes(bitDepth)) {
-            stats.transcodeReasons.push(`Video bit depth ${bitDepth} not supported`);
             return {
                 action: 'transcode',
-                reason: `${bitDepth}-bit not supported, transcoding to 8-bit`,
+                reason: `Video bit depth ${bitDepth} not supported`,
                 sourceCodec,
                 targetCodec: 'h264',
-                hwAccel: this.detectHardwareAcceleration()
             };
         }
 
         // Check resolution
         if (width > codecSupport.maxWidth || height > codecSupport.maxHeight) {
-            stats.transcodeReasons.push(`Resolution ${width}x${height} exceeds max ${codecSupport.maxWidth}x${codecSupport.maxHeight}`);
             return {
                 action: 'transcode',
-                reason: `Resolution too high, downscaling required`,
+                reason: `Resolution ${width}x${height} exceeds max ${codecSupport.maxWidth}x${codecSupport.maxHeight}`,
                 sourceCodec,
                 targetCodec: sourceCodec,
-                hwAccel: this.detectHardwareAcceleration()
             };
         }
 
-        stats.directPlayReasons.push(`Video codec ${sourceCodec} fully supported`);
         return {
             action: 'copy',
             sourceCodec
@@ -188,7 +171,7 @@ export class TranscodeDecisionService {
     /**
      * Check audio codec compatibility
      */
-    private checkAudioCodec(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['audio'] {
+    private checkAudioCodec(file: MediaFile, capabilities: ClientCapabilities): TranscodeDecision['audio'] {
         if (!file.metadata?.audio?.[0]) {
             return { action: 'copy' };
         }
@@ -200,7 +183,6 @@ export class TranscodeDecisionService {
         const codecSupport = capabilities.audioCodecs.find(c => c.codec === sourceCodec);
 
         if (!codecSupport) {
-            stats.transcodeReasons.push(`Audio codec ${sourceCodec} not supported`);
             return {
                 action: 'transcode',
                 reason: `Audio codec ${sourceCodec} not supported`,
@@ -212,17 +194,15 @@ export class TranscodeDecisionService {
 
         // Check channel count
         if (channels > codecSupport.maxChannels) {
-            stats.transcodeReasons.push(`Audio channels ${channels} exceeds max ${codecSupport.maxChannels}`);
             return {
                 action: 'transcode',
-                reason: `Downmixing ${channels} channels to ${codecSupport.maxChannels}`,
+                reason: `Audio channels ${channels} exceeds max ${codecSupport.maxChannels} channels. Downmixing ${channels} channels to ${codecSupport.maxChannels}`,
                 sourceCodec,
                 targetCodec: sourceCodec,
                 trackIndex: 0
             };
         }
 
-        stats.directPlayReasons.push(`Audio codec ${sourceCodec} fully supported`);
         return {
             action: 'copy',
             sourceCodec,
@@ -233,7 +213,7 @@ export class TranscodeDecisionService {
     /**
      * Check subtitle requirements
      */
-    private checkSubtitles(file: MediaFile, capabilities: ClientCapabilities, stats: TranscodeDecision['statistics']): TranscodeDecision['subtitle'] {
+    private checkSubtitles(file: MediaFile, capabilities: ClientCapabilities): TranscodeDecision['subtitle'] {
         if (!file.metadata?.subtitle?.length) {
             return { action: 'none' };
         }
@@ -296,24 +276,6 @@ export class TranscodeDecisionService {
 
         // Fallback to first available codec
         return capabilities.videoCodecs[0]?.codec || 'h264';
-    }
-
-    /**
-     * Detect available hardware acceleration
-     */
-    private detectHardwareAcceleration(): 'nvenc' | 'qsv' | 'cpu' {
-        // Check for NVIDIA GPU
-        if (process.env.FFMPEG_HWACCEL === 'nvenc') {
-            return 'nvenc';
-        }
-
-        // Check for Intel QuickSync
-        if (process.env.FFMPEG_HWACCEL === 'qsv') {
-            return 'qsv';
-        }
-
-        // Fallback to CPU
-        return 'cpu';
     }
 }
 
