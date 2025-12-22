@@ -1,4 +1,3 @@
-import { MediaVideoCodec } from "./types/capabilities/client-capabilities";
 import { VideoCodec } from "./types/media";
 
 export type HardwareAcceleration = 'none' | 'intel_quick_sync' | 'nvidia_nvenc';
@@ -7,6 +6,13 @@ export const supportedCodecsForHardwareAcceleration: VideoCodec[] = ['h264', 'he
 
 export const supportEncodingInHEVC: boolean = true;
 export const supportEncodingInAV1: boolean = true;
+
+/**
+ * If enabled, media is remuxed to fragmented MP4 (fMP4) even when
+ * direct file streaming with byte ranges would be possible.
+ * This improves seek performance and playback stability.
+ */
+export const preferFragmentedMp4 = true;
 
 /**
  * Vollständig Treiber-basiertes Tone-Mapping für Intel-Chips. Funktioniert derzeit nur auf

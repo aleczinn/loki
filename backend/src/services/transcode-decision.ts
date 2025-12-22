@@ -1,5 +1,6 @@
 import { MediaFile } from "../types/media-file";
 import { ClientCapabilities, MediaVideoCodec, MediaAudioCodec } from "../types/capabilities/client-capabilities";
+import { preferFragmentedMp4 } from "../settings";
 
 export type StreamMode = 'direct_play' | 'direct_remux' | 'transcode';
 export type GenericStreamingType = 'copy' | 'transcode';
@@ -70,6 +71,14 @@ export class TranscodeDecisionService {
             mode = 'direct_remux';
         } else if (videoDecision.action === 'transcode' || audioDecision.action === 'transcode') {
             mode = 'transcode';
+        }
+
+        // Prefer fragmented MP4
+        if (mode === 'direct_play' && preferFragmentedMp4) {
+            mode = 'direct_remux';
+
+            containerDecision.reason = 'fragmented-mp4-preferred';
+            stats.remuxReasons.push('optimized-for-seeking');
         }
 
         return {
