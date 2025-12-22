@@ -34,28 +34,17 @@ export interface TranscodeDecision {
     };
 }
 
+export type QualityProfile = 'original' | '4k_40mbps' | '4k_20mbps' | '1080p_20mbps' | '1080p_8mbps' | '720p_6mbps' | '480p_3mbps' | '360p_1mbps';
+
 export class TranscodeDecisionService {
 
     /**
      * Main decision function - determines how to stream media
      */
-    public decide(file: MediaFile, capabilities: ClientCapabilities, profile?: string): TranscodeDecision {
-        const stats = {
-            directPlayReasons: [] as string[],
-            transcodeReasons: [] as string[],
-            remuxReasons: [] as string[]
-        };
-
-        // Check container compatibility
-        const containerDecision = this.checkContainer(file, capabilities);
-
-        // Check video codec compatibility
-        const videoDecision = this.checkVideoCodec(file, capabilities);
-
-        // Check audio codec compatibility
+    public decide(file: MediaFile, capabilities: ClientCapabilities, profile?: QualityProfile): TranscodeDecision {
+        const containerDecision = this.checkContainer(file, capabilities, profile);
+        const videoDecision = this.checkVideoCodec(file, capabilities, profile);
         const audioDecision = this.checkAudioCodec(file, capabilities);
-
-        // Check subtitle requirements
         const subtitleDecision = this.checkSubtitles(file, capabilities);
 
         // Determine final mode
@@ -72,7 +61,6 @@ export class TranscodeDecisionService {
             mode = 'direct_remux';
 
             containerDecision.reason = 'fragmented-mp4-preferred';
-            stats.remuxReasons.push('optimized-for-seeking');
         }
 
         return {
@@ -84,10 +72,34 @@ export class TranscodeDecisionService {
         };
     }
 
+    // TODO : Fix for special formats like 4:3 or when format is 21:9 (cinema scope format)
+    public getQualities(file: MediaFile, capabilities: ClientCapabilities): QualityProfile[] {
+        const qualities: QualityProfile[] = [];
+
+        const videoHeight = file.metadata?.video[0]?.Height || -1;
+
+        if (videoHeight >= 2160) {
+            qualities.push("4k_40mbps", "4k_20mbps");
+        }
+        if (videoHeight >= 1080) {
+            qualities.push("1080p_20mbps", "1080p_8mbps");
+        }
+        if (videoHeight >= 720) {
+            qualities.push("720p_6mbps");
+        }
+        if (videoHeight >= 480) {
+            qualities.push("480p_3mbps");
+        }
+        if (videoHeight >= 360) {
+            qualities.push("360p_1mbps");
+        }
+        return qualities;
+    }
+
     /**
      * Check if container is compatible
      */
-    private checkContainer(file: MediaFile, capabilities: ClientCapabilities): TranscodeDecision['container'] {
+    private checkContainer(file: MediaFile, capabilities: ClientCapabilities, profile?: QualityProfile): TranscodeDecision['container'] {
         const sourceContainer = file.extension.replace('.', '') as any;
         const supportedContainers = capabilities.containers;
 
@@ -119,7 +131,7 @@ export class TranscodeDecisionService {
     /**
      * Check video codec compatibility
      */
-    private checkVideoCodec(file: MediaFile, capabilities: ClientCapabilities): TranscodeDecision['video'] {
+    private checkVideoCodec(file: MediaFile, capabilities: ClientCapabilities, profile?: QualityProfile): TranscodeDecision['video'] {
         if (!file.metadata?.video?.[0]) {
             return { action: 'copy' };
         }

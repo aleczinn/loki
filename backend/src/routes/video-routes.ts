@@ -6,6 +6,7 @@ import { pathExists, stat } from "../utils/file-utils";
 import streamingService from "../services/streaming-service";
 import fs from "fs";
 import { spawn } from "child_process";
+import { QualityProfile } from "../services/transcode-decision";
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.get('/api/videos/:id/master.m3u8', async (req: Request, res: Response) =>
     try {
         const { id } = req.params;
 
-        const profile = (req.query.profile as string) ?? 'auto';
+        const profile = (req.query.profile as QualityProfile) ?? 'original';
         const audio = Number(req.query.audio ?? 0);
         const subtitle = req.query.subtitle as string | undefined;
 

@@ -11,7 +11,7 @@ import clientManager from "./client-manager";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
 import hwAccelDetector, { DEFAULT_HWACCELINFO, HWAccelInfo } from "./hardware-acceleration-detector";
 import { TRANSCODE_PATH } from "../app";
-import transcodeDecisionService, { TranscodeDecision } from "./transcode-decision";
+import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
 import { ClientInfo } from "../types/client-info";
 
 export const SEGMENT_DURATION = 4; // seconds per segment
@@ -58,7 +58,7 @@ class StreamingService {
     private sessions: Map<string, PlaySession> = new Map();
     private lock = new AsyncLock();
 
-    getOrCreateSession(client: ClientInfo, file: MediaFile, profile: string): PlaySession {
+    getOrCreateSession(client: ClientInfo, file: MediaFile, profile: QualityProfile): PlaySession {
         const sessionId = `${client.token}-${file.id}-${profile}`;
 
         // Return session if already exists
