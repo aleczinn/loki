@@ -44,7 +44,7 @@ router.get('/api/media/:id/qualities', async (req: Request, res: Response) => {
             return res.status(401).json({ error: 'Invalid client token' });
         }
 
-        const qualities = transcodeDecisionService.getQualities(file, client.capabilities);
+        const qualities = transcodeDecisionService.getProfiles(file, client.capabilities);
 
         res.status(200).json(qualities);
     } catch (error) {

@@ -44,15 +44,12 @@ router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Respons
 
         switch (session.decision.mode) {
             case 'direct_play':
-                console.log("use direct play");
                 const range = req.headers.range;
                 return await handleDirectPlay(req, res, file, range);
             case 'direct_remux':
-                console.log("use direct remux");
                 return await handleDirectRemux(req, res, file);
             case 'transcode':
-                const bandwidth = BANDWIDTH_BY_PROFILE[session.profile];
-                console.log(`use transcode with profile ${session.profile} and bandwidth ${bandwidth}`);
+                const bandwidth = BANDWIDTH_BY_PROFILE[session.decision.profile];
 
                 res.type('application/vnd.apple.mpegurl');
 
@@ -60,11 +57,10 @@ router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Respons
                     '#EXTM3U',
                     '#EXT-X-VERSION:3',
                     `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth}`,
-                    `/videos/hls/${session.id}/index.m3u8`
+                    `/api/videos/hls/${session.id}/index.m3u8`
                 ].join('\n');
 
-                console.log("master playlist", masterPlaylist);
-                res.send(masterPlaylist);
+                return res.send(masterPlaylist);
         }
     } catch (error) {
         logger.ERROR(`Error getting active sessions: ${error}`);
@@ -72,7 +68,7 @@ router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Respons
     }
 });
 
-router.get('/videos/hls/:sessionId/index.m3u8', async (req, res) => {
+router.get('/api/videos/hls/:sessionId/index.m3u8', async (req, res) => {
     const { sessionId } = req.params;
 
     const session = streamingService.getSession(sessionId);
@@ -82,12 +78,12 @@ router.get('/videos/hls/:sessionId/index.m3u8', async (req, res) => {
 
     const playlist = await streamingService.getPlaylist(session);
 
-    console.log("playlist", playlist);
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
     res.send(playlist);
 });
 
-router.get('/videos/hls/:sessionId/:segment', async (req, res) => {
+router.get('/api/videos/hls/:sessionId/:segment', async (req, res) => {
         const { sessionId, segment } = req.params;
 
         const match = segment.match(/segment(\d+)\.ts/);
@@ -110,8 +106,24 @@ router.get('/videos/hls/:sessionId/:segment', async (req, res) => {
             return res.sendFile(segmentPath);
         }
 
-        // Segment not ready yet → client retries
-        return res.sendStatus(404);
+        // ⚠️ KURZES Polling (1 Sekunde) um Race Conditions zu vermeiden
+        // Danach übernimmt HLS.js das Retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        const retryPath = await streamingService.getSegment(session, segmentIndex);
+        if (retryPath && await pathExists(retryPath)) {
+            res.setHeader('Content-Type', 'video/mp2t');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            return res.sendFile(retryPath);
+        }
+
+        // Segment noch nicht bereit → 503 mit Retry-After
+        // HLS.js wird automatisch retry machen
+        res.setHeader('Retry-After', '1');
+        return res.status(503).json({
+            error: 'Segment not ready',
+            message: 'Transcoding in progress'
+        });
     }
 );
 

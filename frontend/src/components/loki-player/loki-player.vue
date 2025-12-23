@@ -401,12 +401,11 @@ async function openPlayer(file: MediaFile) {
 
     const profile = 'original';
     const token = sessionStorage.getItem(LOKI_TOKEN);
-    const url = `/videos/${file.id}/master.m3u8?token=${token}&profile=${profile}`;
-    const nativeURL = `/api/${url}`;
+    const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${profile}`;
 
     cleanup();
 
-    videoRef.value.src = nativeURL;
+    videoRef.value.src = url;
     videoRef.value.volume = volume.value;
 
     videoRef.value.play().catch(() => {
