@@ -12,7 +12,7 @@ export const supportEncodingInAV1: boolean = true;
  * direct file streaming with byte ranges would be possible.
  * This improves seek performance and playback stability.
  */
-export const preferFragmentedMp4 = true;
+export const preferFragmentedMp4 = false;
 
 /**
  * Vollständig Treiber-basiertes Tone-Mapping für Intel-Chips. Funktioniert derzeit nur auf

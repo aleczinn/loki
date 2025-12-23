@@ -6,13 +6,13 @@ import { pathExists, stat } from "../utils/file-utils";
 import streamingService from "../services/streaming-service";
 import fs from "fs";
 import { spawn } from "child_process";
-import { QualityProfile } from "../services/transcode-decision";
+import { BANDWIDTH_BY_PROFILE, QualityProfile } from "../services/transcode-decision";
 
 const router = Router();
 
-router.get('/api/videos/:id/master.m3u8', async (req: Request, res: Response) => {
+router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Response) => {
     try {
-        const { id } = req.params;
+        const { mediaId } = req.params;
 
         const profile = (req.query.profile as QualityProfile) ?? 'original';
         const audio = Number(req.query.audio ?? 0);
@@ -25,7 +25,7 @@ router.get('/api/videos/:id/master.m3u8', async (req: Request, res: Response) =>
         }
 
         // Get media file
-        const file = await findMediaFileById(id);
+        const file = await findMediaFileById(mediaId);
         if (!file) {
             return res.status(404).json({ error: 'Media file not found' });
         }
@@ -51,8 +51,20 @@ router.get('/api/videos/:id/master.m3u8', async (req: Request, res: Response) =>
                 console.log("use direct remux");
                 return await handleDirectRemux(req, res, file);
             case 'transcode':
-                console.log("use transcode");
-                break;
+                const bandwidth = BANDWIDTH_BY_PROFILE[session.profile];
+                console.log(`use transcode with profile ${session.profile} and bandwidth ${bandwidth}`);
+
+                res.type('application/vnd.apple.mpegurl');
+
+                const masterPlaylist = [
+                    '#EXTM3U',
+                    '#EXT-X-VERSION:3',
+                    `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth}`,
+                    `/videos/hls/${session.id}/index.m3u8`
+                ].join('\n');
+
+                console.log("master playlist", masterPlaylist);
+                res.send(masterPlaylist);
         }
     } catch (error) {
         logger.ERROR(`Error getting active sessions: ${error}`);
@@ -60,45 +72,46 @@ router.get('/api/videos/:id/master.m3u8', async (req: Request, res: Response) =>
     }
 });
 
-router.get('/videos/:id/hls/:sessionId/index.m3u8', async (req, res) => {
-    const { id, sessionId } = req.params;
+router.get('/videos/hls/:sessionId/index.m3u8', async (req, res) => {
+    const { sessionId } = req.params;
 
-    // const session = streamingService.getSession(sessionId);
-    // if (!session) return res.sendStatus(404);
+    const session = streamingService.getSession(sessionId);
+    if (!session) {
+        return res.status(404).json({ error: `Session ${sessionId} not found` });
+    }
 
-    // const { playlist } =
-    //     await streamingService.generatePlaylist(
-    //         session.file,
-    //         session.profile,
-    //         session.token
-    //     );
-    //
-    // res.type('application/vnd.apple.mpegurl');
-    // res.send(playlist);
+    const playlist = await streamingService.getPlaylist(session);
+
+    console.log("playlist", playlist);
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+    res.send(playlist);
 });
 
-router.get('/videos/:id/hls/:sessionId/:segment', async (req, res) => {
+router.get('/videos/hls/:sessionId/:segment', async (req, res) => {
         const { sessionId, segment } = req.params;
 
         const match = segment.match(/segment(\d+)\.ts/);
-        if (!match) return res.sendStatus(400);
+        if (!match) {
+            return res.sendStatus(404);
+        }
 
         const segmentIndex = Number(match[1]);
 
-        // const session = streamingService.getSession(sessionId);
-        // if (!session) return res.sendStatus(404);
+        const session = streamingService.getSession(sessionId);
+        if (!session) {
+            return res.sendStatus(404);
+        }
 
-        // const result =
-            // await streamingService.handleSegment(
-            //     session.file,
-            //     segmentIndex,
-            //     session.profile,
-            //     session.token
-            // );
+        const segmentPath = await streamingService.getSegment(session, segmentIndex);
 
-        // if (!result.path) return res.sendStatus(404);
+        if (segmentPath && await pathExists(segmentPath)) {
+            res.setHeader('Content-Type', 'video/mp2t');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            return res.sendFile(segmentPath);
+        }
 
-        // res.sendFile(result.path);
+        // Segment not ready yet → client retries
+        return res.sendStatus(404);
     }
 );
 

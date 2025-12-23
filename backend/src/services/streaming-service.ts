@@ -1,40 +1,26 @@
 import * as path from 'path';
-import * as crypto from 'crypto';
-import ffmpeg from 'fluent-ffmpeg';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
 import { deleteFile, ensureDir, pathExists, readFile, writeFile } from "../utils/file-utils";
-import { BLUE, GREEN, MAGENTA, RESET, sleep, YELLOW } from "../utils/utils";
-import { spawn, ChildProcess } from 'child_process';
-import clientManager from "./client-manager";
-import { FFMPEG_PATH } from "../utils/ffmpeg";
-import hwAccelDetector, { DEFAULT_HWACCELINFO, HWAccelInfo } from "./hardware-acceleration-detector";
+import { ChildProcess, spawn } from 'child_process';
 import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
 import { ClientInfo } from "../types/client-info";
+import { UUID } from "node:crypto";
+import { FFMPEG_PATH } from "../utils/ffmpeg";
+import { BLUE, GREEN, MAGENTA, RESET } from "../utils/utils";
 
 export const SEGMENT_DURATION = 4; // seconds per segment
-export const SEGMENT_PUFFER_COUNT = 10; // is the number how many segments could technically be created in one transcoding call
-export const SEGMENT_PUFFER_LOOK_AHEAD = 3; // defined the number where to check for future segments. (current segment + PUFFER_COUNT - x)
-export const SEGMENT_OVERLAP_THRESHOLD = 3; // segments distance to consider reusing a job
 export const SEEK_THRESHOLD = 3; // is the number in segments when to cancel a transcode while seeking
 
 interface TranscodeJob {
     id: string;
-    sessionId: string;
     process?: ChildProcess;
     status: 'running' | 'stopped' | 'completed';
     startSegment: number;
     createdAt: Date;
 }
-
-interface QualityOptions {
-    videoOptions: string[]
-    audioOptions: string[]
-}
-
-// export type PlaybackMode = 'direct_player' | 'direct_remux' | 'transcode';
 
 interface PlaySession {
     id: string;
@@ -43,7 +29,7 @@ interface PlaySession {
 
     decision: TranscodeDecision;
 
-    profile: string; // auto, original, 720p, 480p...
+    profile: QualityProfile; // original, 720p, 480p...
     audioIndex: number;
     subtitleIndex?: number;
 
@@ -53,13 +39,13 @@ interface PlaySession {
     transcode?: TranscodeJob;
 }
 
-class StreamingService {
+export class StreamingService {
 
     private sessions: Map<string, PlaySession> = new Map();
     private lock = new AsyncLock();
 
     getOrCreateSession(client: ClientInfo, file: MediaFile, profile: QualityProfile): PlaySession {
-        const sessionId = `${client.token}-${file.id}-${profile}`;
+        const sessionId: UUID = crypto.randomUUID();
 
         // Return session if already exists
         if (this.sessions.has(sessionId)) {
@@ -70,6 +56,9 @@ class StreamingService {
 
         // Create new session
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
+
+        // TODO : if original is not possible then set to next possible
+        profile = "1080p_20mbps";
 
         const session: PlaySession = {
             id: sessionId,
@@ -84,94 +73,256 @@ class StreamingService {
 
         this.sessions.set(sessionId, session);
         logger.INFO(`Created new session: ${sessionId}`);
-
         return session;
     }
 
-    // async generatePlaylist(file: MediaFile, quality: string, token?: string): Promise<{ playlist: string; token: string }> {
-    //     const session = await this.getOrCreateSession(file, quality, token);
-    //
-    //     const dir = path.join(TRANSCODE_PATH, session.token, file.id, quality);
-    //     const playlistPath = path.join(dir, 'playlist.m3u8');
-    //
-    //     await ensureDir(dir);
-    //
-    //     if (await pathExists(playlistPath)) {
-    //         const playlist = await readFile(playlistPath, "utf-8");
-    //
-    //         return {
-    //             playlist,
-    //             token: session.token
-    //         };
-    //     }
-    //
-    //     const duration = file.metadata?.general.Duration || -1;
-    //     if (duration === -1) {
-    //         throw new Error('Invalid media duration. Something is wrong with the metadata!');
-    //     }
-    //     const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
-    //
-    //     let playlist = '#EXTM3U\n';
-    //     playlist += '#EXT-X-VERSION:3\n';
-    //     playlist += `#EXT-X-TARGETDURATION:${SEGMENT_DURATION}\n`;
-    //     playlist += '#EXT-X-MEDIA-SEQUENCE:0\n';
-    //     playlist += '#EXT-X-PLAYLIST-TYPE:VOD\n\n';
-    //
-    //     for (let i = 0; i < totalSegments; i++) {
-    //         const segmentDuration = Math.min(
-    //             SEGMENT_DURATION,
-    //             duration - (i * SEGMENT_DURATION)
-    //         );
-    //         playlist += `#EXTINF:${segmentDuration.toFixed(6)},\n`;
-    //         playlist += `segment${i}.ts\n`;
-    //     }
-    //
-    //     playlist += '#EXT-X-ENDLIST\n';
-    //
-    //     await writeFile(playlistPath, playlist);
-    //     logger.INFO(`Generated playlist for session ${session.id}`);
-    //
-    //     return {
-    //         playlist,
-    //         token: session.token
-    //     };
-    // }
-    //
-    // async handleSegment(file: MediaFile, segmentIndex: number, quality: string, token?: string): Promise<{ path: string | null; token: string }> {
-    //     const session = await this.getOrCreateSession(file, quality, token);
-    //
-    //     const dir = path.join(TRANSCODE_PATH, session.token, file.id, quality);
-    //     const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
-    //
-    //     // Check if segment already exists
-    //     if (await pathExists(segmentPath)) {
-    //         logger.DEBUG(`Serving existing segment ${segmentIndex} for session ${session.id}`);
-    //
-    //         return {
-    //             path: segmentPath,
-    //             token: session.token
-    //         };
-    //     }
-    //
-    //     await this.handleTranscode(session, segmentIndex);
-    //
-    //     // Check again after short delay (segment might be ready now)
-    //     await sleep(100);
-    //
-    //     if (await pathExists(segmentPath)) {
-    //         return {
-    //             path: segmentPath,
-    //             token: session.token
-    //         };
-    //     }
-    //
-    //     return {
-    //         path: null,
-    //         token: session.token
-    //     };
-    // }
-    //
-    // private async handleTranscode(session: StreamSession, requestedSegment: number): Promise<void> {
+    async getPlaylist(session: PlaySession): Promise<string> {
+        const file = session.file;
+        const dir = path.join(TRANSCODE_PATH, session.id, session.profile);
+        const playlistPath = path.join(dir, 'playlist.m3u8');
+
+        await ensureDir(dir);
+
+        if (await pathExists(playlistPath)) {
+            return await readFile(playlistPath, "utf-8");
+        }
+
+        const duration = file.metadata?.general.Duration || -1;
+        if (duration === -1) {
+            throw new Error('Invalid media duration. Something is wrong with the metadata!');
+        }
+        const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
+
+        let playlist = '#EXTM3U\n';
+        playlist += '#EXT-X-VERSION:3\n';
+        playlist += `#EXT-X-TARGETDURATION:${SEGMENT_DURATION}\n`;
+        playlist += '#EXT-X-MEDIA-SEQUENCE:0\n';
+        playlist += '#EXT-X-PLAYLIST-TYPE:VOD\n\n';
+
+        for (let i = 0; i < totalSegments; i++) {
+            const segmentDuration = Math.min(
+                SEGMENT_DURATION,
+                duration - (i * SEGMENT_DURATION)
+            );
+            playlist += `#EXTINF:${segmentDuration.toFixed(6)},\n`;
+            playlist += `/videos/hls/${session.id}/segment${i}.ts\n`;
+        }
+
+        playlist += '#EXT-X-ENDLIST\n';
+
+        await writeFile(playlistPath, playlist);
+        logger.INFO(`Generated playlist for session ${session.id}`);
+
+        return playlist;
+    }
+
+    async getSegment(session: PlaySession, segmentIndex: number): Promise<string | null> {
+        const file = session.file;
+        const dir = path.join(TRANSCODE_PATH, session.id, session.profile);
+        const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
+
+        if (await pathExists(segmentPath)) {
+            logger.DEBUG(`Serving existing segment ${segmentIndex} for session ${session.id}`);
+            return segmentPath;
+        }
+
+        // Transcoding starten oder sicherstellen, dass es läuft
+        await this.ensureTranscodeRunning(session, segmentIndex);
+        return null;
+    }
+
+    private async ensureTranscodeRunning(session: PlaySession, requestedSegment: number): Promise<void> {
+        return this.lock.acquire(`transcode-${session.id}`, async () => {
+            const job = session.transcode;
+
+            if (job?.status === 'running') {
+                const seekDistance = Math.abs(requestedSegment - job.startSegment);
+
+                if (seekDistance > SEEK_THRESHOLD) {
+                    logger.DEBUG(`Seek detected, restarting transcode`);
+                    await this.stopTranscode(session);
+                    await this.spawnTranscode(session, requestedSegment);
+                }
+
+                return;
+            }
+
+            await this.spawnTranscode(session, requestedSegment);
+        });
+    }
+
+    private async spawnTranscode(session: PlaySession, startSegment: number): Promise<void> {
+        const dir = path.join(TRANSCODE_PATH, session.id, session.profile);
+        await ensureDir(dir);
+
+        const jobId = crypto.randomUUID();
+
+        const job: TranscodeJob = {
+            id: jobId,
+            status: 'running',
+            startSegment,
+            createdAt: new Date()
+        };
+
+        session.transcode = job;
+
+        const file = session.file;
+        const duration = file.metadata?.general.Duration || -1;
+        if (duration === -1) {
+            throw new Error('Invalid media duration. Something is wrong with the metadata!');
+        }
+
+        const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
+        const seekTime = startSegment * SEGMENT_DURATION;
+        const tempPlaylistPath = path.join(dir, `temp_${jobId}.m3u8`);
+        const segmentPath = path.join(dir, 'segment%d.ts');
+        const framerate = file.metadata?.video[0]?.FrameRate || -1;
+        const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
+
+        const tempVideoOptions = [
+            '-vf', 'scale=-2:1080',
+            '-preset', 'veryfast',
+            '-b:v', '20000k',
+            '-maxrate', '22000k',
+            '-bufsize', '40000k',
+        ];
+
+        const tempAudioOptions = [
+            '-b:a', '192k',
+            '-ac', '2',
+            '-ar', '48000',
+        ]
+
+        const args = [
+            // Input
+            '-copyts',
+            '-ss', String(seekTime),
+            '-i', file.path,
+            '-threads', '0',
+
+            // Video
+            '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p',
+            ...tempVideoOptions,
+            '-g', String(gopSize),
+            '-sc_threshold', '0',
+            '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
+
+            // Audio
+            ...tempAudioOptions,
+
+            // Mapping
+            '-map', '0:v:0',  // Erster Video Stream
+            '-map', '0:a',    // Alle Audio Streams
+
+            // HLS
+            '-f', 'hls',
+            '-hls_time', String(SEGMENT_DURATION),
+            '-hls_list_size', '0',
+            '-hls_playlist_type', 'vod',
+            '-hls_flags', 'independent_segments',
+            '-start_number', String(startSegment),
+            '-hls_segment_filename', segmentPath,
+
+            // Progress reporting
+            '-progress', 'pipe:1',  // Progress to stdout
+            '-nostats',              // Keine Stats im stderr
+
+            // Output
+            tempPlaylistPath
+        ];
+
+        // FFmpeg spawnen
+        const ffmpegProcess: ChildProcess = spawn(FFMPEG_PATH, args);
+        job.process = ffmpegProcess;
+
+        logger.INFO(`${GREEN}Transcode started - start segment ${startSegment} [${session.id}]${RESET}`);
+
+        // Progress parsing
+        let progressBuffer = '';
+        ffmpegProcess.stdout?.on('data', (data) => {
+            if (job.status !== 'running') return; // Ignoriere wenn gestoppt
+
+            progressBuffer += data.toString();
+            const lines = progressBuffer.split('\n');
+            progressBuffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.includes('out_time_ms=')) {
+                    const match = line.match(/out_time_ms=(\d+)/);
+                    if (match) {
+                        const timeMs = parseInt(match[1]);
+                        const timeSec = timeMs / 1000000;  // Microseconds to seconds
+                        const percent = (timeSec / duration) * 100;
+
+                        logger.INFO(`${BLUE}Progress: ${percent.toFixed(1)}% [${session.id}]${RESET}`);
+                    }
+                }
+            }
+        });
+
+        // Error handling
+        ffmpegProcess.stderr?.on('data', (data) => {
+            if (job.status === 'stopped') return;
+            // Nur wichtige Errors loggen, nicht alle stderr Ausgaben
+            const msg = data.toString();
+            if (msg.includes('error') || msg.includes('Error')) {
+                logger.ERROR(`FFmpeg stderr: ${msg}`);
+            }
+        });
+
+        // Process Ende
+        ffmpegProcess.on('exit', async (code, signal) => {
+            if (job.status === 'stopped') {
+                logger.DEBUG(`Process stopped by user [${session.id}]`);
+                return;
+            }
+
+            if (code === 0) {
+                logger.INFO(`${MAGENTA}Transcode completed [${session.id}]${RESET}`);
+                job.status = 'completed';
+
+                // Cleanup temp playlist nach erfolgreichem Transcoding
+                try {
+                    await deleteFile(tempPlaylistPath);
+                } catch (e) {}
+            } else if (signal === 'SIGKILL') {
+                logger.DEBUG(`Process killed [${session.id}]`);
+            } else {
+                logger.ERROR(`FFmpeg exited with code ${code} [${session.id}]`);
+                job.status = 'stopped';
+            }
+        });
+    }
+
+    async stopTranscode(session: PlaySession): Promise<void> {
+        const job = session.transcode;
+
+        if (!job || job.status !== 'running') return;
+
+        logger.INFO(`Stopping transcode [${session.id}]`);
+
+        // Status sofort setzen
+        job.status = 'stopped';
+
+        // Prozess killen
+        if (job.process && !job.process.killed) {
+            job.process.kill('SIGKILL');
+
+            // Auf Windows zusätzlich taskkill
+            if (process.platform === 'win32' && job.process.pid) {
+                try {
+                    require('child_process').execSync(`taskkill /PID ${job.process.pid} /T /F`, { stdio: 'ignore' });
+                } catch (e) {
+                    // Ignorieren
+                }
+            }
+        }
+
+        session.transcode = undefined;
+    }
+
+    // private async startTranscode(session: StreamSession, requestedSegment: number): Promise<void> {
     //     return await this.lock.acquire(`transcode-${session.id}`, async () => {
     //         const currentJob = this.activeJobs.get(session.id);
     //
@@ -194,330 +345,10 @@ class StreamingService {
     //         }
     //     });
     // }
-    //
-    // private async startTranscode(session: StreamSession, startSegment: number): Promise<void> {
-    //     const file = session.file;
-    //     const jobId = crypto.randomBytes(8).toString('hex');
-    //
-    //     const duration = file.metadata?.general.Duration || -1;
-    //     if (duration === -1) {
-    //         throw new Error('Invalid media duration. Something is wrong with the metadata!');
-    //     }
-    //
-    //     const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
-    //     const dir = path.join(TRANSCODE_PATH, session.token, file.id, session.quality);
-    //
-    //     await ensureDir(dir);
-    //
-    //     const seekTime = startSegment * SEGMENT_DURATION;
-    //
-    //     const tempPlaylistPath = path.join(dir, `temp_${jobId}.m3u8`);
-    //     const segmentPath = path.join(dir, 'segment%d.ts');
-    //
-    //     const qualityOptions = this.getQualityOptions(session.quality);
-    //     if (!qualityOptions) {
-    //         throw new Error('FATAL: Something is wrong with the provided quality option!');
-    //     }
-    //
-    //     const framerate = file.metadata?.video[0]?.FrameRate || -1;
-    //     const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
-    //
-    //     // Determine video encoder based on HW acceleration
-    //     const client = clientManager.getClient(session.token);
-    //     // const hwType = this.hwAccelInfo?.preferred;
-    //     // const videoEncoder = this.hwAccelInfo?.encoders.h264;
-    //     // const preset = hwAccelDetector.getPreset(hwType, 'balanced');
-    //
-    //     // logger.INFO(`Using ${hwType.toUpperCase()} encoder: ${videoEncoder}`);
-    //     // logger.DEBUG(preset);
-    //
-    //     // FFmpeg Arguments als Array
-    //     const args = [
-    //         // Input
-    //         '-copyts',
-    //         '-ss', String(seekTime),
-    //         '-i', file.path,
-    //         '-threads', '0',
-    //
-    //         // Video
-    //         '-c:v', 'libx264',
-    //         '-pix_fmt', 'yuv420p',
-    //         ...qualityOptions.videoOptions,
-    //         '-g', String(gopSize),
-    //         '-sc_threshold', '0',
-    //         '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
-    //
-    //         // Audio
-    //         ...qualityOptions.audioOptions,
-    //
-    //         // Mapping
-    //         '-map', '0:v:0',  // Erster Video Stream
-    //         '-map', '0:a',    // Alle Audio Streams
-    //
-    //         // HLS
-    //         '-f', 'hls',
-    //         '-hls_time', String(SEGMENT_DURATION),
-    //         '-hls_list_size', '0',
-    //         '-hls_playlist_type', 'vod',
-    //         '-hls_flags', 'independent_segments',
-    //         '-start_number', String(startSegment),
-    //         '-hls_segment_filename', segmentPath,
-    //
-    //         // Progress reporting
-    //         '-progress', 'pipe:1',  // Progress to stdout
-    //         '-nostats',              // Keine Stats im stderr
-    //
-    //         // Output
-    //         tempPlaylistPath
-    //     ];
-    //
-    //     const job: TranscodeJob = {
-    //         id: jobId,
-    //         sessionId: session.id,
-    //         startSegment: startSegment,
-    //         status: 'running',
-    //         createdAt: new Date()
-    //     };
-    //
-    //     // FFmpeg spawnen
-    //     const ffmpegProcess: ChildProcess = spawn(FFMPEG_PATH, args);
-    //     job.process = ffmpegProcess;
-    //
-    //     logger.INFO(`${GREEN}Transcode started - start segment ${startSegment} [${session.id}]${RESET}`);
-    //
-    //     // Progress parsing
-    //     let progressBuffer = '';
-    //     ffmpegProcess.stdout?.on('data', (data) => {
-    //         if (job.status !== 'running') return; // Ignoriere wenn gestoppt
-    //
-    //         progressBuffer += data.toString();
-    //         const lines = progressBuffer.split('\n');
-    //         progressBuffer = lines.pop() || '';
-    //
-    //         for (const line of lines) {
-    //             if (line.includes('out_time_ms=')) {
-    //                 const match = line.match(/out_time_ms=(\d+)/);
-    //                 if (match) {
-    //                     const timeMs = parseInt(match[1]);
-    //                     const timeSec = timeMs / 1000000;  // Microseconds to seconds
-    //                     const percent = (timeSec / duration) * 100;
-    //
-    //                     logger.INFO(`${BLUE}Progress: ${percent.toFixed(1)}% [${session.id}]${RESET}`);
-    //                 }
-    //             }
-    //         }
-    //     });
-    //
-    //     // Error handling
-    //     ffmpegProcess.stderr?.on('data', (data) => {
-    //         if (job.status === 'stopped') return;
-    //         // Nur wichtige Errors loggen, nicht alle stderr Ausgaben
-    //         const msg = data.toString();
-    //         if (msg.includes('error') || msg.includes('Error')) {
-    //             logger.ERROR(`FFmpeg stderr: ${msg}`);
-    //         }
-    //     });
-    //
-    //     // Process Ende
-    //     ffmpegProcess.on('exit', async (code, signal) => {
-    //         if (job.status === 'stopped') {
-    //             logger.DEBUG(`Process stopped by user [${session.id}]`);
-    //             return;
-    //         }
-    //
-    //         if (code === 0) {
-    //             logger.INFO(`${MAGENTA}Transcode completed [${session.id}]${RESET}`);
-    //             job.status = 'completed';
-    //
-    //             // Cleanup temp playlist nach erfolgreichem Transcoding
-    //             try {
-    //                 await deleteFile(tempPlaylistPath);
-    //             } catch (e) {}
-    //         } else if (signal === 'SIGKILL') {
-    //             logger.DEBUG(`Process killed [${session.id}]`);
-    //         } else {
-    //             logger.ERROR(`FFmpeg exited with code ${code} [${session.id}]`);
-    //             job.status = 'stopped';
-    //         }
-    //
-    //         this.activeJobs.delete(session.id);
-    //     });
-    //
-    //     this.activeJobs.set(session.id, job);
-    //     session.transcode = job;
-    // }
-    //
-    // async stopTranscode(session: StreamSession): Promise<void> {
-    //     const job = this.activeJobs.get(session.id);
-    //
-    //     if (!job || job.status !== 'running') return;
-    //
-    //     logger.INFO(`Stopping transcode [${session.id}]`);
-    //
-    //     // Status sofort setzen
-    //     job.status = 'stopped';
-    //
-    //     // Prozess killen
-    //     if (job.process && !job.process.killed) {
-    //         job.process.kill('SIGKILL');
-    //
-    //         // Auf Windows zusätzlich taskkill
-    //         if (process.platform === 'win32' && job.process.pid) {
-    //             try {
-    //                 require('child_process').execSync(`taskkill /PID ${job.process.pid} /T /F`, { stdio: 'ignore' });
-    //             } catch (e) {
-    //                 // Ignorieren
-    //             }
-    //         }
-    //     }
-    //
-    //     // Sofort aus Map entfernen
-    //     this.activeJobs.delete(session.id);
-    //     session.transcode = undefined;
-    // }
-    //
-    // /**
-    //  * Get quality settings based on preset
-    //  */
-    // private getQualityOptions(quality: string): QualityOptions | null {
-    //     if (quality == 'original') {
-    //         quality = '1080p_20mbps';
-    //         logger.WARNING("Adjust quality 'original' to 1080p_20mbps!");
-    //     }
-    //
-    //     const settings: Record<string, QualityOptions> = {
-    //         '1080p_20mbps': {
-    //             videoOptions: [
-    //                 '-vf', 'scale=-2:1080',
-    //                 '-preset', 'veryfast',
-    //                 '-b:v', '20000k',
-    //                 '-maxrate', '22000k',
-    //                 '-bufsize', '40000k',
-    //             ],
-    //             audioOptions: [
-    //                 '-b:a', '192k',
-    //                 '-ac', '2',
-    //                 '-ar', '48000',
-    //             ]
-    //         },
-    //         '1080p_8mbps': {
-    //             videoOptions: [
-    //                 '-vf', 'scale=-2:1080',
-    //                 '-preset', 'veryfast',
-    //                 '-b:v', '8000k',
-    //                 '-maxrate', '10000k',
-    //                 '-bufsize', '20000k',
-    //             ],
-    //             audioOptions: [
-    //                 '-b:a', '192k',
-    //                 '-ac', '2',
-    //                 '-ar', '48000',
-    //             ]
-    //         },
-    //         '720p_6mbps': {
-    //             videoOptions: [
-    //                 '-vf', 'scale=-2:720',
-    //                 '-preset', 'veryfast',
-    //                 '-b:v', '6000k',
-    //                 '-maxrate', '7000k',
-    //                 '-bufsize', '14000k',
-    //             ],
-    //             audioOptions: [
-    //                 '-b:a', '128k',
-    //                 '-ac', '2',
-    //                 '-ar', '48000',
-    //             ]
-    //         },
-    //         '480p_3mbps': {
-    //             videoOptions: [
-    //                 '-vf', 'scale=-2:480',
-    //                 '-preset', 'veryfast',
-    //                 '-b:v', '3000k',
-    //                 '-maxrate', '3500k',
-    //                 '-bufsize', '7000k',
-    //             ],
-    //             audioOptions: [
-    //                 '-b:a', '128k',
-    //                 '-ac', '2',
-    //                 '-ar', '48000',
-    //             ]
-    //         },
-    //         '360p_1mbps': {
-    //             videoOptions: [
-    //                 '-vf', 'scale=-2:360',
-    //                 '-preset', 'veryfast',
-    //                 '-b:v', '1000k',
-    //                 '-maxrate', '1200k',
-    //                 '-bufsize', '2400k',
-    //             ],
-    //             audioOptions: [
-    //                 '-b:a', '128k',
-    //                 '-ac', '2',
-    //                 '-ar', '48000',
-    //             ]
-    //         }
-    //     };
-    //
-    //     return settings[quality] || null;
-    // }
-    //
-    // getSessionInfo() {
-    //     return {
-    //         activeSessions: this.sessions.size,
-    //         activeTranscodes: this.activeJobs.size,
-    //         sessions: Array.from(this.sessions.values()).map(session => ({
-    //             token: session.token,
-    //             id: session.id,
-    //             file: session.file,
-    //             quality: session.quality,
-    //             createdAt: session.createdAt,
-    //             lastAccessed: session.lastAccessed,
-    //             hasActiveTranscode: this.activeJobs.has(session.id)
-    //         }))
-    //     }
-    // }
-    //
-    // getSessions(): Map<string, StreamSession> {
-    //     return this.sessions;
-    // }
-    //
-    // getSession(sessionId: string) {
-    //     return this.sessions.get(sessionId);
-    // }
-    //
-    // /**
-    //  * Generate a thumbnail at the specified timestamp.
-    //  * @param file the media file
-    //  * @param outputPath the specified output path
-    //  * @param atSecond timestamp where to take a screenshot. -1 means at the half of the video.
-    //  */
-    // async generateThumbnail(file: MediaFile, outputPath: string, atSecond: number = -1): Promise<void> {
-    //     return new Promise((resolve, reject) => {
-    //         const folder = path.dirname(outputPath);
-    //         const filename = path.basename(outputPath);
-    //
-    //         let timestamp: number;
-    //         const duration = file.metadata?.video[0]?.Duration || 0;
-    //
-    //         if (atSecond === -1) {
-    //             if (!duration || isNaN(duration)) {
-    //                 return reject(new Error('No valid duration in metadata to calculate midpoint.'));
-    //             }
-    //             timestamp = duration / 2;
-    //         } else {
-    //             timestamp = atSecond;
-    //         }
-    //
-    //         ffmpeg(file.path)
-    //             .on('end', () => resolve())
-    //             .on('error', (err) => reject(err))
-    //             .screenshot({
-    //                 timestamps: [timestamp],
-    //                 filename: filename,
-    //                 folder: folder
-    //             })
-    //     });
-    // }
+
+    getSession(sessionId: string): PlaySession | undefined {
+        return this.sessions.get(sessionId);
+    }
 
     /**
      * Shutdown media service
@@ -527,11 +358,10 @@ class StreamingService {
 
         // Stop all active transcoding jobs
         for (const session of this.sessions.values()) {
-            // await this.stopTranscode(session);
+            await this.stopTranscode(session);
         }
 
         this.sessions.clear();
-        // this.activeJobs.clear();
 
         logger.INFO('StreamingService shutdown complete');
     }
@@ -539,4 +369,3 @@ class StreamingService {
 
 const streamingService = new StreamingService();
 export default streamingService;
-export { StreamingService };

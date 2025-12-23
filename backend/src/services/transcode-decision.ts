@@ -35,6 +35,16 @@ export interface TranscodeDecision {
 }
 
 export type QualityProfile = 'original' | '4k_40mbps' | '4k_20mbps' | '1080p_20mbps' | '1080p_8mbps' | '720p_6mbps' | '480p_3mbps' | '360p_1mbps';
+export const BANDWIDTH_BY_PROFILE: Record<QualityProfile, number> = {
+    original: 0,
+    '4k_40mbps': 42000000,
+    '4k_20mbps': 21000000,
+    '1080p_20mbps': 21000000,
+    '1080p_8mbps': 8500000,
+    '720p_6mbps': 6500000,
+    '480p_3mbps': 3500000,
+    '360p_1mbps': 1200000
+};
 
 export class TranscodeDecisionService {
 
