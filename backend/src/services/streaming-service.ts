@@ -183,6 +183,8 @@ export class StreamingService {
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
 
+        const transcodingArgs = getTranscodingArgs(session.decision.profile, session.client.capabilities);
+
         const tempVideoOptions = [
             '-vf', 'scale=-2:1080',
             '-preset', 'veryfast',
