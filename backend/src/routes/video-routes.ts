@@ -3,7 +3,7 @@ import { logger } from "../logger";
 import { findMediaFileById } from "../utils/media-utils";
 import clientManager from "../services/client-manager";
 import { pathExists, stat } from "../utils/file-utils";
-import streamingService from "../services/streaming-service";
+import streamingService, { PlaySession } from "../services/streaming-service";
 import fs from "fs";
 import { spawn } from "child_process";
 import { BANDWIDTH_BY_PROFILE, QualityProfile } from "../services/transcode-decision";
@@ -83,7 +83,7 @@ router.get('/api/videos/hls/:sessionId/index.m3u8', async (req, res) => {
     res.send(playlist);
 });
 
-router.get('/api/videos/hls/:sessionId/:segment', async (req, res) => {
+router.get('/api/videos/hls/:sessionId/:segment', async (req: Request, res: Response): Promise<any> => {
         const { sessionId, segment } = req.params;
 
         const match = segment.match(/segment(\d+)\.ts/);
@@ -106,26 +106,112 @@ router.get('/api/videos/hls/:sessionId/:segment', async (req, res) => {
             return res.sendFile(segmentPath);
         }
 
-        // ⚠️ KURZES Polling (1 Sekunde) um Race Conditions zu vermeiden
-        // Danach übernimmt HLS.js das Retry
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        try {
+            // ✨ Intelligentes Warten auf Segment mit Polling
+            const segmentPath = await waitForSegment(
+                session,
+                segmentIndex,
+                {
+                    pollInterval: 100,      // Alle 100ms prüfen
+                    timeout: 10000,         // Max 10 Sekunden warten
+                    maxPolls: 100          // Max 100 Versuche (= 10s bei 100ms)
+                }
+            );
 
-        const retryPath = await streamingService.getSegment(session, segmentIndex);
-        if (retryPath && await pathExists(retryPath)) {
-            res.setHeader('Content-Type', 'video/mp2t');
-            res.setHeader('Cache-Control', 'public, max-age=3600');
-            return res.sendFile(retryPath);
+            if (segmentPath) {
+                res.setHeader('Content-Type', 'video/mp2t');
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                res.setHeader('Accept-Ranges', 'bytes');
+                return res.sendFile(segmentPath);
+            }
+
+            // Timeout erreicht - Segment konnte nicht erstellt werden
+            logger.WARNING(`Segment ${segmentIndex} timeout after 10s [${sessionId}]`);
+
+            res.setHeader('Retry-After', '2');
+            return res.status(503).json({
+                error: 'Segment not ready',
+                message: 'Transcoding in progress, please retry',
+                segmentIndex: segmentIndex
+            });
+
+        } catch (error) {
+            logger.ERROR(`Error serving segment ${segmentIndex}: ${error}`);
+            return res.status(500).json({
+                error: 'Internal server error',
+                message: 'Failed to serve segment'
+            });
         }
 
-        // Segment noch nicht bereit → 503 mit Retry-After
-        // HLS.js wird automatisch retry machen
-        res.setHeader('Retry-After', '1');
-        return res.status(503).json({
-            error: 'Segment not ready',
-            message: 'Transcoding in progress'
-        });
+        // const segmentPath = await streamingService.getSegment(session, segmentIndex);
+        //
+        // if (segmentPath && await pathExists(segmentPath)) {
+        //     res.setHeader('Content-Type', 'video/mp2t');
+        //     res.setHeader('Cache-Control', 'public, max-age=3600');
+        //     return res.sendFile(segmentPath);
+        // }
+
+
+        // // ⚠️ KURZES Polling (1 Sekunde) um Race Conditions zu vermeiden
+        // // Danach übernimmt HLS.js das Retry
+        // await new Promise(resolve => setTimeout(resolve, 1000));
+        //
+        // const retryPath = await streamingService.getSegment(session, segmentIndex);
+        // if (retryPath && await pathExists(retryPath)) {
+        //     res.setHeader('Content-Type', 'video/mp2t');
+        //     res.setHeader('Cache-Control', 'public, max-age=3600');
+        //     return res.sendFile(retryPath);
+        // }
+        //
+        // // Segment noch nicht bereit → 503 mit Retry-After
+        // // HLS.js wird automatisch retry machen
+        // res.setHeader('Retry-After', '1');
+        // return res.status(503).json({
+        //     error: 'Segment not ready',
+        //     message: 'Transcoding in progress'
+        // });
     }
 );
+
+/**
+ * Wait for segment with intelligent polling
+ */
+async function waitForSegment(
+    session: PlaySession,
+    segmentIndex: number,
+    options: {
+        pollInterval: number;
+        timeout: number;
+        maxPolls: number;
+    }
+): Promise<string | null> {
+    const startTime = Date.now();
+    let pollCount = 0;
+
+    while (pollCount < options.maxPolls) {
+        // Prüfe ob Segment existiert
+        const segmentPath = await streamingService.getSegment(session, segmentIndex);
+
+        if (segmentPath && await pathExists(segmentPath)) {
+            const elapsed = Date.now() - startTime;
+            logger.DEBUG(`Segment ${segmentIndex} ready after ${elapsed}ms (${pollCount} polls)`);
+            return segmentPath;
+        }
+
+        // Prüfe Timeout
+        const elapsed = Date.now() - startTime;
+        if (elapsed >= options.timeout) {
+            logger.WARNING(`Segment ${segmentIndex} timeout after ${elapsed}ms`);
+            return null;
+        }
+
+        // Warte vor nächstem Poll
+        await new Promise(resolve => setTimeout(resolve, options.pollInterval));
+        pollCount++;
+    }
+
+    return null;
+}
 
 /**
  * Handle Direct Play - serve file as-is with Range support

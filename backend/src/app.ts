@@ -10,11 +10,11 @@ import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
 import { clearDirSync, ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
+import hwAccelDetector from "./services/hardware-acceleration-detector";
 import clientRoutes from "./routes/client-routes";
 import mediaRoutes from "./routes/media-routes";
 import videoRoutes from "./routes/video-routes";
 import sessionRoutes from "./routes/session-routes";
-import hwAccelDetector from "./services/hardware-acceleration-detector";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 

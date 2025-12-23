@@ -7,22 +7,18 @@ import { ChildProcess, spawn } from 'child_process';
 import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
 import { ClientInfo } from "../types/client-info";
-import { UUID } from "node:crypto";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
-import { BLUE, GREEN, MAGENTA, RESET, YELLOW } from "../utils/utils";
+import { BLUE, GREEN, MAGENTA, RESET, WHITE, YELLOW } from "../utils/utils";
+import { getTranscodingArgs } from "./transcoding-profiles";
 
 export const SEGMENT_DURATION = 4; // seconds per segment
-export const SEEK_THRESHOLD = 10; // is the number in segments when to cancel a transcode while seeking
+export const PAUSE_TRANSCODE_AFTER = 30000; // pause transcode after x milliseconds. -1 means no pausing.
 
 interface TranscodeJob {
     id: string;
     process?: ChildProcess;
     status: 'running' | 'stopped' | 'completed';
     startSegment: number;
-    lastSegmentCreated?: number;
-    lastSegmentTime?: Date;
-    lastSeekTime?: Date
-    createdAt: Date;
 }
 
 interface SegmentRange {
@@ -30,7 +26,7 @@ interface SegmentRange {
     end: number;
 }
 
-interface PlaySession {
+export interface PlaySession {
     id: string;
     client: ClientInfo;
     file: MediaFile;
@@ -43,6 +39,10 @@ interface PlaySession {
     createdAt: Date;
     lastAccessed: Date;
 
+    currentTime: number;
+    isPaused: boolean;
+    pauseStartedAt?: number;
+
     transcode?: TranscodeJob;
     availableSegments: SegmentRange[];
 }
@@ -54,7 +54,6 @@ export class StreamingService {
 
     getOrCreateSession(client: ClientInfo, file: MediaFile, profile: QualityProfile): PlaySession {
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
-
         const sessionId: string = `${client.token}-${file.id}`;
 
         // Return session if already exists
@@ -80,8 +79,12 @@ export class StreamingService {
             file: file,
             decision: decision,
             audioIndex: 0,
+            subtitleIndex: -1,
             createdAt: new Date(),
             lastAccessed: new Date(),
+            currentTime: 0,
+            isPaused: false,
+            pauseStartedAt: -1,
             availableSegments: []
         };
 
@@ -131,40 +134,25 @@ export class StreamingService {
     }
 
     async getSegment(session: PlaySession, segmentIndex: number): Promise<string | null> {
-        const file = session.file;
         const dir = path.join(TRANSCODE_PATH, session.id, session.decision.profile);
         const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
 
+        session.lastAccessed = new Date();
+
         if (await pathExists(segmentPath)) {
-            logger.DEBUG(`Serving existing segment ${segmentIndex} for session ${session.id}`);
+            logger.DEBUG(`${WHITE}Serving existing segment ${segmentIndex} for session ${session.id}${RESET}`);
             return segmentPath;
         }
 
-        // Transcoding starten oder sicherstellen, dass es läuft
         await this.ensureTranscodeRunning(session, segmentIndex);
         return null;
     }
 
     private async ensureTranscodeRunning(session: PlaySession, requestedSegment: number): Promise<void> {
         return this.lock.acquire(`transcode-${session.id}`, async () => {
-            const job = session.transcode;
-
-            if (job && job.status === 'running') {
-                const seekDistance = Math.abs(requestedSegment - job.startSegment);
-
-                if (seekDistance > SEEK_THRESHOLD) {
-                    // User seeked, restart transcoding from new position
-                    logger.DEBUG(`${YELLOW}Seek detected: segment ${job.startSegment} → ${requestedSegment} (distance: ${seekDistance})${RESET}`);
-                    await this.stopTranscode(session);
-                    await this.startTranscode(session, requestedSegment);
-                } else {
-                    // Update current segment tracking
-                    job.startSegment = Math.max(job.startSegment, requestedSegment);
-                    logger.DEBUG(`Segment ${requestedSegment} within threshold, continuing transcode`);
-                }
-            } else {
-                // No active job or job completed, start new one
-                await this.startTranscode(session, requestedSegment);
+            if (!session.transcode || session.transcode.status !== 'running') {
+                const startSegment = Math.floor(session.currentTime / SEGMENT_DURATION);
+                await this.startTranscode(session, startSegment);
             }
         });
     }
@@ -179,7 +167,6 @@ export class StreamingService {
             id: jobId,
             status: 'running',
             startSegment,
-            createdAt: new Date()
         };
 
         session.transcode = job;
@@ -213,14 +200,16 @@ export class StreamingService {
 
         const args = [
             // Input
-            // '-copyts',
+            '-copyts',
             '-ss', String(seekTime),
             '-i', file.path,
 
             '-threads', '0',
 
-            // Video
+            // Hardware Acceleration Method
             '-c:v', 'libx264',
+
+            // Video
             '-pix_fmt', 'yuv420p',
             ...tempVideoOptions,
             '-g', String(gopSize),
@@ -341,27 +330,80 @@ export class StreamingService {
         session.transcode = undefined;
     }
 
-    /**
-     * Get all existing segment numbers for a session
-     */
-    private async getExistingSegments(session: PlaySession): Promise<number[]> {
-        const dir = path.join(TRANSCODE_PATH, session.id, session.decision.profile);
+    async reportStatistics(sessionId: string, currentTime: number, isPaused: boolean): Promise<void> {
+        const session = this.sessions.get(sessionId);
 
-        if (!await pathExists(dir)) {
-            return [];
+        if (!session) {
+            throw new Error(`No session with id ${sessionId} found`);
         }
 
-        const files = await readdir(dir);
-        const segments: number[] = [];
+        const now = Date.now();
 
-        for (const file of files) {
-            const match = file.match(/segment(\d+)\.ts$/);
-            if (match) {
-                segments.push(parseInt(match[1]));
+        const wasPaused = session.isPaused;
+        session.isPaused = isPaused;
+        session.currentTime = currentTime;
+        session.lastAccessed = new Date(now);
+
+        // Pause-Start merken
+        if (isPaused && !wasPaused) {
+            session.pauseStartedAt = now;
+        }
+
+        // Pause beendet → reset
+        if (!isPaused && wasPaused) {
+            session.pauseStartedAt = undefined;
+        }
+
+        const pauseStartedAt = session.pauseStartedAt;
+
+        if (
+            isPaused &&
+            typeof pauseStartedAt === 'number' &&
+            session.transcode?.status === 'running' &&
+            PAUSE_TRANSCODE_AFTER > 0 &&
+            now - pauseStartedAt > PAUSE_TRANSCODE_AFTER
+        ) {
+            logger.INFO(`Pausing transcode due to long pause [${sessionId}]`);
+            await this.stopTranscode(session);
+        }
+
+        logger.DEBUG(`${MAGENTA}Progress: ${sessionId} @ ${currentTime}s (${isPaused ? 'paused' : 'playing'})${RESET}`);
+    }
+
+    async handleSeek(sessionId: string, time: number): Promise<void> {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`No session with id ${sessionId} found`);
+        }
+
+        session.currentTime = time;
+        session.lastAccessed = new Date();
+
+        const targetSegment = Math.floor(time / SEGMENT_DURATION);
+        logger.INFO(`Seek requested: ${sessionId} to ${time}s (segment ${targetSegment})`);
+
+        if (session.decision.mode === 'transcode') {
+            if (session.transcode?.status === 'running') {
+                await this.stopTranscode(session);
             }
+
+            await this.startTranscode(session, targetSegment);
+        }
+    }
+
+    async handlePlaybackStop(sessionId: string, time?: number): Promise<void> {
+        const session = this.sessions.get(sessionId);
+        if (!session) {
+            throw new Error(`No session with id ${sessionId} found`);
         }
 
-        return segments.sort((a, b) => a - b);
+        logger.INFO(`Stopping playback session: ${sessionId}`);
+
+        // TODO : save "time" to implement the watch later feature
+
+        await this.stopTranscode(session);
+
+        this.sessions.delete(sessionId);
     }
 
     getSession(sessionId: string): PlaySession | undefined {

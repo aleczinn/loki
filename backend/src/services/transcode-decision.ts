@@ -55,12 +55,12 @@ export class TranscodeDecisionService {
      * Main decision function - determines how to stream media
      */
     public decide(file: MediaFile, capabilities: ClientCapabilities, profile: QualityProfile = 'original'): TranscodeDecision {
-        let mode: StreamMode = 'direct_play';
-
         const containerDecision = this.checkContainer(file, capabilities, profile);
         const videoDecision = this.checkVideoCodec(file, capabilities, profile);
         const audioDecision = this.checkAudioCodec(file, capabilities);
         const subtitleDecision = this.checkSubtitles(file, capabilities);
+
+        let mode: StreamMode = 'direct_play';
 
         if (profile === 'original') {
             if (containerDecision.needsRemux && audioDecision.action === 'copy') {

@@ -23,22 +23,26 @@
                     <p class="text-gray">Starte als Transkode</p>
                 </div>
 
-                <!-- Debug Info (optional, nur während Entwicklung) -->
-                <div v-if="playbackInfo"
-                     class="absolute top-20 left-4 bg-black/80 text-white p-4 rounded text-xs">
-                    <div class="font-bold mb-2">Playback Info</div>
-                    <div>Mode: {{ playbackInfo.mode }}</div>
-
-                    <div>Container: {{ playbackInfo.decision.container.sourceContainer }}</div>
-                    <div>Video: {{ playbackInfo.decision.video.action }} {{ playbackInfo.decision.video.sourceCodec }} <span v-if="playbackInfo.decision.video.targetCodec"> ->{{ playbackInfo.decision.video.targetCodec }}</span></div>
-                    <div v-if="playbackInfo.decision.video.hwAccel" class="mb-2">
-                        HW Accel: {{ playbackInfo.decision.video.hwAccel.toUpperCase() }}
-                    </div>
-                    <span v-if="playbackInfo.decision.video.reason" class="ml-4 text-gray">{{ playbackInfo.decision.video.reason }}</span>
-
-                    <div>Audio: {{ playbackInfo.decision.audio.action }} {{ playbackInfo.decision.audio.sourceCodec }} <span v-if="playbackInfo.decision.audio.targetCodec"> ->{{ playbackInfo.decision.audio.targetCodec }}</span></div>
-                    <span v-if="playbackInfo.decision.audio.reason" class="ml-4 text-gray">{{ playbackInfo.decision.audio.reason }}</span>
+                <div class="absolute top-20 left-4 bg-black/80 text-white p-4 rounded text-xs">
+                    <span>Session: {{ sessionId }}</span>
                 </div>
+
+<!--                &lt;!&ndash; Debug Info (optional, nur während Entwicklung) &ndash;&gt;-->
+<!--                <div v-if="playbackInfo"-->
+<!--                     class="absolute top-20 left-4 bg-black/80 text-white p-4 rounded text-xs">-->
+<!--                    <div class="font-bold mb-2">Playback Info</div>-->
+<!--                    <div>Mode: {{ playbackInfo.mode }}</div>-->
+
+<!--                    <div>Container: {{ playbackInfo.decision.container.sourceContainer }}</div>-->
+<!--                    <div>Video: {{ playbackInfo.decision.video.action }} {{ playbackInfo.decision.video.sourceCodec }} <span v-if="playbackInfo.decision.video.targetCodec"> ->{{ playbackInfo.decision.video.targetCodec }}</span></div>-->
+<!--                    <div v-if="playbackInfo.decision.video.hwAccel" class="mb-2">-->
+<!--                        HW Accel: {{ playbackInfo.decision.video.hwAccel.toUpperCase() }}-->
+<!--                    </div>-->
+<!--                    <span v-if="playbackInfo.decision.video.reason" class="ml-4 text-gray">{{ playbackInfo.decision.video.reason }}</span>-->
+
+<!--                    <div>Audio: {{ playbackInfo.decision.audio.action }} {{ playbackInfo.decision.audio.sourceCodec }} <span v-if="playbackInfo.decision.audio.targetCodec"> ->{{ playbackInfo.decision.audio.targetCodec }}</span></div>-->
+<!--                    <span v-if="playbackInfo.decision.audio.reason" class="ml-4 text-gray">{{ playbackInfo.decision.audio.reason }}</span>-->
+<!--                </div>-->
 
                 <!-- Controls -->
                 <div class="absolute inset-0"
@@ -256,7 +260,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -278,18 +282,17 @@ import IconMusicNote from "../../icons/icon-music-note.vue";
 import { LOKI_TOKEN, LOKI_VOLUME } from "../../variables.ts";
 import { LokiPlayerButton } from "../loki-player-button";
 import IconCheckmark from "../../icons/icon-checkmark.vue";
-import { type PlaybackInfo, PlaybackService } from "../../lib/playback-service.ts";
 import type { AxiosInstance } from "axios";
 
 interface VideoPlayerProps {
-    quality?: string;
-    audioTrack?: number;
-    subtitleTrack?: number;
+    profile?: string;
+    audioIndex?: number;
+    subtitleIndex?: number;
     startTime?: number;
 }
 
 const props = withDefaults(defineProps<VideoPlayerProps>(), {
-    quality: 'original',
+    profile: 'original',
     audioTrack: 0,
     subtitleTrack: -1,
     startTime: 0,
@@ -300,10 +303,10 @@ const emit = defineEmits<{
     ended: [];
 }>();
 
-const playbackInfo = ref<PlaybackInfo | null>(null);
-const playbackMode = ref<'direct' | 'hls'>('hls');
 const axios = inject<AxiosInstance>('axios');
-const playbackService = new PlaybackService(axios!);
+
+const sessionId = ref<string | null>(null);
+let progressInterval: NodeJS.Timeout | null = null;
 
 // State
 const isOpen = ref(false);
@@ -399,11 +402,23 @@ async function openPlayer(file: MediaFile) {
         return;
     }
 
-    const profile = 'original';
-    const token = sessionStorage.getItem(LOKI_TOKEN);
-    const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${profile}`;
-
     cleanup();
+
+    const token = sessionStorage.getItem(LOKI_TOKEN);
+    const response = await axios?.post('/session/start', {
+        mediaId: file.id,
+        profile: props.profile
+    }, {
+        headers: {
+            'X-Client-Token': token
+        }
+    });
+
+    sessionId.value = response?.data.sessionId;
+
+    const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${props.profile}`;
+
+    startProgressReporting();
 
     videoRef.value.src = url;
     videoRef.value.volume = volume.value;
@@ -415,6 +430,8 @@ async function openPlayer(file: MediaFile) {
 }
 
 function cleanup() {
+    sessionId.value = null;
+
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
@@ -428,6 +445,19 @@ function cleanup() {
 }
 
 async function closePlayer() {
+    if (sessionId.value && videoRef.value) {
+        try {
+            await axios?.post('/session/stop', {
+                sessionId: sessionId.value,
+                time: videoRef.value.currentTime
+            });
+        } catch (error) {
+            console.error('Failed to stop session:', error);
+        }
+    }
+
+    stopProgressReporting();
+
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
@@ -487,6 +517,33 @@ function initHLSPlayer(url: string) {
     }
 }
 
+
+function startProgressReporting() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+    }
+
+    // Send progress every 5 seconds
+    progressInterval = setInterval(() => {
+        if (!sessionId.value || !videoRef.value) return;
+
+        axios?.post('/session/progress', {
+            sessionId: sessionId.value,
+            currentTime: videoRef.value.currentTime,
+            isPaused: videoRef.value.paused
+        }).catch(err => {
+            console.error('Failed to report progress:', err);
+        });
+    }, 5000);
+}
+
+function stopProgressReporting() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+}
+
 function togglePlayPause() {
     if (!videoRef.value) return;
 
@@ -515,7 +572,17 @@ function skip(seconds: number) {
 function handleSeek(newValue: number) {
     if (!videoRef.value) return;
 
+    videoRef.value.pause();
+
+    axios?.post('/session/seek', {
+        sessionId: sessionId.value,
+        time: newValue
+    }).catch(err => {
+        console.error('Failed to report seek:', err);
+    });
+
     videoRef.value.currentTime = newValue;
+    videoRef.value.play();
 }
 
 function handleVolume(newValue: number) {
@@ -717,6 +784,19 @@ onMounted(() => {
     } else {
         localStorage.setItem(LOKI_VOLUME, volume.value.toString());
     }
+
+    window.addEventListener('beforeunload', () => {
+        if (sessionId.value) {
+            // Use sendBeacon for reliable cleanup on page close
+            navigator.sendBeacon(
+                '/api/session/stop',
+                JSON.stringify({
+                    sessionId: sessionId.value,
+                    time: videoRef?.value?.currentTime
+                })
+            );
+        }
+    });
 });
 
 onUnmounted(() => {
@@ -729,9 +809,8 @@ onUnmounted(() => {
         clearTimeout(controlsTimer);
     }
 
-    if (hls.value) {
-        hls.value.destroy();
-    }
+    stopProgressReporting();
+    closePlayer();
 });
 
 // Watch playing state
@@ -755,7 +834,7 @@ watch(volume, (newVal) => {
 
 defineExpose({
     play(file: MediaFile) {
-        openPlayer(file, 'original');
+        openPlayer(file);
     },
     pause() {
         videoRef.value?.pause();
