@@ -8,14 +8,13 @@ import * as path from 'path';
 import { loggerHandler } from "./middleware/logger-handler";
 import { undefinedRouteHandler } from "./middleware/undefined-route-handler";
 import { logger } from "./logger";
-import { clearDir, clearDirSync, ensureDirSync } from "./utils/file-utils";
+import { clearDirSync, ensureDirSync } from "./utils/file-utils";
 import streamingService from "./services/streaming-service";
+import hwAccelDetector from "./services/hardware-acceleration-detector";
 import clientRoutes from "./routes/client-routes";
 import mediaRoutes from "./routes/media-routes";
-import streamingRoutes from "./routes/streaming-routes";
+import videoRoutes from "./routes/video-routes";
 import sessionRoutes from "./routes/session-routes";
-import playbackRoutes from "./routes/playback-routes";
-import hwAccelDetector from "./services/hardware-acceleration-detector";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
@@ -49,9 +48,8 @@ app.get('/health', (req, res) => {
 
 app.use(clientRoutes);
 app.use(mediaRoutes);
-app.use(streamingRoutes);
+app.use(videoRoutes);
 app.use(sessionRoutes);
-app.use(playbackRoutes);
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
