@@ -4,14 +4,21 @@
         <section class="fixed inset-0 bg-black z-videoplayer">
             <div class="relative flex flex-row justify-center w-full h-full">
                 <div class="aspect-video bg-black w-full">
+                    <!-- Poster Image während Reload -->
+<!--                    <img v-if="posterFrame && (isLoading || isBuffering)"-->
+<!--                         :src="posterFrame"-->
+<!--                         class="absolute inset-0 w-full h-full object-contain"-->
+<!--                         alt="Last frame"-->
+<!--                    />-->
+
                     <video ref="videoRef"
                            class="w-full h-full"
                            @play="isPlaying = true"
                            @pause="isPlaying = false"
                            @loadstart="isLoading = true"
-                           @canplay="isLoading = false"
+                           @canplay="handleCanPlay"
                            @waiting="isBuffering = true"
-                           @playing="isBuffering = false"
+                           @playing="handlePlaying"
                            @timeupdate="updateProgress"
                            @progress="updateBuffer"
                            @ended="onVideoEnd">
@@ -385,6 +392,7 @@ const volume = ref(1);
 const videoRef = ref<HTMLVideoElement | null>(null);
 const hls = ref<Hls | null>(null)
 const currentFile = ref<MediaFile | null>(null);
+const posterFrame = ref<string | null>(null);
 
 // Popups
 const audioDialog = ref<HTMLDialogElement | null>(null);
@@ -413,6 +421,17 @@ const subtitleTracks = ref([
     { name: 'English SDH', language: 'en', format: 'PGS' },
     { name: 'French', language: 'fr', format: 'VobSub' }
 ]);
+
+function handleCanPlay() {
+    isLoading.value = false;
+    // Poster frame entfernen sobald Video bereit ist
+    posterFrame.value = null;
+}
+
+function handlePlaying() {
+    isBuffering.value = false;
+    posterFrame.value = null;
+}
 
 function selectAudioTrack(index: number) {
     currentAudioTrack.value = index;
@@ -568,6 +587,24 @@ async function fetchSessionInfo() {
     }
 }
 
+function capturePosterFrame() {
+    if (!videoRef.value) return;
+
+    try {
+        const canvas = document.createElement('canvas');
+        canvas.width = videoRef.value.videoWidth;
+        canvas.height = videoRef.value.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(videoRef.value, 0, 0, canvas.width, canvas.height);
+            posterFrame.value = canvas.toDataURL('image/jpeg', 0.8);
+        }
+    } catch (error) {
+        console.error('Failed to capture poster frame:', error);
+    }
+}
+
 function cleanup() {
     sessionId.value = null;
 
@@ -707,34 +744,52 @@ async function handleJobRestart(seekTime: number) {
     const url = `/api/videos/${currentFile.value.id}/master.m3u8?token=${token}&profile=${props.profile}`;
 
     if (hls.value) {
-        // HLS.js komplett neu laden
-        console.log('Destroying and reinitializing HLS.js');
-        hls.value.destroy();
-        hls.value = null;
+        console.log('Seamlessly switching HLS playlist');
 
-        // Kurz warten damit alte Ressourcen freigegeben werden
-        await new Promise(resolve => setTimeout(resolve, 100));
+        if (videoRef.value) {
+            capturePosterFrame();
+        }
 
-        initHLSPlayer(url);
+        // Stoppe aktuellen Stream
+        hls.value.stopLoad();
 
-        // Warte bis HLS bereit ist
+        // Lade neue Playlist (ohne destroy!)
+        hls.value.loadSource(url);
+
+        // Warte auf neue Playlist
         await new Promise<void>((resolve) => {
             if (!hls.value) {
                 resolve();
                 return;
             }
 
-            const onReady = () => {
-                hls.value!.off(Hls.Events.MANIFEST_PARSED, onReady);
+            const onManifestParsed = () => {
+                hls.value!.off(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+
+                // Starte bei Segment 0 im neuen Job
+                if (videoRef.value) {
+                    videoRef.value.currentTime = 0;
+                    currentTime.value = seekTime;
+                }
+
                 resolve();
             };
 
-            hls.value.on(Hls.Events.MANIFEST_PARSED, onReady);
+            hls.value.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
         });
 
+        // Auto-play nach Switch
+        if (videoRef.value) {
+            videoRef.value.play().catch(err => {
+                console.error(`Failed to play after restart: ${err}`);
+            });
+        }
     } else if (videoRef.value) {
-        // Native player neu laden
+        // Native player - hier muss leider neu geladen werden
         console.log('Reloading native video player');
+
+        capturePosterFrame();
+
         videoRef.value.pause();
         videoRef.value.src = url;
         videoRef.value.load();
@@ -746,14 +801,9 @@ async function handleJobRestart(seekTime: number) {
             };
             videoRef.value!.addEventListener('loadedmetadata', onLoaded);
         });
-    }
 
-    // Nach Neustart bei Position 0 im neuen Job starten
-    if (videoRef.value) {
         videoRef.value.currentTime = 0;
         currentTime.value = seekTime;
-
-        // Auto-play nach Restart
         videoRef.value.play().catch(err => {
             console.error(`Failed to play after restart: ${err}`);
         });
