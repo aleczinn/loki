@@ -250,7 +250,7 @@ export class StreamingService {
                         const timeMs = parseInt(match[1], 10);
                         const transcodedSeconds = timeMs / 1_000_000; // Microseconds to seconds
                         const absoluteTime = startTime + transcodedSeconds;
-                        const percent = (timeMs  / duration) * 100;
+                        const percent = (transcodedSeconds  / duration) * 100;
 
                         job.lastGeneratedSegment = Math.floor(absoluteTime / SEGMENT_DURATION);
 
