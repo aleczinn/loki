@@ -67,7 +67,7 @@ export class TranscodeDecisionService {
 
         if (needsVideoTranscode || needsAudioTranscode || profile !== 'original') {
             mode = 'transcode';
-        } else if (audioDecision.action === 'copy' && containerDecision.needsRemux) {
+        } else if (containerDecision.needsRemux) {
             mode = 'direct_remux';
         } else {
             mode = 'direct_play';

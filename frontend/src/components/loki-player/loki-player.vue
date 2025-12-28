@@ -63,7 +63,7 @@
 
                         <ul class="ml-2">
                             <li>{{ $t('base.progress') }}: {{ transcodingComputed.progress }} %</li>
-                            <li>{{ $t('base.framerate') }}: {{ transcodingComputed.framerate }} fps ({{ transcodingComputed.factor }}x)</li>
+                            <li>{{ $t('base.framerate') }}: {{ transcodingComputed.fps }} fps ({{ transcodingComputed.speed }}x)</li>
                         </ul>
                     </div>
 
@@ -496,17 +496,21 @@ const audioComputed = computed(() => {
 
 const transcodingComputed = computed(() => {
     if (sessionInfo.value) {
+        console.log("asdasd");
+
         return {
-            progress: -1,
-            framerate: -1,
-            factor: 0.00
+            progress: sessionInfo.value.transcode.progress,
+            fps: sessionInfo.value.transcode.fps,
+            speed: sessionInfo.value.transcode.speed
         }
     }
 
+    console.log("not working");
+
     return {
         progress: -1,
-        framerate: -1,
-        factor: 0.00
+        fps: -1,
+        speed: 0.00
     }
 })
 
@@ -712,6 +716,12 @@ function handleSeek(newValue: number) {
     axios?.post('/session/seek', {
         sessionId: sessionId.value,
         time: newValue
+    }).then((result) => {
+        // if (result.data.restart && hls.value) {
+        //     hls.value.stopLoad();
+        //     hls.value.loadSource(currentUrl); // gleiche URL, neuer Inhalt
+        //     hls.value.startLoad(time);
+        // }
     }).catch(err => {
         console.error('Failed to report seek:', err);
     });

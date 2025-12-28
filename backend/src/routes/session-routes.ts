@@ -79,9 +79,9 @@ router.post('/api/session/seek', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'No time provided' });
         }
 
-        await streamingService.handleSeek(sessionId, time);
+        const result = await streamingService.handleSeek(sessionId, time);
 
-        res.status(204).send();
+        res.status(200).send(result);
     } catch (error) {
         logger.ERROR(`Error reporting a client seek: ${error}`);
         res.status(500).json({ error: 'Failed to report a client seek' });
@@ -130,6 +130,7 @@ router.get('/api/session/:sessionId', async (req: Request, res: Response) => {
         }
 
         const { decision } = session;
+        const transcode = session.transcode;
 
         const response: any = {
             id: session.id,
@@ -142,11 +143,11 @@ router.get('/api/session/:sessionId', async (req: Request, res: Response) => {
             lastAccessed: session.lastAccessed
         };
 
-        if (decision.mode !== 'direct_play') {
+        if (transcode && decision.mode !== 'direct_play') {
             response.transcode = {
-                progress: 0.5,
-                fps: 95.7,
-                speed: 3.95
+                progress: transcode.progress,
+                fps: transcode.fps,
+                speed: transcode.speed
             }
         }
 

@@ -4,7 +4,6 @@ import { PlaySession } from "./streaming-service";
 import { crfForAVCEncoding, supportEncodingInAV1, supportEncodingInHEVC, videoEncodingPreset } from "../settings";
 
 interface TranscodingArgs {
-    inputArgs: string[];
     videoArgs: string[];
     audioArgs: string[];
     subtitleArgs: string[];
@@ -25,7 +24,6 @@ export function getTranscodingArgs(session: PlaySession): TranscodingArgs {
     const supportsAV1 = !!av1;
     const supportsAV1_10bit = supportsAV1 && av1?.bitDepths.includes(10);
 
-    const inputArgs: string[] = [];
     const videoArgs: string[] = [];
     const audioArgs: string[] = [];
     const subtitleArgs: string[] = [];
@@ -48,10 +46,12 @@ export function getTranscodingArgs(session: PlaySession): TranscodingArgs {
                 videoArgs.push('-c:v', encoder); // TODO : change based on settings if I should use h264 or h265
                 videoArgs.push('-crf', String(crfForAVCEncoding));
                 videoArgs.push('-preset', String(videoEncodingPreset));
-                videoArgs.push('-pix_fmt', (supportsHEVC_10bit || supportsAV1_10bit) ? 'yuv420p10le' : 'yuv420p');
+                if (encoder === 'libx264') {
+                    videoArgs.push('-pix_fmt', 'yuv420p');
+                } else {
+                    videoArgs.push('-pix_fmt', (supportsHEVC_10bit || supportsAV1_10bit) ? 'yuv420p10le' : 'yuv420p');
+                }
             } else {
-                inputArgs.push(...hardwareAccelerationDetector.getInputArgs(hw.preferred));
-
                 // TODO : Need to check if gpu/igpu also support encoder
                 switch (hw.preferred) {
                     case 'nvenc':
@@ -166,7 +166,8 @@ export function getTranscodingArgs(session: PlaySession): TranscodingArgs {
             const opus = caps.audioCodecs.find(a => a.codec === 'opus');
             const opusSupported = !!opus;
 
-            audioArgs.push('-c:a', opusSupported ? 'opus' : 'aac');
+            // audioArgs.push('-c:a', opusSupported ? 'opus' : 'aac');
+            audioArgs.push('-c:a','aac');
             switch (profile) {
                 case "4k_40mbps":
                 case "4k_20mbps":
@@ -188,12 +189,7 @@ export function getTranscodingArgs(session: PlaySession): TranscodingArgs {
         }
     }
 
-    // console.log("INPUT_ARGS", inputArgs);
-    // console.log("VIDEO_ARGS", videoArgs);
-    // console.log("AUDIO_ARGS", audioArgs);
-
     return {
-        inputArgs,
         videoArgs,
         audioArgs,
         subtitleArgs
