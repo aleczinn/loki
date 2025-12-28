@@ -43,7 +43,7 @@
                         </ul>
                     </div>
 
-                    <div v-if="sessionInfo?.transcoding">
+                    <div v-if="sessionInfo?.transcode">
                         <h6 class="font-bold mb-1">{{ $t('transcoding.title') }}<</h6>
 <!--                        <ul class="ml-2 mb-2">-->
 <!--                            <li>Container: Der Container wird nicht unterstützt</li>-->
@@ -496,23 +496,15 @@ const audioComputed = computed(() => {
 
 const transcodingComputed = computed(() => {
     if (sessionInfo.value) {
-        console.log("asdasd");
-
         return {
-            progress: sessionInfo.value.transcode.progress,
-            fps: sessionInfo.value.transcode.fps,
-            speed: sessionInfo.value.transcode.speed
+            progress: sessionInfo.value.transcode.progress.toFixed(1) ?? 0,
+            fps: sessionInfo.value.transcode.fps ?? 0,
+            speed: sessionInfo.value.transcode.speed ?? 0
         }
     }
 
-    console.log("not working");
-
-    return {
-        progress: -1,
-        fps: -1,
-        speed: 0.00
-    }
-})
+    return { progress: 0, fps: 0, speed: 0 }
+});
 
 async function openPlayer(file: MediaFile) {
     currentFile.value = file;

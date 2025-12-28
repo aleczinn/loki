@@ -140,10 +140,12 @@ router.get('/api/session/:sessionId', async (req: Request, res: Response) => {
             audioIndex: session.audioIndex,
             subtitleIndex: session.subtitleIndex,
             createdAt: session.createdAt,
-            lastAccessed: session.lastAccessed
+            lastAccessed: session.lastAccessed,
+            transcode: {}
         };
 
         if (transcode && decision.mode !== 'direct_play') {
+
             response.transcode = {
                 progress: transcode.progress,
                 fps: transcode.fps,

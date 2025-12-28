@@ -399,6 +399,7 @@ export class StreamingService {
      */
     async streamDirectRemux(req: Request, res: Response, session: PlaySession): Promise<void> {
         const file = session.file;
+        const duration = file.metadata.general.Duration;
         const decision = session.decision;
 
         res.setHeader('Content-Type', 'video/mp4');
@@ -429,6 +430,8 @@ export class StreamingService {
         args.push(
             '-f', 'mp4',
             '-movflags', 'frag_keyframe+empty_moov+faststart',
+            '-progress', 'pipe:2',
+            '-nostats',
             'pipe:1'
         )
 
@@ -446,8 +449,43 @@ export class StreamingService {
 
         ffmpegProcess.stdout.pipe(res);
 
-        ffmpegProcess.stderr.on('data', (data: any) => {
-            logger.DEBUG(`[remux ${session.id}] ${data}`);
+        let progressBuffer = '';
+
+        ffmpegProcess.stderr.on('data', (data) => {
+            progressBuffer += data.toString();
+
+            const lines = progressBuffer.split('\n');
+            progressBuffer = lines.pop() || '';
+
+            for (const line of lines) {
+                const [key, value] = line.trim().split('=');
+                if (!key || !value) continue;
+
+                switch (key) {
+                    case 'out_time_ms': {
+                        const timeMs = parseInt(value, 10);
+                        if (Number.isNaN(timeMs)) break;
+
+                        const transcodedSeconds = timeMs / 1_000_000; // Microseconds to seconds
+                        job.progress = (transcodedSeconds / duration) * 100;
+                        break;
+                    }
+
+                    case 'fps':
+                        job.fps = parseFloat(value);
+                        break;
+
+                    case 'speed':
+                        job.speed = parseFloat(value.replace('x', ''));
+                        break;
+
+                    case 'progress':
+                        if (value === 'end') {
+                            job.progress = 100;
+                        }
+                        break;
+                }
+            }
         });
 
         ffmpegProcess.on('error', (error: any) => {
