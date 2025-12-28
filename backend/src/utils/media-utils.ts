@@ -142,3 +142,25 @@ export async function getCombinedMetadata(path: string): Promise<Mediainfo | nul
     }
     return null
 }
+
+/**
+ * Get MIME type based on file extension
+ */
+export function getMimeType(extension: string): string {
+    const ext = extension.toLowerCase();
+
+    const mimeTypes: Record<string, string> = {
+        '.mp4': 'video/mp4',
+        '.m4v': 'video/mp4',
+        '.mkv': 'video/x-matroska',
+        '.webm': 'video/webm',
+        '.avi': 'video/x-msvideo',
+        '.mov': 'video/quicktime',
+        '.wmv': 'video/x-ms-wmv',
+        '.flv': 'video/x-flv',
+        '.mpg': 'video/mpeg',
+        '.mpeg': 'video/mpeg'
+    };
+
+    return mimeTypes[ext] || 'video/mp4';
+}

@@ -19,12 +19,68 @@
                 </div>
 
                 <!-- Notification Widget -->
-                <div class="absolute top-8 left-1/2 -translate-1/2 w-fit bg-black-900 rounded-xl px-4 py-2 z-popup">
-                    <p class="text-gray">Starte als Transkode</p>
-                </div>
+<!--                <div class="absolute top-8 left-1/2 -translate-1/2 w-fit bg-black-900 rounded-xl px-4 py-2 z-popup">-->
+<!--                    <p class="text-gray">Starte als Transkode</p>-->
+<!--                </div>-->
 
-                <div class="absolute top-20 left-4 bg-black/80 text-white p-4 rounded text-xs">
-                    <span>Session: {{ sessionId }}</span>
+                <div v-if="sessionId && sessionInfo" class="absolute top-28 left-4 bg-black/80 text-white p-4 rounded text-xs  z-popup pointer-events-none flex flex-col gap-4">
+                    <span class="">{{ $t('debug.labels.session_id') }}: {{ sessionId }}</span>
+
+                    <div>
+                        <h6 class="font-bold mb-1">{{ $t('debug.labels.playback_information') }}</h6>
+                        <ul class="ml-2">
+                            <li>{{ $t('debug.labels.player') }}: {{ $t('debug.player.html') }}</li>
+                            <li>{{ $t('debug.labels.playback_method') }}: {{ $t(`base.methods.${sessionInfo.decision.mode}`) }}</li>
+                            <li>{{ $t('debug.labels.stream_type') }}: {{ sessionInfo.decision.mode === 'transcode' ? $t(`debug.streamtype.hls`) : $t(`debug.streamtype.native`) }}</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h6 class="font-bold mb-1">{{ $t('debug.labels.video_information') }}</h6>
+                        <ul class="ml-2">
+                            <li>{{ $t('debug.labels.player_dimensions') }}: {{ videoRef?.clientWidth }}x{{ videoRef?.clientHeight }}</li>
+                            <li>{{ $t('debug.labels.video_dimensions') }}: {{ videoRef?.videoWidth }}x{{ videoRef?.videoHeight }}</li>
+                        </ul>
+                    </div>
+
+                    <div v-if="sessionInfo?.transcoding">
+                        <h6 class="font-bold mb-1">{{ $t('transcoding.title') }}<</h6>
+<!--                        <ul class="ml-2 mb-2">-->
+<!--                            <li>Container: Der Container wird nicht unterstützt</li>-->
+<!--                            <li>-->
+<!--                                <span>Video: AV1 -> H265</span>-->
+<!--                                <ul class="ml-4 list-disc">-->
+<!--                                    <li>Dynamikumfang des Videos wird nicht unterstützt</li>-->
+<!--                                </ul>-->
+<!--                            </li>-->
+<!--                            <li>-->
+<!--                                <span>Audio: TrueHD -> AAC</span>-->
+<!--                                <ul class="ml-4 list-disc">-->
+<!--                                    <li>Der Audiocodec wird nicht unterstützt</li>-->
+<!--                                </ul>-->
+<!--                            </li>-->
+<!--                        </ul>-->
+
+                        <ul class="ml-2">
+                            <li>{{ $t('base.progress') }}: {{ transcodingComputed.progress }} %</li>
+                            <li>{{ $t('base.framerate') }}: {{ transcodingComputed.framerate }} fps ({{ transcodingComputed.factor }}x)</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h6 class="font-bold mb-1">{{ $t('debug.labels.original_media_information') }}</h6>
+                        <ul class="ml-2">
+                            <li>{{ $t('base.container') }}: {{ containerComputed.container }}</li>
+                            <li>{{ $t('base.size') }}: {{ containerComputed.size }}</li>
+                            <li>{{ $t('base.video.bitrate') }}: {{ formatBitrate(sessionInfo.file.metadata.video[0].BitRate) }}</li>
+                            <li>{{ $t('base.video.codec') }}: {{ videoComputed.codec }}</li>
+                            <li>{{ $t('base.video.hdr_profile') }}: {{ videoComputed.hdr_profile }}</li>
+                            <li>{{ $t('base.audio.codec') }}: {{ audioComputed.codec }}</li>
+                            <li>{{ $t('base.audio.bitrate') }}: {{ audioComputed.bitrate }}</li>
+                            <li>{{ $t('base.audio.channel') }}: {{ audioComputed.channel }}</li>
+                            <li>{{ $t('base.audio.sample_rate') }}: {{ audioComputed.sample_rate }}</li>
+                        </ul>
+                    </div>
                 </div>
 
 <!--                &lt;!&ndash; Debug Info (optional, nur während Entwicklung) &ndash;&gt;-->
@@ -260,7 +316,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { computed, inject, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -272,7 +328,7 @@ import IconPlayerRewind10 from "../../icons/player/icon-player-rewind-10.vue";
 import IconPlayerForward30 from "../../icons/player/icon-player-forward-30.vue";
 import type { MediaFile } from "../../types/media.ts";
 import IconFullscreen from "../../icons/icon-fullscreen.vue";
-import { clamp } from "../../lib/utils.ts";
+import { clamp, formatBitrate, formatFileSize } from "../../lib/utils.ts";
 import IconGear from "../../icons/icon-gear.vue";
 import IconPlayerVolume from "../../icons/player/icon-player-volume.vue";
 import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
@@ -306,6 +362,7 @@ const emit = defineEmits<{
 const axios = inject<AxiosInstance>('axios');
 
 const sessionId = ref<string | null>(null);
+const sessionInfo = ref<any | null>(null);
 let progressInterval: NodeJS.Timeout | null = null;
 
 // State
@@ -324,8 +381,8 @@ const buffered = ref(0);
 const volume = ref(1);
 
 // Refs
-const hls = ref<Hls | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null);
+const hls = ref<Hls | null>(null)
 const currentFile = ref<MediaFile | null>(null);
 
 // Popups
@@ -388,6 +445,71 @@ const endTime = computed(() => {
     });
 });
 
+const containerComputed = computed(() => {
+    if (sessionInfo.value) {
+        let container = sessionInfo.value.file?.metadata.general.Format.toLowerCase();
+
+        switch (container) {
+            case 'mpeg-4':
+                container = 'mp4';
+                break;
+            case 'matroska':
+                container = 'mkv';
+                break;
+        }
+
+        return {
+            container: container,
+            size: formatFileSize(sessionInfo.value.file.size)
+        }
+    }
+
+    return {
+        container: 'unknown',
+        size: 'unknown'
+    }
+})
+
+const videoComputed = computed(() => {
+    if (sessionInfo.value) {
+
+    }
+
+    return {
+        codec: 'unknown',
+        hdr_profile: 'unknown'
+    }
+})
+
+const audioComputed = computed(() => {
+    if (sessionInfo.value) {
+
+    }
+
+    return {
+        codec: 'unknown',
+        bitrate: -1,
+        channel: -1,
+        sample_rate: -1
+    }
+})
+
+const transcodingComputed = computed(() => {
+    if (sessionInfo.value) {
+        return {
+            progress: -1,
+            framerate: -1,
+            factor: 0.00
+        }
+    }
+
+    return {
+        progress: -1,
+        framerate: -1,
+        factor: 0.00
+    }
+})
+
 async function openPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
@@ -427,6 +549,12 @@ async function openPlayer(file: MediaFile) {
         console.log("Abspielen mit native player fehlgeschlagen! Wechsle zu HLS");
         initHLSPlayer(url);
     });
+
+    axios?.get(`/session/${sessionId.value}`).then(response => {
+        sessionInfo.value = response?.data;
+    }).catch(error => {
+        console.error(`Failed to get session information for ${sessionId}:`, error);
+    })
 }
 
 function cleanup() {
@@ -534,6 +662,13 @@ function startProgressReporting() {
         }).catch(err => {
             console.error('Failed to report progress:', err);
         });
+
+        axios?.get(`/session/${sessionId.value}`).then(response => {
+            sessionInfo.value = response?.data;
+        }).catch(error => {
+            console.error(`Failed to get session information for ${sessionId}:`, error);
+        })
+
     }, 5000);
 }
 
@@ -598,6 +733,7 @@ function updateProgress() {
 
     currentTime.value = videoRef.value.currentTime;
     duration.value = videoRef.value.duration || 0;
+
 }
 
 function updateBuffer() {
@@ -786,7 +922,7 @@ onMounted(() => {
     }
 
     window.addEventListener('beforeunload', () => {
-        if (sessionId.value) {
+        if (sessionId.value && videoRef.value) {
             // Use sendBeacon for reliable cleanup on page close
             navigator.sendBeacon(
                 '/api/session/stop',

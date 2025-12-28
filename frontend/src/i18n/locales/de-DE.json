@@ -1,4 +1,41 @@
 {
+    "base": {
+        "container": "Container",
+        "video": {
+            "base": "Video",
+            "bitrate": "Video-Bitrate",
+            "codec": "Video-Codec",
+            "hdr_profile": "Video-Dynamikumfang"
+        },
+        "audio": {
+            "base": "Audio",
+            "bitrate": "Audio-Bitrate",
+            "codec": "Audio-Codec",
+            "channel": "Audio-Kanäle",
+            "sample_rate": "Audio-Abtastrate"
+        },
+        "subtitle": {
+            "base": "Untertitel",
+            "format": {
+                "pgs": "PGS",
+                "srt": "SRT",
+                "ass": "ASS",
+                "vobsub": "VobSub"
+            }
+        },
+        "codec": "Codec",
+        "bitrate": "Bitrate",
+        "sample_rate": "Abtastrate",
+        "size": "Größe",
+        "progress": "Fortschritt",
+        "framerate": "Bildrate",
+        "methods": {
+            "direct_play": "Direktes Abspielen",
+            "direct_remux": "Direktes Remuxing",
+            "direct_stream": "Direktes Streamen",
+            "transcode": "Transkodieren"
+        }
+    },
     "login": {
         "who-is-watching": "Wer schaut grade?",
         "add-profile": "Profil hinzufügen"
@@ -69,6 +106,38 @@
         "fullscreen": {
             "title": "Vollbild (F)",
             "label": "Vollbild"
+        }
+    },
+    "debug": {
+        "labels": {
+            "session_id": "SessionId",
+            "player": "Player",
+            "player_dimensions": "Playerabmessungen",
+            "playback_information": "Wiedergabe-Informationen",
+            "playback_method": "Abspielmethode",
+            "video_information": "Videoinformationen",
+            "video_dimensions": "Videoauflösung",
+            "stream_type": "Streamtyp",
+            "original_media_information": "Original Medium-Informationen"
+        },
+        "player": {
+            "html": "HTML Video Player",
+            "exo": "Exo Player"
+        },
+        "streamtype": {
+            "native": "Nativ",
+            "hls": "HLS"
+        }
+    },
+    "transcoding": {
+        "title": "Transkodierung",
+        "flags": {
+            "container_not_supported": "Der Dynamikumfang des Videos wird nicht unterstützt",
+            "video_codec_not_supported": "Der Videocodec wird nicht unterstützt",
+            "video_dynamic_not_supported": "Der Dynamikumfang des Videos wird nicht unterstütz",
+            "audio_codec_not_supported": "Der Audiocodec wird nicht unterstützt",
+            "subtitle_type_not_supported": "Der Untertitel-Typ wird nicht unterstützt",
+            "prefer_fragmented_mp4": "Bevorzuge fragmentiertes MP4"
         }
     }
 }

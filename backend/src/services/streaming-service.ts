@@ -2,7 +2,7 @@ import * as path from 'path';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
-import { deleteFile, ensureDir, pathExists, readdir, readFile, writeFile } from "../utils/file-utils";
+import { deleteFile, ensureDir, pathExists, readdir, readFile, stat, writeFile } from "../utils/file-utils";
 import { ChildProcess, spawn } from 'child_process';
 import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
@@ -10,6 +10,9 @@ import { ClientInfo } from "../types/client-info";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
 import { BLUE, GREEN, MAGENTA, RESET, WHITE, YELLOW } from "../utils/utils";
 import { getTranscodingArgs } from "./transcoding-profiles";
+import { Request, Response } from 'express';
+import { getMimeType } from "../utils/media-utils";
+import fs from "fs";
 
 export const SEGMENT_DURATION = 4; // seconds per segment
 export const PAUSE_TRANSCODE_AFTER = 30000; // pause transcode after x milliseconds. -1 means no pausing.
@@ -19,11 +22,7 @@ interface TranscodeJob {
     process?: ChildProcess;
     status: 'running' | 'stopped' | 'completed';
     startSegment: number;
-}
-
-interface SegmentRange {
-    start: number;
-    end: number;
+    lastGeneratedSegment?: number;
 }
 
 export interface PlaySession {
@@ -34,7 +33,7 @@ export interface PlaySession {
     decision: TranscodeDecision;
 
     audioIndex: number;
-    subtitleIndex?: number;
+    subtitleIndex: number;
 
     createdAt: Date;
     lastAccessed: Date;
@@ -44,7 +43,6 @@ export interface PlaySession {
     pauseStartedAt?: number;
 
     transcode?: TranscodeJob;
-    availableSegments: SegmentRange[];
 }
 
 export class StreamingService {
@@ -84,8 +82,7 @@ export class StreamingService {
             lastAccessed: new Date(),
             currentTime: 0,
             isPaused: false,
-            pauseStartedAt: -1,
-            availableSegments: []
+            pauseStartedAt: -1
         };
 
         this.sessions.set(sessionId, session);
@@ -162,7 +159,6 @@ export class StreamingService {
         await ensureDir(dir);
 
         const jobId = crypto.randomUUID();
-
         const job: TranscodeJob = {
             id: jobId,
             status: 'running',
@@ -183,22 +179,7 @@ export class StreamingService {
         const framerate = file.metadata?.video[0]?.FrameRate || -1;
         const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
 
-        const transcodingArgs = getTranscodingArgs(session.decision.profile, session.client.capabilities);
-
-        const tempVideoOptions = [
-            '-vf', 'scale=-2:1080',
-            '-preset', 'veryfast',
-            '-b:v', '20000k',
-            '-maxrate', '22000k',
-            '-bufsize', '40000k',
-        ];
-
-        const tempAudioOptions = [
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-ac', '2',
-            '-ar', '48000',
-        ]
+        const transcodingArgs = getTranscodingArgs(session);
 
         const args = [
             // Input
@@ -208,18 +189,18 @@ export class StreamingService {
 
             '-threads', '0',
 
-            // Hardware Acceleration Method
-            '-c:v', 'libx264',
-
             // Video
+            '-c:v', 'libx264',
             '-pix_fmt', 'yuv420p',
-            ...tempVideoOptions,
             '-g', String(gopSize),
             '-sc_threshold', '0',
             '-force_key_frames', `expr:gte(t,n_forced*${SEGMENT_DURATION})`,
 
             // Audio
-            ...tempAudioOptions,
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-ac', '2',
+            '-ar', '48000',
 
             // Mapping
             '-map', '0:v:0',  // Erster Video stream
@@ -295,7 +276,8 @@ export class StreamingService {
                 // Cleanup temp playlist nach erfolgreichem Transcoding
                 try {
                     await deleteFile(tempPlaylistPath);
-                } catch (e) {}
+                } catch (e) {
+                }
             } else if (signal === 'SIGKILL') {
                 logger.DEBUG(`Process killed [${session.id}]`);
             } else {
@@ -330,6 +312,144 @@ export class StreamingService {
         }
 
         session.transcode = undefined;
+    }
+
+    /**
+     * Direct Play - serve file as-is with Range support
+     */
+    async streamDirectPlay(req: Request, res: Response, session: PlaySession, range?: string): Promise<void> {
+        const file = session.file;
+        const stats = await stat(file.path);
+        const fileSize = stats.size;
+
+        // Set MIME type
+        const mimeType = getMimeType(file.extension);
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Accept-Ranges', 'bytes');
+
+        // Handle Range request (for seeking)
+        if (range) {
+            const parts = range.replace(/bytes=/, '').split('-');
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunkSize = (end - start) + 1;
+
+            // Validate range
+            if (start >= fileSize || end >= fileSize) {
+                res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+                res.end();
+                return; // ← Kein Wert zurückgeben
+            }
+
+            logger.DEBUG(`Direct Play: Range ${start}-${end}/${fileSize} for ${file.name}`);
+
+            res.status(206); // Partial Content
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+            res.setHeader('Content-Length', chunkSize);
+
+            const stream = fs.createReadStream(file.path, { start, end });
+            stream.pipe(res);
+
+            stream.on('error', (error) => {
+                logger.ERROR(`Stream error: ${error}`);
+                if (!res.headersSent) {
+                    res.status(500).end();
+                }
+            });
+        } else {
+            // Full file
+            logger.DEBUG(`Direct Play: Full file for ${file.name}`);
+
+            res.setHeader('Content-Length', fileSize);
+
+            const stream = fs.createReadStream(file.path);
+            stream.pipe(res);
+
+            stream.on('error', (error) => {
+                logger.ERROR(`Stream error: ${error}`);
+                if (!res.headersSent) {
+                    res.status(500).end();
+                }
+            });
+        }
+    }
+
+    /**
+     * Direct remux - Stream file via fragmented mp4.
+     * No video transcoding. Optional audio transcoding.
+     */
+    async streamDirectRemux(req: Request, res: Response, session: PlaySession): Promise<void> {
+        const file = session.file;
+        const decision = session.decision;
+
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Accept-Ranges', 'bytes');
+        // res.setHeader('Cache-Control', 'no-cache');
+
+        const args: string[] = [
+            '-i', file.path,
+
+            '-map', '0:v:0',
+            '-map', '0:a:0',
+
+            // Video copy
+            '-c:v', 'copy',
+            '-c:a', 'copy',
+        ];
+
+        // SUBTITLE
+        // if (decision.subtitle.action === 'copy') {
+        //     // args.push('-c:s', 'copy');
+        //     args.push('-c:s', 'mov_text');
+        // } else {
+        //     args.push('-sn');
+        // }
+
+        // args.push('-sn');
+
+        args.push(
+            '-f', 'mp4',
+            '-movflags', 'frag_keyframe+empty_moov+faststart',
+            'pipe:1'
+        )
+
+        logger.DEBUG(`${MAGENTA}DIRECT REMUX ARGS: ${args}${RESET}`);
+
+        const ffmpegProcess = spawn(FFMPEG_PATH, args);
+
+        const job: TranscodeJob = {
+            id: crypto.randomUUID(),
+            status: 'running',
+            process: ffmpegProcess,
+            startSegment: -1
+        };
+        session.transcode = job;
+
+        ffmpegProcess.stdout.pipe(res);
+
+        ffmpegProcess.stderr.on('data', (data: any) => {
+            logger.DEBUG(`[remux ${session.id}] ${data}`);
+        });
+
+        ffmpegProcess.on('error', (error: any) => {
+            logger.ERROR(`FFmpeg remux error: ${error}`);
+            if (!res.headersSent) {
+                res.status(500).end();
+            }
+        });
+
+        ffmpegProcess.on('close', (code: any) => {
+            if (code !== 0) {
+                logger.ERROR(`FFmpeg remux exited with code ${code}`);
+            } else {
+                logger.DEBUG(`Direct Remux completed for ${file.name}`);
+            }
+        });
+
+        req.on('close', () => {
+            logger.DEBUG('Client disconnected, killing FFmpeg remux');
+            ffmpegProcess.kill('SIGKILL');
+        });
     }
 
     async reportStatistics(sessionId: string, currentTime: number, isPaused: boolean): Promise<void> {
@@ -369,7 +489,7 @@ export class StreamingService {
             await this.stopTranscode(session);
         }
 
-        logger.DEBUG(`${MAGENTA}Progress: ${sessionId} @ ${currentTime}s (${isPaused ? 'paused' : 'playing'})${RESET}`);
+        logger.DEBUG(`${BLUE}Session Heartbeat: ${sessionId} @ ${currentTime}s (${isPaused ? 'paused' : 'playing'})${RESET}`);
     }
 
     async handleSeek(sessionId: string, time: number): Promise<void> {
@@ -382,7 +502,7 @@ export class StreamingService {
         session.lastAccessed = new Date();
 
         const targetSegment = Math.floor(time / SEGMENT_DURATION);
-        logger.INFO(`Seek requested: ${sessionId} to ${time}s (segment ${targetSegment})`);
+        logger.INFO(`${BLUE}Seek requested: ${sessionId} to ${time}s (segment ${targetSegment})${RESET}`);
 
         if (session.decision.mode === 'transcode') {
             if (session.transcode?.status === 'running') {

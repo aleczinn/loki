@@ -67,7 +67,7 @@ export class HardwareAccelerationDetector {
             }
         }
 
-        const preferred = this.determinePreferred(available);
+        const preferred: HWAccelType = this.determinePreferred(available);
 
         this.cachedInfo = { available, preferred, encoders: encodersByType };
 
