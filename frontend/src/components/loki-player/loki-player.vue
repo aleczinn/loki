@@ -4,13 +4,6 @@
         <section class="fixed inset-0 bg-black z-videoplayer">
             <div class="relative flex flex-row justify-center w-full h-full">
                 <div class="aspect-video bg-black w-full">
-                    <!-- Poster Image während Reload -->
-<!--                    <img v-if="posterFrame && (isLoading || isBuffering)"-->
-<!--                         :src="posterFrame"-->
-<!--                         class="absolute inset-0 w-full h-full object-contain"-->
-<!--                         alt="Last frame"-->
-<!--                    />-->
-
                     <video ref="videoRef"
                            class="w-full h-full"
                            @play="isPlaying = true"
@@ -148,7 +141,7 @@
                                 <span class="text-left">{{ formatTime(currentTime) }}</span>
 
                                 <loki-progress-bar class="w-full h-1"
-                                                   :value="currentTime"
+                                                   :value="displayTime"
                                                    :value-secondary="buffered"
                                                    :min-value="0"
                                                    :max-value="duration"
@@ -157,7 +150,7 @@
                                                    @update:value="handleSeek">
                                 </loki-progress-bar>
 
-                                <span class="text-right">{{ formatTime(duration) }}</span>
+                                <span class="text-right">{{ formatTime(displayTime) }}</span>
                             </div>
 
                             <!-- Buttons -->
@@ -392,7 +385,9 @@ const volume = ref(1);
 const videoRef = ref<HTMLVideoElement | null>(null);
 const hls = ref<Hls | null>(null)
 const currentFile = ref<MediaFile | null>(null);
-const posterFrame = ref<string | null>(null);
+
+const isSeeking = ref(false);
+const seekTarget = ref(0);
 
 // Popups
 const audioDialog = ref<HTMLDialogElement | null>(null);
@@ -424,13 +419,10 @@ const subtitleTracks = ref([
 
 function handleCanPlay() {
     isLoading.value = false;
-    // Poster frame entfernen sobald Video bereit ist
-    posterFrame.value = null;
 }
 
 function handlePlaying() {
     isBuffering.value = false;
-    posterFrame.value = null;
 }
 
 function selectAudioTrack(index: number) {
@@ -490,6 +482,12 @@ const containerComputed = computed(() => {
     }
 })
 
+const displayTime = computed(() => {
+    // Während Seeking: zeige Ziel-Zeit
+    // Sonst: zeige echte aktuelle Zeit
+    return isSeeking.value ? seekTarget.value : currentTime.value;
+});
+
 const videoComputed = computed(() => {
     if (sessionInfo.value) {
 
@@ -530,11 +528,7 @@ async function openPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
 
-    startOffset.value = 0;
-    currentTime.value = 0;
-    duration.value = 0;
-    buffered.value = 0;
-
+    cleanup();
     duration.value = file.metadata.general.Duration;
 
     await nextTick();
@@ -543,8 +537,6 @@ async function openPlayer(file: MediaFile) {
         console.error("videoRef still null after nextTick()");
         return;
     }
-
-    cleanup();
 
     const token = sessionStorage.getItem(LOKI_TOKEN);
     const response = await axios?.post('/session/start', {
@@ -587,26 +579,14 @@ async function fetchSessionInfo() {
     }
 }
 
-function capturePosterFrame() {
-    if (!videoRef.value) return;
-
-    try {
-        const canvas = document.createElement('canvas');
-        canvas.width = videoRef.value.videoWidth;
-        canvas.height = videoRef.value.videoHeight;
-
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.drawImage(videoRef.value, 0, 0, canvas.width, canvas.height);
-            posterFrame.value = canvas.toDataURL('image/jpeg', 0.8);
-        }
-    } catch (error) {
-        console.error('Failed to capture poster frame:', error);
-    }
-}
-
 function cleanup() {
     sessionId.value = null;
+    startOffset.value = 0;
+    currentTime.value = 0;
+    duration.value = 0;
+    buffered.value = 0;
+    isSeeking.value = false;
+    seekTarget.value = 0;
 
     if (hls.value) {
         hls.value.destroy();
@@ -746,10 +726,6 @@ async function handleJobRestart(seekTime: number) {
     if (hls.value) {
         console.log('Seamlessly switching HLS playlist');
 
-        if (videoRef.value) {
-            capturePosterFrame();
-        }
-
         // Stoppe aktuellen Stream
         hls.value.stopLoad();
 
@@ -788,8 +764,6 @@ async function handleJobRestart(seekTime: number) {
         // Native player - hier muss leider neu geladen werden
         console.log('Reloading native video player');
 
-        capturePosterFrame();
-
         videoRef.value.pause();
         videoRef.value.src = url;
         videoRef.value.load();
@@ -811,24 +785,23 @@ async function handleJobRestart(seekTime: number) {
 }
 
 function skip(seconds: number) {
-    if (!videoRef.value) return;
-
-    const value = videoRef.value.currentTime + seconds;
-    videoRef.value.currentTime = clamp(value, 0, videoRef.value.duration);
+    const baseTime = isSeeking.value ? seekTarget.value : currentTime.value;
+    const newTime = baseTime + seconds;
+    handleSeek(newTime);
 }
 
 async function handleSeek(seconds: number) {
     if (!videoRef.value || !sessionId.value) return;
 
     const wasPaused = videoRef.value.paused;
+    isSeeking.value = true;
+    seekTarget.value = seconds;
+
     videoRef.value.pause();
 
     const target = Math.max(0, Math.min(seconds, duration.value));
 
     try {
-        const jobRelativeTime = target - (startOffset.value || 0);
-        console.log(`Seeking to ${target}s (job-relative: ${jobRelativeTime}s, offset: ${startOffset.value}s)`);
-
         const response = await axios?.post('/session/seek', {
             sessionId: sessionId.value,
             time: target  // Sende absolute Zeit ans Backend
@@ -836,13 +809,10 @@ async function handleSeek(seconds: number) {
 
         if (response?.data.restart) {
             // Job wurde neu gestartet → HLS komplett neu laden
-            console.log('Seek triggered job restart');
             await handleJobRestart(response.data.startOffset || target);
             await fetchSessionInfo();
         } else {
             // Normaler Seek innerhalb des aktuellen Jobs
-            console.log('Seek within current job');
-
             if (videoRef.value) {
                 // Setze Position relativ zum aktuellen Job
                 const newJobTime = target - (startOffset.value || 0);
@@ -860,6 +830,8 @@ async function handleSeek(seconds: number) {
         if (!wasPaused && videoRef.value) {
             videoRef.value.play();
         }
+    } finally {
+        isSeeking.value = false;
     }
 }
 
@@ -876,7 +848,6 @@ function updateProgress() {
 
     // Globale Zeit = Job-relative Zeit + Offset
     currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
-
 
 
     // currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);

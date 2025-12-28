@@ -71,6 +71,19 @@ export class StreamingService {
                 // transcode continues and get restarted for the next segment
             }
 
+            // ✨ NEU: Stoppe alten Job und reset Session State
+            if (session.transcode) {
+                logger.INFO(`Cleaning up old transcode job for reused session ${sessionId}`);
+                this.stopTranscode(session).catch(err => {
+                    logger.ERROR(`Failed to stop old transcode: ${err}`);
+                });
+                session.transcode = undefined;
+            }
+
+            session.currentTime = 0;
+            session.isPaused = false;
+            session.pauseStartedAt = undefined;
+
             logger.DEBUG(`Reusing session: ${sessionId}`);
             return session;
         }
@@ -611,27 +624,6 @@ export class StreamingService {
             return { restart: true, startOffset };
         });
     }
-
-    // async handleSeek(sessionId: string, time: number): Promise<void> {
-    //     const session = this.sessions.get(sessionId);
-    //     if (!session) {
-    //         throw new Error(`No session with id ${sessionId} found`);
-    //     }
-    //
-    //     session.currentTime = time;
-    //     session.lastAccessed = new Date();
-    //
-    //     const targetSegment = Math.floor(time / SEGMENT_DURATION);
-    //     logger.INFO(`${BLUE}Seek requested: ${sessionId} to ${time}s (segment ${targetSegment})${RESET}`);
-    //
-    //     if (session.decision.mode === 'transcode') {
-    //         if (session.transcode?.status === 'running') {
-    //             await this.stopTranscode(session);
-    //         }
-    //
-    //         await this.startTranscode(session, targetSegment);
-    //     }
-    // }
 
     async handlePlaybackStop(sessionId: string, time?: number): Promise<void> {
         const session = this.sessions.get(sessionId);
