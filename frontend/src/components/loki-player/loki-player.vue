@@ -375,6 +375,7 @@ let controlsTimer: NodeJS.Timeout | null = null;
 let lastMousePosition = { x: 0, y: 0 };
 
 // Progress
+const startOffset = ref(0);
 const currentTime = ref(0);
 const duration = ref(0);
 const buffered = ref(0);
@@ -497,7 +498,7 @@ const audioComputed = computed(() => {
 const transcodingComputed = computed(() => {
     if (sessionInfo.value) {
         return {
-            progress: sessionInfo.value.transcode.progress.toFixed(1) ?? 0,
+            progress: sessionInfo.value.transcode.progress?.toFixed(1) ?? 0,
             fps: sessionInfo.value.transcode.fps ?? 0,
             speed: sessionInfo.value.transcode.speed ?? 0
         }
@@ -510,7 +511,9 @@ async function openPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
 
+    startOffset.value = 0;
     currentTime.value = 0;
+    duration.value = 0;
     buffered.value = 0;
 
     await nextTick();
@@ -533,6 +536,9 @@ async function openPlayer(file: MediaFile) {
     });
 
     sessionId.value = response?.data.sessionId;
+    duration.value = file.metadata.general.Duration;
+
+    console.log(`Start with duration ${duration.value}`);
 
     const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${props.profile}`;
 
@@ -560,12 +566,6 @@ function cleanup() {
         hls.value.destroy();
         hls.value = null;
     }
-
-    // if (videoRef.value) {
-    //     videoRef.value.pause();
-    //     videoRef.value.removeAttribute("src");
-    //     videoRef.value.load();
-    // }
 }
 
 async function closePlayer() {
@@ -700,25 +700,34 @@ function skip(seconds: number) {
     videoRef.value.currentTime = clamp(value, 0, videoRef.value.duration);
 }
 
-function handleSeek(newValue: number) {
-    if (!videoRef.value) return;
+function handleSeek(seconds: number) {
+    if (!videoRef.value || !sessionId.value) return;
 
     videoRef.value.pause();
+    // const clampedTime = Math.max(0, Math.min(newValue, duration.value));
+
+    const target = Math.max(0, Math.min(seconds, duration.value));
+    const segmentSeek = target - (startOffset.value || 0);
 
     axios?.post('/session/seek', {
         sessionId: sessionId.value,
-        time: newValue
-    }).then((result) => {
+        time: segmentSeek
+    }).then(() => {
         // if (result.data.restart && hls.value) {
         //     hls.value.stopLoad();
         //     hls.value.loadSource(currentUrl); // gleiche URL, neuer Inhalt
         //     hls.value.startLoad(time);
         // }
+
+        // aktueller Segment-player neu setzen
+        if (videoRef.value) {
+            videoRef.value.currentTime = segmentSeek;
+            currentTime.value = target;
+        }
     }).catch(err => {
         console.error('Failed to report seek:', err);
     });
 
-    videoRef.value.currentTime = newValue;
     videoRef.value.play();
 }
 
@@ -733,18 +742,27 @@ function handleVolume(newValue: number) {
 function updateProgress() {
     if (!videoRef.value) return;
 
-    currentTime.value = videoRef.value.currentTime;
-    duration.value = videoRef.value.duration || 0;
+    currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
 
+    // currentTime.value = videoRef.value.currentTime;
+    // duration.value = videoRef.value.duration || 0;
 }
 
 function updateBuffer() {
     if (!videoRef.value || !duration.value) return;
 
+    // const b = videoRef.value.buffered;
+    // if (b.length > 0) {
+    //     // Get the end of the last buffered range
+    //     buffered.value = b.end(b.length - 1);
+    // }
+
     const b = videoRef.value.buffered;
     if (b.length > 0) {
-        // Get the end of the last buffered range
-        buffered.value = b.end(b.length - 1);
+        // buffered = Ende des letzten gepufferten Segmentes + startOffset
+        buffered.value = b.end(b.length - 1) + (startOffset.value || 0);
+    } else {
+        buffered.value = 0;
     }
 }
 

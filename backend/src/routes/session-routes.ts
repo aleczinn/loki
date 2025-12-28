@@ -35,7 +35,8 @@ router.post('/api/session/start', async (req: Request, res: Response) => {
         const session = streamingService.getOrCreateSession(client, file, profile);
 
         return res.status(200).json({
-            sessionId: session.id
+            sessionId: session.id,
+            file: session.file
         });
     } catch (error) {
         logger.ERROR(`Failed to start a new session: ${error}`);
