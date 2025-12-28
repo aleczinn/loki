@@ -9,9 +9,9 @@
                            @play="isPlaying = true"
                            @pause="isPlaying = false"
                            @loadstart="isLoading = true"
-                           @canplay="isLoading = false"
+                           @canplay="handleCanPlay"
                            @waiting="isBuffering = true"
-                           @playing="isBuffering = false"
+                           @playing="handlePlaying"
                            @timeupdate="updateProgress"
                            @progress="updateBuffer"
                            @ended="onVideoEnd">
@@ -19,26 +19,86 @@
                 </div>
 
                 <!-- Notification Widget -->
-                <div class="absolute top-8 left-1/2 -translate-1/2 w-fit bg-black-900 rounded-xl px-4 py-2 z-popup">
-                    <p class="text-gray">Starte als Transkode</p>
-                </div>
+<!--                <div class="absolute top-8 left-1/2 -translate-1/2 w-fit bg-black-900 rounded-xl px-4 py-2 z-popup">-->
+<!--                    <p class="text-gray">Starte als Transkode</p>-->
+<!--                </div>-->
 
-                <!-- Debug Info (optional, nur während Entwicklung) -->
-                <div v-if="playbackInfo"
-                     class="absolute top-20 left-4 bg-black/80 text-white p-4 rounded text-xs">
-                    <div class="font-bold mb-2">Playback Info</div>
-                    <div>Mode: {{ playbackInfo.mode }}</div>
+                <div v-if="sessionId && sessionInfo" class="absolute top-28 left-4 bg-black/80 text-white p-4 rounded text-xs  z-popup pointer-events-none flex flex-col gap-4">
+                    <span class="">{{ $t('debug.labels.session_id') }}: {{ sessionId }}</span>
 
-                    <div>Container: {{ playbackInfo.decision.container.sourceContainer }}</div>
-                    <div>Video: {{ playbackInfo.decision.video.action }} {{ playbackInfo.decision.video.sourceCodec }} <span v-if="playbackInfo.decision.video.targetCodec"> ->{{ playbackInfo.decision.video.targetCodec }}</span></div>
-                    <div v-if="playbackInfo.decision.video.hwAccel" class="mb-2">
-                        HW Accel: {{ playbackInfo.decision.video.hwAccel.toUpperCase() }}
+                    <div>
+                        <h6 class="font-bold mb-1">{{ $t('debug.labels.playback_information') }}</h6>
+                        <ul class="ml-2">
+                            <li>{{ $t('debug.labels.player') }}: {{ $t('debug.player.html') }}</li>
+                            <li>{{ $t('debug.labels.playback_method') }}: {{ $t(`base.methods.${sessionInfo.decision.mode}`) }}</li>
+                            <li>{{ $t('debug.labels.stream_type') }}: {{ sessionInfo.decision.mode === 'transcode' ? $t(`debug.streamtype.hls`) : $t(`debug.streamtype.native`) }}</li>
+                        </ul>
                     </div>
-                    <span v-if="playbackInfo.decision.video.reason" class="ml-4 text-gray">{{ playbackInfo.decision.video.reason }}</span>
 
-                    <div>Audio: {{ playbackInfo.decision.audio.action }} {{ playbackInfo.decision.audio.sourceCodec }} <span v-if="playbackInfo.decision.audio.targetCodec"> ->{{ playbackInfo.decision.audio.targetCodec }}</span></div>
-                    <span v-if="playbackInfo.decision.audio.reason" class="ml-4 text-gray">{{ playbackInfo.decision.audio.reason }}</span>
+                    <div>
+                        <h6 class="font-bold mb-1">{{ $t('debug.labels.video_information') }}</h6>
+                        <ul class="ml-2">
+                            <li>{{ $t('debug.labels.player_dimensions') }}: {{ videoRef?.clientWidth }}x{{ videoRef?.clientHeight }}</li>
+                            <li>{{ $t('debug.labels.video_dimensions') }}: {{ videoRef?.videoWidth }}x{{ videoRef?.videoHeight }}</li>
+                        </ul>
+                    </div>
+
+                    <div v-if="sessionInfo?.transcode">
+                        <h6 class="font-bold mb-1">{{ $t('transcoding.title') }}<</h6>
+<!--                        <ul class="ml-2 mb-2">-->
+<!--                            <li>Container: Der Container wird nicht unterstützt</li>-->
+<!--                            <li>-->
+<!--                                <span>Video: AV1 -> H265</span>-->
+<!--                                <ul class="ml-4 list-disc">-->
+<!--                                    <li>Dynamikumfang des Videos wird nicht unterstützt</li>-->
+<!--                                </ul>-->
+<!--                            </li>-->
+<!--                            <li>-->
+<!--                                <span>Audio: TrueHD -> AAC</span>-->
+<!--                                <ul class="ml-4 list-disc">-->
+<!--                                    <li>Der Audiocodec wird nicht unterstützt</li>-->
+<!--                                </ul>-->
+<!--                            </li>-->
+<!--                        </ul>-->
+
+                        <ul class="ml-2">
+                            <li>{{ $t('base.progress') }}: {{ transcodingComputed.progress }} %</li>
+                            <li>{{ $t('base.framerate') }}: {{ transcodingComputed.fps }} fps ({{ transcodingComputed.speed }}x)</li>
+                        </ul>
+                    </div>
+
+                    <div>
+                        <h6 class="font-bold mb-1">{{ $t('debug.labels.original_media_information') }}</h6>
+                        <ul class="ml-2">
+                            <li>{{ $t('base.container') }}: {{ containerComputed.container }}</li>
+                            <li>{{ $t('base.size') }}: {{ containerComputed.size }}</li>
+                            <li>{{ $t('base.video.bitrate') }}: {{ formatBitrate(sessionInfo.file.metadata.video[0].BitRate) }}</li>
+                            <li>{{ $t('base.video.codec') }}: {{ videoComputed.codec }}</li>
+                            <li>{{ $t('base.video.hdr_profile') }}: {{ videoComputed.hdr_profile }}</li>
+                            <li>{{ $t('base.audio.codec') }}: {{ audioComputed.codec }}</li>
+                            <li>{{ $t('base.audio.bitrate') }}: {{ audioComputed.bitrate }}</li>
+                            <li>{{ $t('base.audio.channel') }}: {{ audioComputed.channel }}</li>
+                            <li>{{ $t('base.audio.sample_rate') }}: {{ audioComputed.sample_rate }}</li>
+                        </ul>
+                    </div>
                 </div>
+
+<!--                &lt;!&ndash; Debug Info (optional, nur während Entwicklung) &ndash;&gt;-->
+<!--                <div v-if="playbackInfo"-->
+<!--                     class="absolute top-20 left-4 bg-black/80 text-white p-4 rounded text-xs">-->
+<!--                    <div class="font-bold mb-2">Playback Info</div>-->
+<!--                    <div>Mode: {{ playbackInfo.mode }}</div>-->
+
+<!--                    <div>Container: {{ playbackInfo.decision.container.sourceContainer }}</div>-->
+<!--                    <div>Video: {{ playbackInfo.decision.video.action }} {{ playbackInfo.decision.video.sourceCodec }} <span v-if="playbackInfo.decision.video.targetCodec"> ->{{ playbackInfo.decision.video.targetCodec }}</span></div>-->
+<!--                    <div v-if="playbackInfo.decision.video.hwAccel" class="mb-2">-->
+<!--                        HW Accel: {{ playbackInfo.decision.video.hwAccel.toUpperCase() }}-->
+<!--                    </div>-->
+<!--                    <span v-if="playbackInfo.decision.video.reason" class="ml-4 text-gray">{{ playbackInfo.decision.video.reason }}</span>-->
+
+<!--                    <div>Audio: {{ playbackInfo.decision.audio.action }} {{ playbackInfo.decision.audio.sourceCodec }} <span v-if="playbackInfo.decision.audio.targetCodec"> ->{{ playbackInfo.decision.audio.targetCodec }}</span></div>-->
+<!--                    <span v-if="playbackInfo.decision.audio.reason" class="ml-4 text-gray">{{ playbackInfo.decision.audio.reason }}</span>-->
+<!--                </div>-->
 
                 <!-- Controls -->
                 <div class="absolute inset-0"
@@ -81,7 +141,7 @@
                                 <span class="text-left">{{ formatTime(currentTime) }}</span>
 
                                 <loki-progress-bar class="w-full h-1"
-                                                   :value="currentTime"
+                                                   :value="displayTime"
                                                    :value-secondary="buffered"
                                                    :min-value="0"
                                                    :max-value="duration"
@@ -90,7 +150,7 @@
                                                    @update:value="handleSeek">
                                 </loki-progress-bar>
 
-                                <span class="text-right">{{ formatTime(duration) }}</span>
+                                <span class="text-right">{{ formatTime(displayTime) }}</span>
                             </div>
 
                             <!-- Buttons -->
@@ -256,7 +316,7 @@
 
 <script setup lang="ts">
 import Hls from "hls.js";
-import { computed, inject, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, inject, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { LokiLoadingSpinner } from "../loki-loading-spinner";
 import IconChromecast from "../../icons/icon-chromecast.vue";
 import IconArrowLeft from "../../icons/icon-arrow-left.vue";
@@ -268,7 +328,7 @@ import IconPlayerRewind10 from "../../icons/player/icon-player-rewind-10.vue";
 import IconPlayerForward30 from "../../icons/player/icon-player-forward-30.vue";
 import type { MediaFile } from "../../types/media.ts";
 import IconFullscreen from "../../icons/icon-fullscreen.vue";
-import { clamp } from "../../lib/utils.ts";
+import { clamp, formatBitrate, formatFileSize } from "../../lib/utils.ts";
 import IconGear from "../../icons/icon-gear.vue";
 import IconPlayerVolume from "../../icons/player/icon-player-volume.vue";
 import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
@@ -278,18 +338,17 @@ import IconMusicNote from "../../icons/icon-music-note.vue";
 import { LOKI_TOKEN, LOKI_VOLUME } from "../../variables.ts";
 import { LokiPlayerButton } from "../loki-player-button";
 import IconCheckmark from "../../icons/icon-checkmark.vue";
-import { type PlaybackInfo, PlaybackService } from "../../lib/playback-service.ts";
 import type { AxiosInstance } from "axios";
 
 interface VideoPlayerProps {
-    quality?: string;
-    audioTrack?: number;
-    subtitleTrack?: number;
+    profile?: string;
+    audioIndex?: number;
+    subtitleIndex?: number;
     startTime?: number;
 }
 
 const props = withDefaults(defineProps<VideoPlayerProps>(), {
-    quality: 'original',
+    profile: 'original',
     audioTrack: 0,
     subtitleTrack: -1,
     startTime: 0,
@@ -300,10 +359,11 @@ const emit = defineEmits<{
     ended: [];
 }>();
 
-const playbackInfo = ref<PlaybackInfo | null>(null);
-const playbackMode = ref<'direct' | 'hls'>('hls');
 const axios = inject<AxiosInstance>('axios');
-const playbackService = new PlaybackService(axios!);
+
+const sessionId = ref<string | null>(null);
+const sessionInfo = ref<any | null>(null);
+let progressInterval: NodeJS.Timeout | null = null;
 
 // State
 const isOpen = ref(false);
@@ -315,15 +375,19 @@ let controlsTimer: NodeJS.Timeout | null = null;
 let lastMousePosition = { x: 0, y: 0 };
 
 // Progress
+const startOffset = ref(0);
 const currentTime = ref(0);
 const duration = ref(0);
 const buffered = ref(0);
 const volume = ref(1);
 
 // Refs
-const hls = ref<Hls | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null);
+const hls = ref<Hls | null>(null)
 const currentFile = ref<MediaFile | null>(null);
+
+const isSeeking = ref(false);
+const seekTarget = ref(0);
 
 // Popups
 const audioDialog = ref<HTMLDialogElement | null>(null);
@@ -352,6 +416,14 @@ const subtitleTracks = ref([
     { name: 'English SDH', language: 'en', format: 'PGS' },
     { name: 'French', language: 'fr', format: 'VobSub' }
 ]);
+
+function handleCanPlay() {
+    isLoading.value = false;
+}
+
+function handlePlaying() {
+    isBuffering.value = false;
+}
 
 function selectAudioTrack(index: number) {
     currentAudioTrack.value = index;
@@ -385,76 +457,167 @@ const endTime = computed(() => {
     });
 });
 
-async function openPlayer(file: MediaFile, quality: string = 'original') {
+const containerComputed = computed(() => {
+    if (sessionInfo.value) {
+        let container = sessionInfo.value.file?.metadata.general.Format.toLowerCase();
+
+        switch (container) {
+            case 'mpeg-4':
+                container = 'mp4';
+                break;
+            case 'matroska':
+                container = 'mkv';
+                break;
+        }
+
+        return {
+            container: container,
+            size: formatFileSize(sessionInfo.value.file.size)
+        }
+    }
+
+    return {
+        container: 'unknown',
+        size: 'unknown'
+    }
+})
+
+const displayTime = computed(() => {
+    // Während Seeking: zeige Ziel-Zeit
+    // Sonst: zeige echte aktuelle Zeit
+    return isSeeking.value ? seekTarget.value : currentTime.value;
+});
+
+const videoComputed = computed(() => {
+    if (sessionInfo.value) {
+
+    }
+
+    return {
+        codec: 'unknown',
+        hdr_profile: 'unknown'
+    }
+})
+
+const audioComputed = computed(() => {
+    if (sessionInfo.value) {
+
+    }
+
+    return {
+        codec: 'unknown',
+        bitrate: -1,
+        channel: -1,
+        sample_rate: -1
+    }
+})
+
+const transcodingComputed = computed(() => {
+    if (sessionInfo.value) {
+        return {
+            progress: sessionInfo.value.transcode.progress?.toFixed(1) ?? 0,
+            fps: sessionInfo.value.transcode.fps ?? 0,
+            speed: sessionInfo.value.transcode.speed ?? 0
+        }
+    }
+
+    return { progress: 0, fps: 0, speed: 0 }
+});
+
+async function openPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
 
-    currentTime.value = 0;
-    buffered.value = 0;
+    cleanup();
+    duration.value = file.metadata.general.Duration;
 
-    const response = await axios?.get(`/playback/${file.id}/${quality}/start`);
-    const session = response?.data;
+    await nextTick();
 
-    console.log(session);
+    if (!videoRef.value) {
+        console.error("videoRef still null after nextTick()");
+        return;
+    }
 
     const token = sessionStorage.getItem(LOKI_TOKEN);
-    const url = `${session.streamUrl}?token=${token}`;
-
-    switch (session.mode) {
-        case 'direct_play':
-        case 'direct_remux':
-            // Native <video> Element
-            initNativePlayer(url);
-            break;
-        case 'transcode':
-            // HLS.js Player
-            initHLSPlayer(url);
-            break;
-        default: {
-            console.error("No player mode defined!");
+    const response = await axios?.post('/session/start', {
+        mediaId: file.id,
+        profile: props.profile
+    }, {
+        headers: {
+            'X-Client-Token': token
         }
+    });
+
+    sessionId.value = response?.data.sessionId;
+    duration.value = file.metadata.general.Duration;
+
+    console.log(`Start with duration ${duration.value}`);
+
+    const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${props.profile}`;
+
+    startProgressReporting();
+
+    videoRef.value.src = url;
+    videoRef.value.volume = volume.value;
+
+    videoRef.value.play().catch(() => {
+        console.log("Abspielen mit native player fehlgeschlagen! Wechsle zu HLS");
+        initHLSPlayer(url);
+    });
+
+    fetchSessionInfo();
+}
+
+async function fetchSessionInfo() {
+    if (!sessionId.value) return;
+
+    try {
+        const response = await axios?.get(`/session/${sessionId.value}`);
+        sessionInfo.value = response?.data;
+    } catch (error) {
+        console.error(`Failed to get session info: ${error}`);
     }
 }
 
-async function closePlayer() {
+function cleanup() {
+    sessionId.value = null;
+    startOffset.value = 0;
+    currentTime.value = 0;
+    duration.value = 0;
+    buffered.value = 0;
+    isSeeking.value = false;
+    seekTarget.value = 0;
+
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
     }
+}
 
-    // const mediaId = currentFile.value?.id;
-    //
-    // try {
-    //     console.log(`Try killing transcode with id ${mediaId}`);
-    //     const response = await axios?.get<MediaFile[]>(`/streaming/${mediaId}/kill`);
-    //     console.log("Killing session... ", response);
-    // } catch (err) {
-    //     console.error('Failed to load media files:', err);
-    // }
+async function closePlayer() {
+    if (sessionId.value && videoRef.value) {
+        try {
+            await axios?.post('/session/stop', {
+                sessionId: sessionId.value,
+                time: videoRef.value.currentTime
+            });
+        } catch (error) {
+            console.error('Failed to stop session:', error);
+        }
+    }
+
+    stopProgressReporting();
+
+    if (hls.value) {
+        hls.value.destroy();
+        hls.value = null;
+    }
 
     isOpen.value = false;
     currentFile.value = null;
     isPlaying.value = false;
 
     emit('closed');
-}
-
-function initNativePlayer(url: string) {
-    if (!videoRef.value) return;
-
-    // Clean up HLS if it exists
-    if (hls.value) {
-        hls.value.destroy();
-        hls.value = null;
-    }
-
-    // Token an URL anhängen
-    // Use native video element
-    videoRef.value.src = url;
-    videoRef.value.volume = volume.value;
-    videoRef.value.play();
-
-    console.log("init native player");
 }
 
 function initHLSPlayer(url: string) {
@@ -465,42 +628,71 @@ function initHLSPlayer(url: string) {
 
     if (!videoRef.value) return;
 
-    if (Hls.isSupported()) {
-        hls.value = new Hls({
-            debug: false,
-            enableWorker: true,
-            lowLatencyMode: false,
-            backBufferLength: 60,
-            maxBufferLength: 60,
-            autoStartLoad: true,
-            xhrSetup: (xhr: XMLHttpRequest, _: string) => {
-                const token = sessionStorage.getItem(LOKI_TOKEN);
+    if (!Hls.isSupported()) {
+        console.error("HLS not supported");
+        return;
+    }
 
-                if (token) {
-                    xhr.setRequestHeader('X-Client-Token', token);
-                }
+    hls.value = new Hls({
+        debug: false,
+        enableWorker: true,
+        lowLatencyMode: false,
+        backBufferLength: 60,
+        maxBufferLength: 60,
+        autoStartLoad: true,
+        xhrSetup: (xhr: XMLHttpRequest, _: string) => {
+            const token = sessionStorage.getItem(LOKI_TOKEN);
+
+            if (token) {
+                xhr.setRequestHeader('X-Client-Token', token);
             }
-        });
-
-        hls.value.loadSource(url);
-        hls.value.attachMedia(videoRef.value);
-        hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoRef.value!.play();
-        });
-
-        // Handle HLS errors
-        hls.value.on(Hls.Events.ERROR, (_, data) => {
-            if (data.fatal) {
-                console.error('Fatal HLS error:', data);
-            }
-        });
-
-        if (videoRef.value) {
-            videoRef.value.volume = volume.value;
         }
-    } else if (videoRef.value.canPlayType('application/vnd.apple.mpegurl')) {
-        videoRef.value.src = url;
-        videoRef.value.play();
+    });
+
+    hls.value.loadSource(url);
+    hls.value.attachMedia(videoRef.value);
+    hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+        videoRef.value!.play();
+    });
+
+    // Handle HLS errors
+    hls.value.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal) {
+            console.error('Fatal HLS error:', data);
+        }
+    });
+
+    if (videoRef.value) {
+        videoRef.value.volume = volume.value;
+    }
+}
+
+
+function startProgressReporting() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+    }
+
+    // Send progress every 5 seconds
+    progressInterval = setInterval(() => {
+        if (!sessionId.value || !videoRef.value) return;
+
+        axios?.post('/session/progress', {
+            sessionId: sessionId.value,
+            currentTime: videoRef.value.currentTime,
+            isPaused: videoRef.value.paused
+        }).catch(err => {
+            console.error('Failed to report progress:', err);
+        });
+
+        fetchSessionInfo();
+    }, 5000);
+}
+
+function stopProgressReporting() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
     }
 }
 
@@ -522,17 +714,125 @@ function togglePlayPause() {
     }
 }
 
-function skip(seconds: number) {
-    if (!videoRef.value) return;
+async function handleJobRestart(seekTime: number) {
+    if (!currentFile.value || !sessionId.value) return;
 
-    const value = videoRef.value.currentTime + seconds;
-    videoRef.value.currentTime = clamp(value, 0, videoRef.value.duration);
+    console.log(`Job restart - new startOffset: ${seekTime}s`);
+    startOffset.value = seekTime;
+
+    const token = sessionStorage.getItem(LOKI_TOKEN);
+    const url = `/api/videos/${currentFile.value.id}/master.m3u8?token=${token}&profile=${props.profile}`;
+
+    if (hls.value) {
+        console.log('Seamlessly switching HLS playlist');
+
+        // Stoppe aktuellen Stream
+        hls.value.stopLoad();
+
+        // Lade neue Playlist (ohne destroy!)
+        hls.value.loadSource(url);
+
+        // Warte auf neue Playlist
+        await new Promise<void>((resolve) => {
+            if (!hls.value) {
+                resolve();
+                return;
+            }
+
+            const onManifestParsed = () => {
+                hls.value!.off(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+
+                // Starte bei Segment 0 im neuen Job
+                if (videoRef.value) {
+                    videoRef.value.currentTime = 0;
+                    currentTime.value = seekTime;
+                }
+
+                resolve();
+            };
+
+            hls.value.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+        });
+
+        // Auto-play nach Switch
+        if (videoRef.value) {
+            videoRef.value.play().catch(err => {
+                console.error(`Failed to play after restart: ${err}`);
+            });
+        }
+    } else if (videoRef.value) {
+        // Native player - hier muss leider neu geladen werden
+        console.log('Reloading native video player');
+
+        videoRef.value.pause();
+        videoRef.value.src = url;
+        videoRef.value.load();
+
+        await new Promise<void>((resolve) => {
+            const onLoaded = () => {
+                videoRef.value!.removeEventListener('loadedmetadata', onLoaded);
+                resolve();
+            };
+            videoRef.value!.addEventListener('loadedmetadata', onLoaded);
+        });
+
+        videoRef.value.currentTime = 0;
+        currentTime.value = seekTime;
+        videoRef.value.play().catch(err => {
+            console.error(`Failed to play after restart: ${err}`);
+        });
+    }
 }
 
-function handleSeek(newValue: number) {
-    if (!videoRef.value) return;
+function skip(seconds: number) {
+    const baseTime = isSeeking.value ? seekTarget.value : currentTime.value;
+    const newTime = baseTime + seconds;
+    handleSeek(newTime);
+}
 
-    videoRef.value.currentTime = newValue;
+async function handleSeek(seconds: number) {
+    if (!videoRef.value || !sessionId.value) return;
+
+    const wasPaused = videoRef.value.paused;
+    isSeeking.value = true;
+    seekTarget.value = seconds;
+
+    videoRef.value.pause();
+
+    const target = Math.max(0, Math.min(seconds, duration.value));
+
+    try {
+        const response = await axios?.post('/session/seek', {
+            sessionId: sessionId.value,
+            time: target  // Sende absolute Zeit ans Backend
+        });
+
+        if (response?.data.restart) {
+            // Job wurde neu gestartet → HLS komplett neu laden
+            await handleJobRestart(response.data.startOffset || target);
+            await fetchSessionInfo();
+        } else {
+            // Normaler Seek innerhalb des aktuellen Jobs
+            if (videoRef.value) {
+                // Setze Position relativ zum aktuellen Job
+                const newJobTime = target - (startOffset.value || 0);
+                videoRef.value.currentTime = newJobTime;
+                currentTime.value = target;
+
+                if (!wasPaused) {
+                    videoRef.value.play();
+                }
+            }
+        }
+    } catch (error) {
+        console.error(`Seek failed: ${error}`);
+
+        if (!wasPaused && videoRef.value) {
+            videoRef.value.play();
+        }
+    } finally {
+        isSeeking.value = false;
+    }
 }
 
 function handleVolume(newValue: number) {
@@ -546,17 +846,30 @@ function handleVolume(newValue: number) {
 function updateProgress() {
     if (!videoRef.value) return;
 
-    currentTime.value = videoRef.value.currentTime;
-    duration.value = videoRef.value.duration || 0;
+    // Globale Zeit = Job-relative Zeit + Offset
+    currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
+
+
+    // currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
+    // currentTime.value = videoRef.value.currentTime;
+    // duration.value = videoRef.value.duration || 0;
 }
 
 function updateBuffer() {
     if (!videoRef.value || !duration.value) return;
 
+    // const b = videoRef.value.buffered;
+    // if (b.length > 0) {
+    //     // Get the end of the last buffered range
+    //     buffered.value = b.end(b.length - 1);
+    // }
+
     const b = videoRef.value.buffered;
     if (b.length > 0) {
-        // Get the end of the last buffered range
-        buffered.value = b.end(b.length - 1);
+        // Buffered relativ zur globalen Timeline
+        buffered.value = b.end(b.length - 1) + (startOffset.value || 0);
+    } else {
+        buffered.value = 0;
     }
 }
 
@@ -734,6 +1047,19 @@ onMounted(() => {
     } else {
         localStorage.setItem(LOKI_VOLUME, volume.value.toString());
     }
+
+    window.addEventListener('beforeunload', () => {
+        if (sessionId.value && videoRef.value) {
+            // Use sendBeacon for reliable cleanup on page close
+            navigator.sendBeacon(
+                '/api/session/stop',
+                JSON.stringify({
+                    sessionId: sessionId.value,
+                    time: videoRef?.value?.currentTime
+                })
+            );
+        }
+    });
 });
 
 onUnmounted(() => {
@@ -746,9 +1072,8 @@ onUnmounted(() => {
         clearTimeout(controlsTimer);
     }
 
-    if (hls.value) {
-        hls.value.destroy();
-    }
+    stopProgressReporting();
+    closePlayer();
 });
 
 // Watch playing state
@@ -772,7 +1097,7 @@ watch(volume, (newVal) => {
 
 defineExpose({
     play(file: MediaFile) {
-        openPlayer(file, 'original');
+        openPlayer(file);
     },
     pause() {
         videoRef.value?.pause();

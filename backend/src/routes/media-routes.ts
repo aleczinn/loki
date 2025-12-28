@@ -4,6 +4,8 @@ import { scanMediaDirectory } from "../utils/utils";
 import { MEDIA_PATH } from "../app";
 import { findMediaFileById } from "../utils/media-utils";
 import { pathExists } from "../utils/file-utils";
+import transcodeDecisionService from "../services/transcode-decision";
+import clientManager from "../services/client-manager";
 
 const router = Router();
 
@@ -21,6 +23,11 @@ router.get('/api/media', async (req: Request, res: Response) => {
 router.get('/api/media/:id/qualities', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const token = req.headers['x-client-token'] as string || req.query.token as string || undefined;
+
+        if (!token) {
+            return res.status(401).json({ error: 'No client token provided' });
+        }
 
         const file = await findMediaFileById(id);
         if (!file) {
@@ -31,7 +38,15 @@ router.get('/api/media/:id/qualities', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Media file does not exist on disk' });
         }
 
-        res.status(200).json({});
+        // Get client capabilities
+        const client = clientManager.getClient(token);
+        if (!client) {
+            return res.status(401).json({ error: 'Invalid client token' });
+        }
+
+        const qualities = transcodeDecisionService.getProfiles(file, client.capabilities);
+
+        res.status(200).json(qualities);
     } catch (error) {
         console.error('Error scanning media files: ', error);
         res.status(500).json({ error: 'Failed to scan media directory' });

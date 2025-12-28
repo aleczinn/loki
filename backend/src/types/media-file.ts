@@ -6,6 +6,6 @@ export interface MediaFile {
     path: string;
     size: number;
     extension: string;
-    metadata: Mediainfo | null;
+    metadata: Mediainfo;
     modified: Date;
 }

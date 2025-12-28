@@ -1,5 +1,5 @@
 <template>
-    <loki-player ref="player" :quality="selectedQuality"></loki-player>
+    <loki-player ref="player" :profile="selectedQuality"></loki-player>
 
     <div class="flex flex-col h-screen">
         <main class="flex-1 py-8">

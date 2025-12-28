@@ -1,4 +1,3 @@
-import { MediaVideoCodec } from "./types/capabilities/client-capabilities";
 import { VideoCodec } from "./types/media";
 
 export type HardwareAcceleration = 'none' | 'intel_quick_sync' | 'nvidia_nvenc';
@@ -6,7 +5,14 @@ export const renderDevice = '/dev/dri/renderD128';
 export const supportedCodecsForHardwareAcceleration: VideoCodec[] = ['h264', 'hevc', 'hevc_10bit', 'vp9', 'vp9_10bit', 'av1'];
 
 export const supportEncodingInHEVC: boolean = true;
-export const supportEncodingInAV1: boolean = true;
+export const supportEncodingInAV1: boolean = false;
+
+/**
+ * If enabled, media is remuxed to fragmented MP4 (fMP4) even when
+ * direct file streaming with byte ranges would be possible.
+ * This improves seek performance and playback stability.
+ */
+export const preferFragmentedMp4 = false;
 
 /**
  * Vollständig Treiber-basiertes Tone-Mapping für Intel-Chips. Funktioniert derzeit nur auf
@@ -41,8 +47,8 @@ export type AudioDownmixAlgorithm = 'none' | 'dave750' | 'nightmodel_dialogue' |
 export const audioDownmixAlgorithm: AudioDownmixAlgorithm = 'none';
 export const maxSizeMuxingQueue: number = 2048; // Maximale Anzahl von Paketen, die gepuffert werden können, während auf die Initialisierung aller Streams gewartet wird. Versuche diese zu erhöhen, wenn in den FFmpeg-Protokollen der Fehler "Zu viele Pakete für den Ausgabestrom gepuffert" auftaucht. Der empfohlene Wert ist 2048.
 
-export type VideoEncodingPreset = 'auto' | 'veryslow' | 'slower' | 'slow' | 'medium' | 'fast' | 'faster' | 'veryfast' | 'superfast' | 'ultrafast' // Wähle einen schnelleren Wert um die Performance zu verbessern oder einen langsameren Wert um die Qualität zu verbessern.
-export const videoEncodingPreset: VideoEncodingPreset = 'auto';
+export type VideoEncodingPreset = 'veryslow' | 'slower' | 'slow' | 'medium' | 'fast' | 'faster' | 'veryfast' | 'superfast' | 'ultrafast' // Wähle einen schnelleren Wert um die Performance zu verbessern oder einen langsameren Wert um die Qualität zu verbessern.
+export const videoEncodingPreset: VideoEncodingPreset = 'veryfast';
 export const crfForHEVCEncoding: number = 22;
 export const crfForAVCEncoding: number = 20; // Der Constant Rate Factor (CRF) bezeichnet die Einstellung für die Standardqualität des x264 und x265 Software-Encoders. Setze einen Wert zwischen 0 und 51. Ein niedriger Wert resultiert in besserer Qualität (auf Kosten einer größeren Datei). Gängige Werte sind 18-28. Der Standard für x264 ist 23 und 28 für x265, diese sollten als Referenzen verwendet werden. Hardware-Encoder verwenden diese Einstellung nicht.
 
