@@ -1,156 +1,197 @@
-import { QualityProfile } from "./transcode-decision";
+import { QualityProfile, TranscodeDecision } from "./transcode-decision";
 import hardwareAccelerationDetector from "./hardware-acceleration-detector";
-import { ClientCapabilities } from "../types/capabilities/client-capabilities";
+import { PlaySession } from "./streaming-service";
+import { crfForAVCEncoding, supportEncodingInAV1, supportEncodingInHEVC, videoEncodingPreset } from "../settings";
 
 interface TranscodingArgs {
-    containerOptions: string[];
-    videoOptions: string[];
-    audioOptions: string[];
-    subtitleOptions: string[];
+    videoArgs: string[];
+    audioArgs: string[];
+    subtitleArgs: string[];
 }
 
-export function getTranscodingArgs(profile: QualityProfile, capabilities: ClientCapabilities): TranscodingArgs {
-    const hwAccl = hardwareAccelerationDetector.getInfo();
+export function getTranscodingArgs(session: PlaySession): TranscodingArgs {
+    const decision: TranscodeDecision = session.decision;
 
-    if (hwAccl) {
-        switch (profile) {
-            case "4k_40mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,2160)',
-                        '-b:v', '40000k',
-                        '-maxrate', '42000k',
-                        '-bufsize', '80000k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '192k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
+    const caps = session.client.capabilities;
+    const profile = decision.profile;
+    const hevc = caps.videoCodecs.find(v => v.codec === 'hevc');
+
+    const supportsHEVC = !!hevc;
+    const supportsHEVC_8bit = supportsHEVC && hevc?.bitDepths.includes(8);
+    const supportsHEVC_10bit = supportsHEVC && hevc?.bitDepths.includes(10);
+
+    const av1 = caps.videoCodecs.find(v => v.codec === 'av1');
+    const supportsAV1 = !!av1;
+    const supportsAV1_10bit = supportsAV1 && av1?.bitDepths.includes(10);
+
+    const videoArgs: string[] = [];
+    const audioArgs: string[] = [];
+    const subtitleArgs: string[] = [];
+
+    const hw = hardwareAccelerationDetector.getInfo();
+    if (hw) {
+        // VIDEO
+        if (decision.video.action === 'copy') {
+            videoArgs.push('-c:v', 'copy');
+        } else {
+            if (hw.preferred === 'cpu') {
+                let encoder = 'libx264';
+                if (supportsHEVC && supportEncodingInHEVC) {
+                    encoder = 'libx265';
                 }
-            case "4k_20mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,2160)',
-                        '-b:v', '20000k',
-                        '-maxrate', '22000k',
-                        '-bufsize', '40000k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '192k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
+                if (supportsAV1 && supportEncodingInAV1) {
+                    encoder = 'libsvtav1';
                 }
-            case "1080p_20mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,1080)',
-                        '-b:v', '20000k',
-                        '-maxrate', '22000k',
-                        '-bufsize', '40000k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '192k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
+
+                videoArgs.push('-c:v', encoder); // TODO : change based on settings if I should use h264 or h265
+                videoArgs.push('-crf', String(crfForAVCEncoding));
+                videoArgs.push('-preset', String(videoEncodingPreset));
+                if (encoder === 'libx264') {
+                    videoArgs.push('-pix_fmt', 'yuv420p');
+                } else {
+                    videoArgs.push('-pix_fmt', (supportsHEVC_10bit || supportsAV1_10bit) ? 'yuv420p10le' : 'yuv420p');
                 }
-            case "1080p_8mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,1080)',
-                        '-b:v', '8000k',
-                        '-maxrate', '10000k',
-                        '-bufsize', '20000k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '192k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
+            } else {
+                // TODO : Need to check if gpu/igpu also support encoder
+                switch (hw.preferred) {
+                    case 'nvenc':
+                        if (supportEncodingInAV1) {
+                            videoArgs.push('-c:v', 'av1_nvenc');
+                            if (supportsAV1_10bit) {
+                                videoArgs.push('-pix_fmt', 'yuv420p10le');
+                            } else {
+                                videoArgs.push('-profile:v', 'main');
+                                videoArgs.push('-pix_fmt', 'yuv420p');
+                            }
+                        } else if (supportEncodingInHEVC) {
+                            videoArgs.push('-c:v', 'hevc_nvenc');
+                            if (supportsHEVC_10bit) {
+                                videoArgs.push('-profile:v', 'main10');
+                                videoArgs.push('-pix_fmt', 'p010le');
+                            } else {
+                                videoArgs.push('-profile:v', 'main');
+                                videoArgs.push('-pix_fmt', 'yuv420p');
+                            }
+                        } else {
+                            videoArgs.push('-c:v', 'h264_nvenc');
+                            videoArgs.push('-pix_fmt', 'yuv420p');
+                        }
+                        break;
+                    case 'qsv':
+                        if (supportEncodingInAV1) {
+                            // encoder = 'av1_qsv';
+                        } else if (supportEncodingInHEVC) {
+                            // encoder = 'hevc_qsv';
+                        } else {
+                            // encoder = 'h264_qsv';
+                        }
+                        break;
+                    case 'amf':
+                        if (supportEncodingInAV1) {
+                            // encoder = 'av1_amf';
+                        } else if (supportEncodingInHEVC) {
+                            // encoder = 'hevc_amf';
+                        } else {
+                            // encoder = 'h264_amf';
+                        }
+                        break;
+                    case 'vaapi':
+                        if (supportEncodingInAV1) {
+                            // encoder = 'av1_vaapi';
+                        } else if (supportEncodingInHEVC) {
+                            // encoder = 'hevc_vaapi';
+                        } else {
+                            // encoder = 'h264_vaapi';
+                        }
+                        break;
                 }
-            case "720p_6mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,720)',
-                        '-b:v', '6000k',
-                        '-maxrate', '7000k',
-                        '-bufsize', '14000k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '192k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
+
+                switch (profile) {
+                    case "4k_40mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,2160)');
+                        videoArgs.push('-b:v', '40000k');
+                        videoArgs.push('-maxrate', '42000k');
+                        videoArgs.push('-bufsize', '80000k');
+                        break;
+                    case "4k_20mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,2160)');
+                        videoArgs.push('-b:v', '20000k');
+                        videoArgs.push('-maxrate', '22000k');
+                        videoArgs.push('-bufsize', '40000k');
+                        break;
+                    case "1080p_20mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,1080)');
+                        videoArgs.push('-b:v', '20000k');
+                        videoArgs.push('-maxrate', '22000k');
+                        videoArgs.push('-bufsize', '40000k');
+                        break;
+                    case "1080p_8mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,1080)');
+                        videoArgs.push('-b:v', '8000k');
+                        videoArgs.push('-maxrate', '10000k');
+                        videoArgs.push('-bufsize', '16000k');
+                        break;
+                    case "720p_6mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,720)');
+                        videoArgs.push('-b:v', '6000k');
+                        videoArgs.push('-maxrate', '8000k');
+                        videoArgs.push('-bufsize', '12000k');
+                        break;
+                    case "480p_3mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,480)');
+                        videoArgs.push('-b:v', '3000k');
+                        videoArgs.push('-maxrate', '4000k');
+                        videoArgs.push('-bufsize', '6000k');
+                        break;
+                    case "360p_1mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,360)');
+                        videoArgs.push('-b:v', '1000k');
+                        videoArgs.push('-maxrate', '1500k');
+                        videoArgs.push('-bufsize', '2000k');
+                        break;
+                    case "240p_1mbps":
+                        videoArgs.push('-vf', 'scale=-2:min(ih,240)');
+                        videoArgs.push('-b:v', '1000k');
+                        videoArgs.push('-maxrate', '1500k');
+                        videoArgs.push('-bufsize', '2000k');
+                        break;
                 }
-            case "480p_3mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,480)',
-                        '-b:v', '3000k',
-                        '-maxrate', '3500k',
-                        '-bufsize', '7000k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '128k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
-                }
-            case "360p_1mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,360)',
-                        '-b:v', '1000k',
-                        '-maxrate', '1200k',
-                        '-bufsize', '2400k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '128k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
-                }
-            case "240p_1mbps":
-                return {
-                    containerOptions: [],
-                    videoOptions: [
-                        '-vf', 'scale=-2:min(ih,240)',
-                        '-b:v', '1000k',
-                        '-maxrate', '1200k',
-                        '-bufsize', '2400k',
-                    ],
-                    audioOptions: [
-                        '-c:a', 'aac',
-                        '-b:a', '96k',
-                        '-ac', '2',
-                        '-ar', '48000',
-                    ],
-                    subtitleOptions: []
-                }
+            }
+        }
+
+        // AUDIO
+        if (decision.audio.action === 'copy') {
+            audioArgs.push('-c:a', 'copy');
+        } else {
+            const opus = caps.audioCodecs.find(a => a.codec === 'opus');
+            const opusSupported = !!opus;
+
+            // audioArgs.push('-c:a', opusSupported ? 'opus' : 'aac');
+            audioArgs.push('-c:a','aac');
+            switch (profile) {
+                case "4k_40mbps":
+                case "4k_20mbps":
+                case "1080p_20mbps":
+                case "1080p_8mbps":
+                case "720p_6mbps":
+                    audioArgs.push('-b:a', '192k');
+                    break;
+                case "480p_3mbps":
+                    audioArgs.push('-b:a', '128k');
+                    break;
+                case "360p_1mbps":
+                case "240p_1mbps":
+                    audioArgs.push('-b:a', '96k');
+                    break;
+            }
+            audioArgs.push('-ac', '2');
+            audioArgs.push('-ar', '48000');
         }
     }
-    throw Error(`Unable to determine quality args for ${profile} because hwaccl is undefined`);
+
+    return {
+        videoArgs,
+        audioArgs,
+        subtitleArgs
+    }
 }

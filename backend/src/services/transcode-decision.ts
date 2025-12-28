@@ -60,34 +60,35 @@ export class TranscodeDecisionService {
         const audioDecision = this.checkAudioCodec(file, capabilities);
         const subtitleDecision = this.checkSubtitles(file, capabilities);
 
-        let mode: StreamMode = 'direct_play';
+        let mode: StreamMode;
 
-        if (profile === 'original') {
-            if (containerDecision.needsRemux && audioDecision.action === 'copy') {
-                mode = 'direct_remux';
-                // Profile is already set to original
-            } else if (videoDecision.action === 'transcode' || audioDecision.action === 'transcode') {
-                mode = 'transcode';
+        const needsVideoTranscode = videoDecision.action === 'transcode' || subtitleDecision.action === 'burn_in';
+        const needsAudioTranscode = audioDecision.action === 'transcode';
 
-                // TODO : Get next logical profile here
-                const qualities = this.getProfiles(file, capabilities);
-                if (qualities.length > 0) {
-                    const newProfile = qualities[0];
-                    profile = newProfile;
-                    logger.DEBUG(`Adjust profile from ${profile} to ${newProfile} because of transcoding`);
-                } else {
-                    throw Error(`No valid profiles found for media file ${file.id}`);
-                }
-            }
-        } else {
+        if (needsVideoTranscode || needsAudioTranscode || profile !== 'original') {
             mode = 'transcode';
-            // Profile is already set by user, so we don't change it
+        } else if (containerDecision.needsRemux) {
+            mode = 'direct_remux';
+        } else {
+            mode = 'direct_play';
+        }
+
+        if (mode === 'transcode' && profile === 'original') {
+            const qualities = this.getProfiles(file, capabilities);
+            if (!qualities.length) {
+                throw new Error(`No valid profiles found for ${file.id}`);
+            }
+
+            const selected = qualities[0];
+            if (selected !== profile) {
+                logger.DEBUG(`Adjust profile from ${profile} → ${selected}`);
+                profile = selected;
+            }
         }
 
         // Prefer fragmented MP4
         if (mode === 'direct_play' && preferFragmentedMp4) {
             mode = 'direct_remux';
-
             containerDecision.reason = 'fragmented-mp4-preferred';
         }
 

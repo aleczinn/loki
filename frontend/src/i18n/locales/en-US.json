@@ -71,5 +71,13 @@
             "title": "Fullscreen (F)",
             "label": "Fullscreen"
         }
+    },
+    "streaming": {
+        "methods": {
+            "direct_play": "Direct Play",
+            "direct_remux": "Direct Remux",
+            "direct_stream": "Direct Stream",
+            "transcode": "Transcode"
+        }
     }
 }

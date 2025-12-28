@@ -79,9 +79,9 @@ router.post('/api/session/seek', async (req: Request, res: Response) => {
             return res.status(400).json({ error: 'No time provided' });
         }
 
-        await streamingService.handleSeek(sessionId, time);
+        const result = await streamingService.handleSeek(sessionId, time);
 
-        res.status(204).send();
+        res.status(200).send(result);
     } catch (error) {
         logger.ERROR(`Error reporting a client seek: ${error}`);
         res.status(500).json({ error: 'Failed to report a client seek' });
@@ -110,6 +110,51 @@ router.post('/api/session/stop', async (req: Request, res: Response) => {
     } catch (error) {
         logger.ERROR(`Error stopping a session: ${error}`);
         res.status(500).json({ error: 'Failed to stop a session' });
+    }
+});
+
+/**
+ * Info for Session
+ */
+router.get('/api/session/:sessionId', async (req: Request, res: Response) => {
+    try {
+        const { sessionId } = req.params;
+
+        if (!sessionId) {
+            return res.status(400).json({ error: 'Session ID required' });
+        }
+
+        const session = streamingService.getSession(sessionId);
+        if (!session) {
+            return res.status(404).json({ error: `No session for id ${sessionId} found` });
+        }
+
+        const { decision } = session;
+        const transcode = session.transcode;
+
+        const response: any = {
+            id: session.id,
+            client: session.client,
+            file: session.file,
+            decision,
+            audioIndex: session.audioIndex,
+            subtitleIndex: session.subtitleIndex,
+            createdAt: session.createdAt,
+            lastAccessed: session.lastAccessed
+        };
+
+        if (transcode && decision.mode !== 'direct_play') {
+            response.transcode = {
+                progress: transcode.progress,
+                fps: transcode.fps,
+                speed: transcode.speed
+            }
+        }
+
+        res.status(200).json(response);
+    } catch (error) {
+        logger.ERROR(`Error for session info: ${error}`);
+        res.status(500).json({ error: 'Failed to generate session info' });
     }
 });
 
