@@ -2,13 +2,13 @@ import * as path from 'path';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
-import { deleteFile, ensureDir, pathExists, readdir, readFile, stat, writeFile } from "../utils/file-utils";
+import { ensureDir, pathExists, readFile, stat } from "../utils/file-utils";
 import { ChildProcess, spawn } from 'child_process';
 import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
 import { ClientInfo } from "../types/client-info";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
-import { BLUE, GREEN, MAGENTA, RESET, WHITE, YELLOW } from "../utils/utils";
+import { BLUE, GREEN, MAGENTA, RESET, WHITE } from "../utils/utils";
 import { getTranscodingArgs } from "./transcoding-profiles";
 import { Request, Response } from 'express';
 import { getMimeType } from "../utils/media-utils";
@@ -22,6 +22,7 @@ interface TranscodeJob {
     process?: ChildProcess;
     status: 'running' | 'stopped' | 'completed';
     startSegment: number;
+    startTime: number;
     lastGeneratedSegment?: number;
 }
 
@@ -29,7 +30,6 @@ export interface PlaySession {
     id: string;
     client: ClientInfo;
     file: MediaFile;
-
     decision: TranscodeDecision;
 
     audioIndex: number;
@@ -91,102 +91,105 @@ export class StreamingService {
     }
 
     async getPlaylist(session: PlaySession): Promise<string> {
-        const file = session.file;
-        const dir = path.join(TRANSCODE_PATH, session.id, session.decision.profile);
-        const playlistPath = path.join(dir, 'playlist.m3u8');
+        session.lastAccessed = new Date();
 
-        await ensureDir(dir);
+        await this.lock.acquire(`playlist-${session.id}`, async () => {
+            if (!session.transcode || session.transcode.status !== 'running') {
+                const startSegment =
+                    Math.floor(session.currentTime / SEGMENT_DURATION);
+                await this.startTranscode(session, startSegment);
+            }
+        });
 
-        if (await pathExists(playlistPath)) {
-            return await readFile(playlistPath, "utf-8");
-        }
+        const job = session.transcode!;
+        const playlistPath = path.join(
+            TRANSCODE_PATH,
+            session.id,
+            job.id,
+            'playlist.m3u8'
+        );
 
-        const duration = file.metadata?.general.Duration || -1;
-        if (duration === -1) {
-            throw new Error('Invalid media duration. Something is wrong with the metadata!');
-        }
-        const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
-
-        let playlist = '#EXTM3U\n';
-        playlist += '#EXT-X-VERSION:3\n';
-        playlist += `#EXT-X-TARGETDURATION:${SEGMENT_DURATION}\n`;
-        playlist += '#EXT-X-MEDIA-SEQUENCE:0\n';
-        playlist += '#EXT-X-PLAYLIST-TYPE:VOD\n\n';
-
-        for (let i = 0; i < totalSegments; i++) {
-            const segmentDuration = Math.min(
-                SEGMENT_DURATION,
-                duration - (i * SEGMENT_DURATION)
-            );
-            playlist += `#EXTINF:${segmentDuration.toFixed(6)},\n`;
-            playlist += `/api/videos/hls/${session.id}/segment${i}.ts\n`;
-        }
-
-        playlist += '#EXT-X-ENDLIST\n';
-
-        await writeFile(playlistPath, playlist);
-        logger.INFO(`Generated playlist for session ${session.id}`);
-
-        return playlist;
+        await this.waitForFile(playlistPath);
+        return readFile(playlistPath, 'utf-8');
     }
 
     async getSegment(session: PlaySession, segmentIndex: number): Promise<string | null> {
-        const dir = path.join(TRANSCODE_PATH, session.id, session.decision.profile);
-        const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
-
         session.lastAccessed = new Date();
 
+        const job = session.transcode;
+        if (!job || job.status !== 'running') {
+            throw new Error('No active transcode');
+        }
+
+        const dir = path.join(TRANSCODE_PATH, session.id, job.id);
+        const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
+
+        // Falls Segment existiert → sofort liefern
         if (await pathExists(segmentPath)) {
             logger.DEBUG(`${WHITE}Serving existing segment ${segmentIndex} for session ${session.id}${RESET}`);
             return segmentPath;
         }
 
-        await this.ensureTranscodeRunning(session, segmentIndex);
-        return null;
+        // Warten bis ffmpeg Segment erzeugt
+        const timeoutMs = 8000;
+        const start = Date.now();
+
+        while (Date.now() - start < timeoutMs) {
+            if (await pathExists(segmentPath)) {
+                return segmentPath;
+            }
+            await new Promise(r => setTimeout(r, 30));
+        }
+
+        throw new Error(`Segment ${segmentIndex} not available`);
+
+        // await this.ensureTranscodeRunning(session, segmentIndex);
+        // return null;
     }
 
-    private async ensureTranscodeRunning(session: PlaySession, requestedSegment: number): Promise<void> {
-        return this.lock.acquire(`transcode-${session.id}`, async () => {
-            if (!session.transcode || session.transcode.status !== 'running') {
-                const startSegment = Math.floor(session.currentTime / SEGMENT_DURATION);
-                await this.startTranscode(session, startSegment);
-            }
-        });
-    }
+    // private async ensureTranscodeRunning(session: PlaySession, requestedSegment: number): Promise<void> {
+    //     return this.lock.acquire(`transcode-${session.id}`, async () => {
+    //         if (!session.transcode || session.transcode.status !== 'running') {
+    //             const startSegment = Math.floor(session.currentTime / SEGMENT_DURATION);
+    //             await this.startTranscode(session, startSegment);
+    //         }
+    //     });
+    // }
 
     private async startTranscode(session: PlaySession, startSegment: number): Promise<void> {
-        const dir = path.join(TRANSCODE_PATH, session.id, session.decision.profile);
-        await ensureDir(dir);
+        await this.stopTranscode(session);
 
         const jobId = crypto.randomUUID();
+        const startTime = startSegment * SEGMENT_DURATION;
+
+        const outputDir = path.join(TRANSCODE_PATH, session.id, jobId);
+        await ensureDir(outputDir);
+
+        const playlistPath = path.join(outputDir, 'playlist.m3u8');
+        const segmentPath = path.join(outputDir, 'segment%d.ts');
+
         const job: TranscodeJob = {
             id: jobId,
             status: 'running',
             startSegment,
+            startTime,
+            lastGeneratedSegment: undefined
         };
-
         session.transcode = job;
 
         const file = session.file;
-        const duration = file.metadata?.general.Duration || -1;
-        if (duration === -1) {
-            throw new Error('Invalid media duration. Something is wrong with the metadata!');
-        }
+        const duration = file.metadata.general.Duration;
+        const totalSegments = Math.ceil(duration / SEGMENT_DURATION);
 
-        const seekTime = startSegment * SEGMENT_DURATION;
-        const tempPlaylistPath = path.join(dir, `temp_${jobId}.m3u8`);
-        const segmentPath = path.join(dir, 'segment%d.ts');
-        const framerate = file.metadata?.video[0]?.FrameRate || -1;
-        const gopSize = framerate === -1 ? 250 : Math.round(framerate * SEGMENT_DURATION);
+        const framerate = session.file.metadata?.video[0]?.FrameRate ?? 25;
+        const gopSize = Math.round(framerate * SEGMENT_DURATION);
 
         const transcodingArgs = getTranscodingArgs(session);
 
         const args = [
             // Input
-            '-copyts',
-            '-ss', String(seekTime),
+            '-ss', String(startTime),
             '-i', file.path,
-
             '-threads', '0',
 
             // Video
@@ -210,7 +213,7 @@ export class StreamingService {
             '-f', 'hls',
             '-hls_time', String(SEGMENT_DURATION),
             '-hls_list_size', '0',
-            '-hls_playlist_type', 'vod',
+            '-hls_playlist_type', 'event',
             '-hls_flags', 'independent_segments+temp_file',
             '-start_number', String(startSegment),
             '-hls_segment_filename', segmentPath,
@@ -220,7 +223,7 @@ export class StreamingService {
             '-loglevel', 'error',
 
             // Output
-            tempPlaylistPath
+            playlistPath
         ];
 
         // FFmpeg spawnen
@@ -231,6 +234,7 @@ export class StreamingService {
 
         // Progress parsing
         let progressBuffer = '';
+
         ffmpegProcess.stdout?.on('data', (data) => {
             if (job.status !== 'running') return; // Ignoriere wenn gestoppt
 
@@ -241,12 +245,18 @@ export class StreamingService {
             for (const line of lines) {
                 if (line.includes('out_time_ms=')) {
                     const match = line.match(/out_time_ms=(\d+)/);
-                    if (match) {
-                        const timeMs = parseInt(match[1]);
-                        const timeSec = timeMs / 1000000;  // Microseconds to seconds
-                        const percent = (timeSec / duration) * 100;
 
-                        logger.INFO(`${BLUE}Progress: ${percent.toFixed(1)}% [${session.id}]${RESET}`);
+                    if (match) {
+                        const timeMs = parseInt(match[1], 10);
+                        const transcodedSeconds = timeMs / 1_000_000; // Microseconds to seconds
+                        const absoluteTime = startTime + transcodedSeconds;
+                        const percent = (timeMs  / duration) * 100;
+
+                        job.lastGeneratedSegment = Math.floor(absoluteTime / SEGMENT_DURATION);
+
+                        logger.INFO(`${BLUE}Transcode-Progress: ${percent.toFixed(1)}% Segments: [${job.startSegment}/${job.lastGeneratedSegment}/${totalSegments}] [${session.id}]${RESET}`);
+
+
                     }
                 }
             }
@@ -272,12 +282,6 @@ export class StreamingService {
             if (code === 0) {
                 logger.INFO(`${MAGENTA}Transcode completed [${session.id}]${RESET}`);
                 job.status = 'completed';
-
-                // Cleanup temp playlist nach erfolgreichem Transcoding
-                try {
-                    await deleteFile(tempPlaylistPath);
-                } catch (e) {
-                }
             } else if (signal === 'SIGKILL') {
                 logger.DEBUG(`Process killed [${session.id}]`);
             } else {
@@ -305,9 +309,7 @@ export class StreamingService {
             if (process.platform === 'win32' && job.process.pid) {
                 try {
                     require('child_process').execSync(`taskkill /PID ${job.process.pid} /T /F`, { stdio: 'ignore' });
-                } catch (e) {
-                    // Ignorieren
-                }
+                } catch (e) {}
             }
         }
 
@@ -421,7 +423,8 @@ export class StreamingService {
             id: crypto.randomUUID(),
             status: 'running',
             process: ffmpegProcess,
-            startSegment: -1
+            startSegment: -1,
+            startTime: -1
         };
         session.transcode = job;
 
@@ -450,6 +453,17 @@ export class StreamingService {
             logger.DEBUG('Client disconnected, killing FFmpeg remux');
             ffmpegProcess.kill('SIGKILL');
         });
+    }
+
+    async waitForFile(filePath: string, timeoutMs = 5000, intervalMs = 50): Promise<void> {
+        const start = Date.now();
+
+        while (Date.now() - start < timeoutMs) {
+            if (await pathExists(filePath)) return;
+            await new Promise(r => setTimeout(r, intervalMs));
+        }
+
+        throw new Error(`Timeout waiting for ${filePath}`);
     }
 
     async reportStatistics(sessionId: string, currentTime: number, isPaused: boolean): Promise<void> {
@@ -493,25 +507,71 @@ export class StreamingService {
     }
 
     async handleSeek(sessionId: string, time: number): Promise<void> {
-        const session = this.sessions.get(sessionId);
-        if (!session) {
-            throw new Error(`No session with id ${sessionId} found`);
-        }
+        return this.lock.acquire(`seek-${sessionId}`, async () => {
+            const session = this.sessions.get(sessionId);
+            if (!session) throw new Error(`No session ${sessionId}`);
 
-        session.currentTime = time;
-        session.lastAccessed = new Date();
+            session.currentTime = time;
+            session.lastAccessed = new Date();
 
-        const targetSegment = Math.floor(time / SEGMENT_DURATION);
-        logger.INFO(`${BLUE}Seek requested: ${sessionId} to ${time}s (segment ${targetSegment})${RESET}`);
+            const targetSegment = Math.floor(time / SEGMENT_DURATION);
+            const job = session.transcode;
 
-        if (session.decision.mode === 'transcode') {
-            if (session.transcode?.status === 'running') {
-                await this.stopTranscode(session);
+            logger.INFO(`Seek ${sessionId} → ${time}s (segment ${targetSegment})`);
+
+            if (session.decision.mode !== 'transcode') {
+                return;
             }
 
+            // Kein laufender Job → neu starten
+            if (
+                !job ||
+                job.status !== 'running' ||
+                !job.process ||
+                job.process.killed
+            ) {
+                logger.DEBUG(`No active job → starting new transcode`);
+                await this.startTranscode(session, targetSegment);
+                return;
+            }
+
+            // Liegt der Seek im bereits generierten Fenster?
+            if (
+                job.lastGeneratedSegment !== undefined &&
+                targetSegment >= job.startSegment &&
+                targetSegment <= job.lastGeneratedSegment
+            ) {
+                logger.DEBUG(`Seek inside window (${job.startSegment}–${job.lastGeneratedSegment})`);
+                return;
+            }
+
+            // Außerhalb → ffmpeg neu starten
+            logger.INFO(`Seek outside window → restarting transcode`);
+            await this.stopTranscode(session);
             await this.startTranscode(session, targetSegment);
-        }
+        });
     }
+
+    // async handleSeek(sessionId: string, time: number): Promise<void> {
+    //     const session = this.sessions.get(sessionId);
+    //     if (!session) {
+    //         throw new Error(`No session with id ${sessionId} found`);
+    //     }
+    //
+    //     session.currentTime = time;
+    //     session.lastAccessed = new Date();
+    //
+    //     const targetSegment = Math.floor(time / SEGMENT_DURATION);
+    //     logger.INFO(`${BLUE}Seek requested: ${sessionId} to ${time}s (segment ${targetSegment})${RESET}`);
+    //
+    //     if (session.decision.mode === 'transcode') {
+    //         if (session.transcode?.status === 'running') {
+    //             await this.stopTranscode(session);
+    //         }
+    //
+    //         await this.startTranscode(session, targetSegment);
+    //     }
+    // }
 
     async handlePlaybackStop(sessionId: string, time?: number): Promise<void> {
         const session = this.sessions.get(sessionId);
@@ -521,11 +581,15 @@ export class StreamingService {
 
         logger.INFO(`Stopping playback session: ${sessionId}`);
 
-        // TODO : save "time" to implement the watch later feature
+        this.saveResumeTime(session.file, session.currentTime);
 
         await this.stopTranscode(session);
 
         this.sessions.delete(sessionId);
+    }
+
+    saveResumeTime(file: MediaFile, time: number): void {
+        // TODO : save "time" to implement the watch later feature
     }
 
     getSession(sessionId: string): PlaySession | undefined {
