@@ -516,6 +516,8 @@ async function openPlayer(file: MediaFile) {
     duration.value = 0;
     buffered.value = 0;
 
+    duration.value = file.metadata.general.Duration;
+
     await nextTick();
 
     if (!videoRef.value) {
@@ -552,11 +554,18 @@ async function openPlayer(file: MediaFile) {
         initHLSPlayer(url);
     });
 
-    axios?.get(`/session/${sessionId.value}`).then(response => {
+    fetchSessionInfo();
+}
+
+async function fetchSessionInfo() {
+    if (!sessionId.value) return;
+
+    try {
+        const response = await axios?.get(`/session/${sessionId.value}`);
         sessionInfo.value = response?.data;
-    }).catch(error => {
-        console.error(`Failed to get session information for ${sessionId}:`, error);
-    })
+    } catch (error) {
+        console.error(`Failed to get session info: ${error}`);
+    }
 }
 
 function cleanup() {
@@ -659,12 +668,7 @@ function startProgressReporting() {
             console.error('Failed to report progress:', err);
         });
 
-        axios?.get(`/session/${sessionId.value}`).then(response => {
-            sessionInfo.value = response?.data;
-        }).catch(error => {
-            console.error(`Failed to get session information for ${sessionId}:`, error);
-        })
-
+        fetchSessionInfo();
     }, 5000);
 }
 
@@ -693,6 +697,69 @@ function togglePlayPause() {
     }
 }
 
+async function handleJobRestart(seekTime: number) {
+    if (!currentFile.value || !sessionId.value) return;
+
+    console.log(`Job restart - new startOffset: ${seekTime}s`);
+    startOffset.value = seekTime;
+
+    const token = sessionStorage.getItem(LOKI_TOKEN);
+    const url = `/api/videos/${currentFile.value.id}/master.m3u8?token=${token}&profile=${props.profile}`;
+
+    if (hls.value) {
+        // HLS.js komplett neu laden
+        console.log('Destroying and reinitializing HLS.js');
+        hls.value.destroy();
+        hls.value = null;
+
+        // Kurz warten damit alte Ressourcen freigegeben werden
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        initHLSPlayer(url);
+
+        // Warte bis HLS bereit ist
+        await new Promise<void>((resolve) => {
+            if (!hls.value) {
+                resolve();
+                return;
+            }
+
+            const onReady = () => {
+                hls.value!.off(Hls.Events.MANIFEST_PARSED, onReady);
+                resolve();
+            };
+
+            hls.value.on(Hls.Events.MANIFEST_PARSED, onReady);
+        });
+
+    } else if (videoRef.value) {
+        // Native player neu laden
+        console.log('Reloading native video player');
+        videoRef.value.pause();
+        videoRef.value.src = url;
+        videoRef.value.load();
+
+        await new Promise<void>((resolve) => {
+            const onLoaded = () => {
+                videoRef.value!.removeEventListener('loadedmetadata', onLoaded);
+                resolve();
+            };
+            videoRef.value!.addEventListener('loadedmetadata', onLoaded);
+        });
+    }
+
+    // Nach Neustart bei Position 0 im neuen Job starten
+    if (videoRef.value) {
+        videoRef.value.currentTime = 0;
+        currentTime.value = seekTime;
+
+        // Auto-play nach Restart
+        videoRef.value.play().catch(err => {
+            console.error(`Failed to play after restart: ${err}`);
+        });
+    }
+}
+
 function skip(seconds: number) {
     if (!videoRef.value) return;
 
@@ -700,35 +767,50 @@ function skip(seconds: number) {
     videoRef.value.currentTime = clamp(value, 0, videoRef.value.duration);
 }
 
-function handleSeek(seconds: number) {
+async function handleSeek(seconds: number) {
     if (!videoRef.value || !sessionId.value) return;
 
+    const wasPaused = videoRef.value.paused;
     videoRef.value.pause();
-    // const clampedTime = Math.max(0, Math.min(newValue, duration.value));
 
     const target = Math.max(0, Math.min(seconds, duration.value));
-    const segmentSeek = target - (startOffset.value || 0);
 
-    axios?.post('/session/seek', {
-        sessionId: sessionId.value,
-        time: segmentSeek
-    }).then(() => {
-        // if (result.data.restart && hls.value) {
-        //     hls.value.stopLoad();
-        //     hls.value.loadSource(currentUrl); // gleiche URL, neuer Inhalt
-        //     hls.value.startLoad(time);
-        // }
+    try {
+        const jobRelativeTime = target - (startOffset.value || 0);
+        console.log(`Seeking to ${target}s (job-relative: ${jobRelativeTime}s, offset: ${startOffset.value}s)`);
 
-        // aktueller Segment-player neu setzen
-        if (videoRef.value) {
-            videoRef.value.currentTime = segmentSeek;
-            currentTime.value = target;
+        const response = await axios?.post('/session/seek', {
+            sessionId: sessionId.value,
+            time: target  // Sende absolute Zeit ans Backend
+        });
+
+        if (response?.data.restart) {
+            // Job wurde neu gestartet → HLS komplett neu laden
+            console.log('Seek triggered job restart');
+            await handleJobRestart(response.data.startOffset || target);
+            await fetchSessionInfo();
+        } else {
+            // Normaler Seek innerhalb des aktuellen Jobs
+            console.log('Seek within current job');
+
+            if (videoRef.value) {
+                // Setze Position relativ zum aktuellen Job
+                const newJobTime = target - (startOffset.value || 0);
+                videoRef.value.currentTime = newJobTime;
+                currentTime.value = target;
+
+                if (!wasPaused) {
+                    videoRef.value.play();
+                }
+            }
         }
-    }).catch(err => {
-        console.error('Failed to report seek:', err);
-    });
+    } catch (error) {
+        console.error(`Seek failed: ${error}`);
 
-    videoRef.value.play();
+        if (!wasPaused && videoRef.value) {
+            videoRef.value.play();
+        }
+    }
 }
 
 function handleVolume(newValue: number) {
@@ -742,8 +824,12 @@ function handleVolume(newValue: number) {
 function updateProgress() {
     if (!videoRef.value) return;
 
+    // Globale Zeit = Job-relative Zeit + Offset
     currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
 
+
+
+    // currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
     // currentTime.value = videoRef.value.currentTime;
     // duration.value = videoRef.value.duration || 0;
 }
@@ -759,7 +845,7 @@ function updateBuffer() {
 
     const b = videoRef.value.buffered;
     if (b.length > 0) {
-        // buffered = Ende des letzten gepufferten Segmentes + startOffset
+        // Buffered relativ zur globalen Timeline
         buffered.value = b.end(b.length - 1) + (startOffset.value || 0);
     } else {
         buffered.value = 0;

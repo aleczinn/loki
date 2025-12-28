@@ -562,7 +562,7 @@ export class StreamingService {
         logger.DEBUG(`${BLUE}Session Heartbeat: ${sessionId} @ ${currentTime}s (${isPaused ? 'paused' : 'playing'})${RESET}`);
     }
 
-    async handleSeek(sessionId: string, time: number): Promise<{ restart: boolean }> {
+    async handleSeek(sessionId: string, time: number): Promise<{ restart: boolean, startOffset?: number }> {
         return this.lock.acquire(`seek-${sessionId}`, async () => {
             const session = this.sessions.get(sessionId);
             if (!session) throw new Error(`No session ${sessionId}`);
@@ -579,41 +579,36 @@ export class StreamingService {
                 return { restart: false };
             }
 
-            // 1️⃣ Kein Job → starten
+            // Kein Job → starten
             if (!job) {
                 logger.DEBUG(`No job → starting transcode`);
                 await this.startTranscode(session, targetSegment);
-                return { restart: true };
+                const startOffset = targetSegment * SEGMENT_DURATION;
+                return { restart: true, startOffset };
             }
 
-            // 2️⃣ Job vollständig fertig → niemals neu starten
-            if (job.status === 'completed') {
-                logger.DEBUG(`Seek inside completed transcode → no restart`);
-                return { restart: false };
-            }
-
-            // 3️⃣ Job explizit gestoppt → neu starten
-            if (job.status === 'stopped') {
-                logger.DEBUG(`Stopped job → restarting transcode`);
-                await this.startTranscode(session, targetSegment);
-                return { restart: true };
-            }
-
-            // Liegt der Seek im bereits generierten Fenster?
-            if (
-                job.lastGeneratedSegment !== undefined &&
+            // Prüfe ob Seek innerhalb des Job-Fensters liegt
+            const isInWindow = job.lastGeneratedSegment !== undefined &&
                 targetSegment >= job.startSegment &&
-                targetSegment <= job.lastGeneratedSegment
-            ) {
+                targetSegment <= job.lastGeneratedSegment;
+
+            if (isInWindow) {
+                // Seek innerhalb des generierten Bereichs
                 logger.DEBUG(`Seek inside window (${job.startSegment}–${job.lastGeneratedSegment})`);
                 return { restart: false };
             }
 
-            // Außerhalb → ffmpeg neu starten
-            logger.INFO(`Seek outside window → restarting transcode`);
-            await this.stopTranscode(session);
+            // Seek außerhalb → Job neu starten (auch wenn completed!)
+            logger.INFO(`Seek outside window (current: ${job.startSegment}–${job.lastGeneratedSegment}, target: ${targetSegment}) → restarting`);
+
+            // Nur stoppen wenn noch läuft
+            if (job.status === 'running') {
+                await this.stopTranscode(session);
+            }
+
             await this.startTranscode(session, targetSegment);
-            return { restart: true };
+            const startOffset = targetSegment * SEGMENT_DURATION;
+            return { restart: true, startOffset };
         });
     }
 
