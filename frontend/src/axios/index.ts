@@ -1,84 +1,63 @@
-import axios, { type AxiosInstance } from "axios";
+import axios from "axios";
 import type { App } from 'vue';
 import { LOKI_TOKEN } from "../variables.ts";
 
 interface AxiosOptions {
-    baseURL?: string
-    token?: string
+    baseURL?: string;
 }
 
-let axiosInstance: AxiosInstance;
+export const axiosInstance = axios.create({
+    baseURL: '/api',
+    headers: {
+        'Content-Type': 'application/json'
+    },
+    timeout: 10000
+});
 
+// Dev Logging
+if (import.meta.env.DEV) {
+    axiosInstance.interceptors.request.use(
+        (config) => {
+            console.log(`🚀 ${config.method?.toUpperCase()} ${config.url}`);
+            return config;
+        },
+        (error) => {
+            console.error('❌ Request Error:', error);
+            return Promise.reject(error);
+        }
+    );
+}
+
+// Token-Interceptor
+axiosInstance.interceptors.request.use(config => {
+    if (!config.url?.includes('/client/register')) {
+        const token = sessionStorage.getItem(LOKI_TOKEN);
+        if (token) {
+            config.headers['X-Client-Token'] = token;
+        }
+    }
+    return config;
+});
+
+// Error Handling
+axiosInstance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401 &&
+            error.response?.data?.code === 'INVALID_CLIENT_TOKEN') {
+            console.error('Invalid client token');
+            sessionStorage.removeItem(LOKI_TOKEN);
+        }
+        return Promise.reject(error);
+    }
+);
+
+// Vue-Plugin
 export default {
     install: (app: App, options: AxiosOptions = {}) => {
-        axiosInstance = axios.create({
-            baseURL: options.baseURL,
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            timeout: 10000
-        });
-
-        // simple request interceptor for logging in development
-        if (import.meta.env.DEV) {
-            axiosInstance.interceptors.request.use(
-                (config) => {
-                    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
-                    return config;
-                },
-                (error) => {
-                    console.error('❌ Request Error:', error);
-                    return Promise.reject(error);
-                }
-            );
+        if (options.baseURL) {
+            axiosInstance.defaults.baseURL = options.baseURL;
         }
-
-        axiosInstance.interceptors.request.use(config => {
-            const token = sessionStorage.getItem(LOKI_TOKEN);
-            if (token) {
-                config.headers['X-Client-Token'] = token;
-            }
-            return config;
-        });
-
-        axiosInstance.interceptors.response.use(response => {
-            // const token = response.headers['X-Client-Token'];
-            // if (token) {
-            //     sessionStorage.setItem(LOKI_TOKEN, token);
-            // }
-            return response;
-        });
-
-        // // request interceptor for auth-token
-        // axiosInstance.interceptors.request.use(
-        //     (config) => {
-        //         const token = localStorage.getItem('authToken') || options.token;
-        //         if (token && config.headers) {
-        //             config.headers.Authorization = `Bearer ${token}`;
-        //         }
-        //         return config;
-        //     },
-        //     (error) => {
-        //         return Promise.reject(error);
-        //     }
-        // );
-        //
-        // // response interceptor for error handling
-        // axiosInstance.interceptors.response.use(
-        //     (response) => response,
-        //     (error) => {
-        //         if (error.response?.status === 503) {
-        //             console.error('Backend service unavailable');
-        //         }
-        //         if (error.response?.status === 401) {
-        //             // token expired/invalid
-        //             localStorage.removeItem('authToken');
-        //             // optional: redirect to log in
-        //         }
-        //         return Promise.reject(error);
-        //     }
-        // );
-
         // for options api
         app.config.globalProperties.$axios = axiosInstance;
 
@@ -86,5 +65,3 @@ export default {
         app.provide('axios', axiosInstance);
     }
 };
-
-export { axiosInstance };
