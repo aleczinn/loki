@@ -3,14 +3,10 @@
 
 @theme {
     /* Colors */
-    /*--color-primary-light: #8FC5EA;*/
-    /*--color-primary: #53A7DD;*/
-    /*--color-primary-darker: #1e6fab;*/
-    /*--color-primary-darkest: #092133;*/
-
     --color-primary-light: #33A87D;
     --color-primary: #00925D;
     --color-primary-darker: #006641;
+    --color-primary-darkest: #00472d;
 
     --color-alert: #EB3F5E;
     --color-success: #4CAF50;

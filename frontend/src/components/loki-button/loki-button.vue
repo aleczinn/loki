@@ -75,17 +75,20 @@ const variantClasses = computed(() => {
         primary: [
             'bg-primary text-white',
             'hover:bg-primary-darker',
-            'focus:bg-primary-light focus:outline-2 focus:outline-offset-4 focus:outline-primary-light active:bg-primary-lighter',
+            'active:bg-primary-darkest',
+            'focus-visible:bg-primary-light focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-light',
         ],
         secondary: [
             'bg-black-900 text-white',
             'border-1 border-solid border-white',
-            'focus:outline-2 focus:outline-offset-4 focus:outline-white active:bg-primary-darker',
+            'active:bg-black',
+            'focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white',
         ],
         hollow: [
             'bg-transparent text-white',
             'border-1 border-solid border-white',
-            'focus:outline-2 focus:outline-offset-4 focus:outline-white active:bg-primary-darker',
+            'active:bg-transparent',
+            'focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white',
         ]
     }
 
