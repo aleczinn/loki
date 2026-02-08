@@ -44,7 +44,7 @@
                     </div>
 
                     <div v-if="sessionInfo?.transcode">
-                        <h6 class="font-bold mb-1">{{ $t('transcoding.title') }}<</h6>
+                        <h6 class="font-bold mb-1">{{ $t('transcoding.title') }}</h6>
 <!--                        <ul class="ml-2 mb-2">-->
 <!--                            <li>Container: Der Container wird nicht unterstützt</li>-->
 <!--                            <li>-->
@@ -138,7 +138,7 @@
                         <div class="">
                             <!-- Timeline -->
                             <div class="flex flex-row items-center gap-3 text-white text-sm p-2 mb-2">
-                                <span class="text-left">{{ formatTime(currentTime) }}</span>
+                                <span class="text-left">{{ formatTime(displayTime) }}</span>
 
                                 <loki-progress-bar class="w-full h-1"
                                                    :value="displayTime"
@@ -150,7 +150,7 @@
                                                    @update:value="handleSeek">
                                 </loki-progress-bar>
 
-                                <span class="text-right">{{ formatTime(displayTime) }}</span>
+                                <span class="text-right">{{ formatTime(duration) }}</span>
                             </div>
 
                             <!-- Buttons -->
@@ -538,21 +538,15 @@ async function openPlayer(file: MediaFile) {
         return;
     }
 
-    const token = sessionStorage.getItem(LOKI_TOKEN);
     const response = await axios?.post('/session/start', {
         mediaId: file.id,
         profile: props.profile
-    }, {
-        headers: {
-            'X-Client-Token': token
-        }
     });
 
     sessionId.value = response?.data.sessionId;
     duration.value = file.metadata.general.Duration;
 
-    console.log(`Start with duration ${duration.value}`);
-
+    const token = sessionStorage.getItem(LOKI_TOKEN);
     const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${props.profile}`;
 
     startProgressReporting();
