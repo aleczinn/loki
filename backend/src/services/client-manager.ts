@@ -41,11 +41,11 @@ class ClientManager {
         return this.clients;
     }
 
-    updateClientCapabilities(token: string, capabilities: Partial<ClientCapabilities>): boolean {
+    updateClientCapabilities(token: string, capabilities: ClientCapabilities): boolean {
         const client = this.clients.get(token);
 
         if (client) {
-            client.capabilities = { ...client.capabilities, ...capabilities };
+            client.capabilities = capabilities;
             client.lastSeen = new Date();
             return true;
         }
