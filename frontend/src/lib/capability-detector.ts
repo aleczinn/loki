@@ -12,14 +12,26 @@ import type {
 export class CapabilityDetector {
 
     async detectCapabilities(): Promise<ClientCapabilities> {
+        const client = this.detectClient();
+        const containers = this.detectContainers();
+        const audioCodecs = this.detectAudioCodecs();
+        const subtitles = this.detectSubtitles();
+        const supportsAdaptiveStreaming = 'MediaSource' in window;
+
+        // Call in parallel for better performance
+        const [display, videoCodecs] = await Promise.all([
+            this.detectDisplay(),
+            this.detectVideoCodecs()
+        ]);
+
         return {
-            client: this.detectClient(),
-            display: await this.detectDisplay(),
-            containers: this.detectContainers(),
-            videoCodecs: await this.detectVideoCodecs(),
-            audioCodecs: this.detectAudioCodecs(),
-            subtitles: this.detectSubtitles(),
-            supportsAdaptiveStreaming: 'MediaSource' in window
+            client,
+            display,
+            containers,
+            videoCodecs,
+            audioCodecs,
+            subtitles,
+            supportsAdaptiveStreaming
         };
     }
 
@@ -206,29 +218,16 @@ export class CapabilityDetector {
     }
 
     private async detectVideoCodecs(): Promise<VideoCodecCapability[]> {
-        const codecs: VideoCodecCapability[] = [];
+        // Call in parallel for better performance
+        const [h264, hevc, vp9, av1, vp8] = await Promise.all([
+            this.detectH264(),
+            this.testHEVC(),
+            this.testVP9(),
+            this.testAV1(),
+            this.testVP8()
+        ]);
 
-        // H.264 Detection
-        const h264 = await this.detectH264();
-        if (h264.profiles.length > 0) codecs.push(h264);
-
-        // HEVC/H.265
-        const hevc = await this.testHEVC();
-        if (hevc.profiles.length > 0) codecs.push(hevc);
-
-        // VP9
-        const vp9 = await this.testVP9();
-        if (vp9.profiles.length > 0) codecs.push(vp9);
-
-        // AV1
-        const av1 = await this.testAV1();
-        if (av1.profiles.length > 0) codecs.push(av1);
-
-        // VP8 (legacy)
-        const vp8 = await this.testVP8();
-        if (vp8.profiles.length > 0) codecs.push(vp8);
-
-        return codecs;
+        return [h264, hevc, vp9, av1, vp8].filter(codec => codec.profiles.length > 0);
     }
 
     private async detectH264(): Promise<VideoCodecCapability> {
