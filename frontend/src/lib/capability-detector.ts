@@ -11,6 +11,12 @@ import type {
 
 export class CapabilityDetector {
 
+    getMinimalCapabilities(): ClientCapabilities {
+        return {
+            client: this.detectClient()
+        }
+    }
+
     async detectCapabilities(): Promise<ClientCapabilities> {
         const client = this.detectClient();
         const containers = this.detectContainers();

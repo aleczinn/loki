@@ -15,11 +15,10 @@ export async function initializeClient(): Promise<string> {
 
     const existingToken = sessionStorage.getItem(LOKI_TOKEN);
     const detector = new CapabilityDetector();
-    const capabilities = await detector.detectCapabilities();
 
     const response = await axiosInstance.post('/client/register', {
         token: existingToken || null,
-        capabilities
+        capabilities: detector.getMinimalCapabilities()
     });
 
     const newToken = response.data.token;
@@ -31,7 +30,26 @@ export async function initializeClient(): Promise<string> {
     sessionStorage.setItem(LOKI_TOKEN, newToken);
     isClientInitialized = true;
 
+
+    detectFullCapabilities(newToken, detector);
+
     return newToken;
+}
+
+async function detectFullCapabilities(token: string, detector: CapabilityDetector) {
+    try {
+        console.log('Detecting full capabilities now...');
+        const capabilities = await detector.detectCapabilities();
+
+        await axiosInstance.post('/client/update', {
+            token,
+            capabilities
+        });
+
+        console.log('Updated capabilities!');
+    } catch (error) {
+        console.warn('Failed to update full capabilities:', error);
+    }
 }
 
 export function getClientToken(): string | null {

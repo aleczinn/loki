@@ -36,7 +36,7 @@ router.post('/api/client/update', async (req: Request, res: Response) => {
 
     const status = clientManager.updateClientCapabilities(token, capabilities);
     if (status) {
-        return res.status(200);
+        return res.status(200).send();
     }
     return res.status(404).json({ error: `no client with token ${token} found` });
 });

@@ -78,10 +78,10 @@ export interface Client {
 /** Einheitliche Client Capabilities für alle Plattformen */
 export interface ClientCapabilities {
     client: Client;
-    display: DisplayCapability;
-    containers: MediaContainer[];
-    videoCodecs: VideoCodecCapability[];
-    audioCodecs: AudioCodecCapability[];
-    subtitles: SubtitleCapability;
-    supportsAdaptiveStreaming: boolean; // Unterstützt der Client Media Source Extensions? Adaptive Streaming (HLS via hls.js)
+    display?: DisplayCapability;
+    containers?: MediaContainer[];
+    videoCodecs?: VideoCodecCapability[];
+    audioCodecs?: AudioCodecCapability[];
+    subtitles?: SubtitleCapability;
+    supportsAdaptiveStreaming?: boolean; // Unterstützt der Client Media Source Extensions? Adaptive Streaming (HLS via hls.js)
 }
