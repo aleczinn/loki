@@ -315,6 +315,9 @@ export class StreamingService {
             if (code === 0) {
                 logger.INFO(`${MAGENTA}Transcode completed [${session.id}]${RESET}`);
                 job.status = 'completed';
+                job.progress = 100;
+                job.fps = 0;
+                job.speed = 0;
             } else if (signal === 'SIGKILL') {
                 logger.DEBUG(`Process killed [${session.id}]`);
             } else {

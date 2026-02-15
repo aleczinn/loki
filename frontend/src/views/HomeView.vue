@@ -1,10 +1,13 @@
 <template>
     <loki-player ref="player" :profile="selectedQuality"></loki-player>
 
-    <div class="flex flex-col h-screen">
+    <div class="flex flex-col h-screen relative">
+        <div class="absolute top-4 left-4 text-gray">{{ getClientToken() }}</div>
+
         <main class="flex-1 py-8">
             <div class="mx-auto max-w-[87rem]">
                 <!-- ADD CONTENT HERE -->
+
                 <h3 class="text-white font-bold mb-2">Media Files</h3>
                 <div class="flex flex-col mb-4">
                     <a v-for="media in mediaFiles" :key="media.name" @click="playMedia(media)"
@@ -35,6 +38,7 @@
 import { inject, onMounted, onUnmounted, ref } from "vue";
 import type { AxiosInstance } from "axios";
 import { LokiPlayer } from "../components/loki-player";
+import { getClientToken } from "../client-init.ts";
 
 const axios = inject<AxiosInstance>('axios');
 
