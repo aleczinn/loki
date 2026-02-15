@@ -4,11 +4,13 @@ import { preferFragmentedMp4 } from "../settings";
 import { logger } from "../logger";
 
 export type StreamMode = 'direct_play' | 'direct_remux' | 'transcode';
+export type PlayerMethod = 'direct' | 'hls'; // Add DASH later
 export type GenericStreamingType = 'copy' | 'transcode';
 export type SubtitleStreamingType = 'copy' | 'burn_in' | 'none';
 
 export interface TranscodeDecision {
     mode: StreamMode;
+    method: PlayerMethod;
     profile: QualityProfile;
     container: {
         needsRemux: boolean;
@@ -92,8 +94,12 @@ export class TranscodeDecisionService {
             containerDecision.reason = 'fragmented-mp4-preferred';
         }
 
+        // TODO : Adjust later if DASH is added
+        const method: PlayerMethod = mode === 'direct_play' ? 'direct' : 'hls';
+
         return {
             mode,
+            method,
             profile,
             container: containerDecision,
             video: videoDecision,

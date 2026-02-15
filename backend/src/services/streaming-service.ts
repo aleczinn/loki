@@ -54,7 +54,7 @@ export class StreamingService {
     private sessions: Map<string, PlaySession> = new Map();
     private lock = new AsyncLock();
 
-    getOrCreateSession(client: ClientInfo, file: MediaFile, profile: QualityProfile): PlaySession {
+    getOrCreateSession(client: ClientInfo, file: MediaFile, profile: QualityProfile, audioTrack: number = 0, subtitleTrack: number = -1): PlaySession {
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
         const sessionId: string = `${client.token}-${file.id}`;
 
@@ -352,8 +352,7 @@ export class StreamingService {
     /**
      * Direct Play - serve file as-is with Range support
      */
-    async streamDirectPlay(req: Request, res: Response, session: PlaySession, range?: string): Promise<void> {
-        const file = session.file;
+    async streamDirectPlay(req: Request, res: Response, file: MediaFile, range?: string): Promise<void> {
         const stats = await stat(file.path);
         const fileSize = stats.size;
 

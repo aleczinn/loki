@@ -8,6 +8,29 @@ import { BANDWIDTH_BY_PROFILE, QualityProfile } from "../services/transcode-deci
 
 const router = Router();
 
+/**
+ * Route for direct play
+ */
+router.get('/api/videos/:mediaId/stream', async (req: Request, res: Response) => {
+    const { mediaId } = req.params;
+    const token = req.headers['x-client-token'] as string || req.query.token as string;
+
+    if (!token) {
+        return res.status(401).json({ error: 'No client token provided' });
+    }
+
+    const file = await findMediaFileById(mediaId);
+    if (!file || !await pathExists(file.path)) {
+        return res.status(404).json({ error: 'Media file not found' });
+    }
+
+    const range = req.headers.range;
+    await streamingService.streamDirectPlay(req, res, file, range);
+});
+
+/**
+ * Route for hls
+ */
 router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Response) => {
     try {
         const { mediaId } = req.params;
@@ -44,7 +67,8 @@ router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Respons
             case 'direct_play':
                 console.log("use direct play");
                 const range = req.headers.range;
-                return await streamingService.streamDirectPlay(req, res, session, range);
+                // return await streamingService.streamDirectPlay(req, res, session, range);
+                break;
             case 'direct_remux':
                 console.log("use direct remux");
                 return await streamingService.streamDirectRemux(req, res, session);
