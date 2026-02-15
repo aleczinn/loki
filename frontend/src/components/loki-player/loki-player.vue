@@ -328,7 +328,7 @@ import IconPlayerRewind10 from "../../icons/player/icon-player-rewind-10.vue";
 import IconPlayerForward30 from "../../icons/player/icon-player-forward-30.vue";
 import type { MediaFile } from "../../types/media.ts";
 import IconFullscreen from "../../icons/icon-fullscreen.vue";
-import { clamp, formatBitrate, formatFileSize } from "../../lib/utils.ts";
+import { formatBitrate, formatFileSize } from "../../lib/utils.ts";
 import IconGear from "../../icons/icon-gear.vue";
 import IconPlayerVolume from "../../icons/player/icon-player-volume.vue";
 import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
@@ -524,12 +524,10 @@ const transcodingComputed = computed(() => {
     return { progress: 0, fps: 0, speed: 0 }
 });
 
-async function openPlayer(file: MediaFile) {
+async function setupPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
-
     cleanup();
-    duration.value = file.metadata.general.Duration;
 
     await nextTick();
 
@@ -540,25 +538,33 @@ async function openPlayer(file: MediaFile) {
 
     const response = await axios?.post('/session/start', {
         mediaId: file.id,
-        profile: props.profile
+        profile: props.profile,
+        audioTrack: 0,
+        subtitleTrack: -1
     });
 
+    const data = response?.data;
     sessionId.value = response?.data.sessionId;
-    duration.value = file.metadata.general.Duration;
+    duration.value = data.duration;
 
     const token = sessionStorage.getItem(LOKI_TOKEN);
-    const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${props.profile}`;
+    const url = `${data.streamUrl}${data.streamUrl.includes('?') ? '&' : '?'}token=${token}`;
+
+    switch (data.method) {
+        case 'direct':
+            videoRef.value.src = url;
+            videoRef.value.volume = volume.value;
+            videoRef.value.play();
+            break;
+        case 'hls':
+            initHLSPlayer(url);
+            break;
+        default:
+            console.error(`Unknown player method: ${data.method}`);
+            break;
+    }
 
     startProgressReporting();
-
-    videoRef.value.src = url;
-    videoRef.value.volume = volume.value;
-
-    videoRef.value.play().catch(() => {
-        console.log("Abspielen mit native player fehlgeschlagen! Wechsle zu HLS");
-        initHLSPlayer(url);
-    });
-
     fetchSessionInfo();
 }
 
@@ -1091,7 +1097,7 @@ watch(volume, (newVal) => {
 
 defineExpose({
     play(file: MediaFile) {
-        openPlayer(file);
+        setupPlayer(file);
     },
     pause() {
         videoRef.value?.pause();
