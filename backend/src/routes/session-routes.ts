@@ -11,7 +11,7 @@ const router = Router();
  */
 router.post('/api/session/start', async (req: Request, res: Response) => {
     try {
-        const { mediaId, profile, audioTrack, subtitleTrack } = req.body;
+        const { mediaId, profile, audioTrack, subtitleTrack, startTime } = req.body;
         const token = req.headers['x-client-token'] as string || req.query.token as string || undefined;
 
         if (!token) {
@@ -32,7 +32,7 @@ router.post('/api/session/start', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Media file not found' });
         }
 
-        const session = streamingService.getOrCreateSession(client, file, profile, audioTrack, subtitleTrack);
+        const session = streamingService.getOrCreateSession(client, file, profile, audioTrack, subtitleTrack, startTime || 0);
         const playerMethod = session.decision.method;
         const streamUrl = playerMethod === 'direct'
             ? `/api/${file.id}/stream`

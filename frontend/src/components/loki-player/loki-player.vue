@@ -560,7 +560,8 @@ async function restartSessionWithNewTracks() {
         mediaId: currentFile.value.id,
         profile: props.profile,
         audioTrack: currentAudioTrack.value,
-        subtitleTrack: currentSubtitleTrack.value
+        subtitleTrack: currentSubtitleTrack.value,
+        startTime: savedTime
     });
 
     const data = response?.data;

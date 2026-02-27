@@ -54,7 +54,13 @@ export class StreamingService {
     private sessions: Map<string, PlaySession> = new Map();
     private lock = new AsyncLock();
 
-    getOrCreateSession(client: ClientInfo, file: MediaFile, profile: QualityProfile, audioTrack: number = 0, subtitleTrack: number = -1): PlaySession {
+    getOrCreateSession(client: ClientInfo,
+                       file: MediaFile,
+                       profile: QualityProfile,
+                       audioTrack: number = 0,
+                       subtitleTrack: number = -1,
+                       startTime: number = 0
+    ): PlaySession {
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
         const sessionId: string = `${client.token}-${file.id}`;
 
@@ -83,7 +89,7 @@ export class StreamingService {
                 session.transcode = undefined;
             }
 
-            session.currentTime = 0;
+            session.currentTime = startTime;
             session.isPaused = false;
             session.pauseStartedAt = undefined;
 
@@ -99,7 +105,7 @@ export class StreamingService {
             subtitleIndex: subtitleTrack,
             createdAt: new Date(),
             lastAccessed: new Date(),
-            currentTime: 0,
+            currentTime: startTime,
             isPaused: false,
             pauseStartedAt: -1
         };
@@ -192,6 +198,8 @@ export class StreamingService {
         const args = [
             '-ss', String(startTime),
             '-i', file.path,
+            '-start_at_zero',                   // Timestamps bei 0 beginnen
+            '-avoid_negative_ts', 'make_zero',  // Negative Timestamps eliminieren
             '-threads', '0',
         ];
 
