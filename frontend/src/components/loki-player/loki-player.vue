@@ -34,6 +34,9 @@
 
                             <li>{{ $t('debug.labels.playback_method') }}: {{ $t(`base.methods.${sessionInfo.decision.mode}`) }}</li>
                             <li>{{ $t('debug.labels.stream_type') }}: {{ sessionInfo.decision.mode === 'transcode' ? $t(`debug.streamtype.hls`) : $t(`debug.streamtype.native`) }}</li>
+
+                            <li>Audio: {{ currentAudioTrack }} ({{ audioTracks[currentAudioTrack || 0].name }})</li>
+                            <li>Subtitle: {{ currentSubtitleTrack }} ({{ subtitleTracks[currentSubtitleTrack || 0].name }})</li>
                         </ul>
                     </div>
 
@@ -411,24 +414,6 @@ interface TrackInfo {
 
 const audioTracks = ref<TrackInfo[]>([]);
 const subtitleTracks = ref<TrackInfo[]>([]);
-
-// const audioTracks = ref([
-//     { name: 'DTS-HD MA 7.1 [SKELLETON Mix]', language: 'German', codec: 'Standard' },
-//     { name: 'DTS-HD MA 5.1', language: 'German', codec: '' },
-//     { name: 'DTS-HD MA 7.1', language: 'English', codec: '' },
-//     { name: 'Audiokommentar m. Regisseur Chris Weitz DTS Stereo', language: 'English', codec: '' },
-// ]);
-//
-// const subtitleTracks = ref([
-//     { name: 'Aus' },
-//     { name: 'Deutsch Erzwungen', language: 'de', format: 'SubRip' },
-//     { name: 'Deutsch', language: 'de', format: 'PGS' },
-//     { name: 'Deutsch SDH', language: 'de', format: 'PGS' },
-//     { name: 'English Forced', language: 'en', format: 'SubRip' },
-//     { name: 'English', language: 'en', format: 'PGS' },
-//     { name: 'English SDH', language: 'en', format: 'PGS' },
-//     { name: 'French', language: 'fr', format: 'VobSub' }
-// ]);
 
 // Track-Name generieren
 function buildAudioTrackName(track: any, index: number): string {
@@ -867,40 +852,30 @@ async function reloadHLSStream(streamUrl: string, seekToTime?: number) {
     const token = sessionStorage.getItem(LOKI_TOKEN);
     const url = `${streamUrl}${streamUrl.includes('?') ? '&' : '?'}token=${token}`;
 
+    // Komplett zerstören — nur so werden Buffer geleert
     if (hls.value) {
-        hls.value.stopLoad();
-        hls.value.loadSource(url);
+        hls.value.destroy();
+        hls.value = null;
+    }
 
+    initHLSPlayer(url);
+
+    // Warten bis Manifest geladen
+    if (hls.value) {
         await new Promise<void>((resolve) => {
-            const onManifestParsed = () => {
-                hls.value!.off(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+            const onParsed = () => {
+                hls.value!.off(Hls.Events.MANIFEST_PARSED, onParsed);
                 resolve();
             };
-            hls.value!.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
-        });
-    } else {
-        // Fallback: HLS komplett neu initialisieren
-        initHLSPlayer(url);
-
-        await new Promise<void>((resolve) => {
-            const onManifestParsed = () => {
-                hls.value!.off(Hls.Events.MANIFEST_PARSED, onManifestParsed);
-                resolve();
-            };
-            hls.value!.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
+            hls.value!.on(Hls.Events.MANIFEST_PARSED, onParsed);
         });
     }
 
     if (seekToTime !== undefined && seekToTime > 0) {
-        // Bei neuem Job: Segment 0 im neuen Job = seekToTime absolut
         startOffset.value = seekToTime;
         videoRef.value.currentTime = 0;
         currentTime.value = seekToTime;
     }
-
-    videoRef.value.play().catch(err => {
-        console.error(`Failed to play after reload: ${err}`);
-    });
 }
 
 /**
