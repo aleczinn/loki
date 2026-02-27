@@ -35,8 +35,8 @@ router.post('/api/session/start', async (req: Request, res: Response) => {
         const session = streamingService.getOrCreateSession(client, file, profile, audioTrack, subtitleTrack);
         const playerMethod = session.decision.method;
         const streamUrl = playerMethod === 'direct'
-            ? `/api/videos/${file.id}/stream`
-            : `/api/videos/hls/${session.id}/master.m3u8`;
+            ? `/api/${file.id}/stream`
+            : `/api/hls/${session.id}/master.m3u8`;
 
         return res.status(200).json({
             sessionId: session.id,

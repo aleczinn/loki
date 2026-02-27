@@ -67,6 +67,13 @@ export class TranscodeDecisionService {
         const needsVideoTranscode = videoDecision.action === 'transcode' || subtitleDecision.action === 'burn_in';
         const needsAudioTranscode = audioDecision.action === 'transcode';
 
+        // Wenn burn_in nötig ist, aber Video auf copy steht → Video muss transkodiert werden
+        if (subtitleDecision.action === 'burn_in' && videoDecision.action === 'copy') {
+            videoDecision.action = 'transcode';
+            videoDecision.reason = 'Video transcoding required for subtitle burn-in';
+            videoDecision.targetCodec = this.selectBestVideoCodec(capabilities);
+        }
+
         if (needsVideoTranscode || needsAudioTranscode || profile !== 'original') {
             mode = 'transcode';
         } else if (containerDecision.needsRemux) {
