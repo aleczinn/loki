@@ -30,6 +30,8 @@
                         <h6 class="font-bold mb-1">{{ $t('debug.labels.playback_information') }}</h6>
                         <ul class="ml-2">
                             <li>{{ $t('debug.labels.player') }}: {{ $t('debug.player.html') }}</li>
+                            <!-- Abspielmethode: Direkt / HLS / DASH -->
+
                             <li>{{ $t('debug.labels.playback_method') }}: {{ $t(`base.methods.${sessionInfo.decision.mode}`) }}</li>
                             <li>{{ $t('debug.labels.stream_type') }}: {{ sessionInfo.decision.mode === 'transcode' ? $t(`debug.streamtype.hls`) : $t(`debug.streamtype.native`) }}</li>
                         </ul>

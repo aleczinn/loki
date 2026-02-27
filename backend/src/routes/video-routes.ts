@@ -11,7 +11,7 @@ const router = Router();
 /**
  * Route for direct play
  */
-router.get('/api/videos/:mediaId/stream', async (req: Request, res: Response) => {
+router.get('/api/hls/:mediaId/stream', async (req: Request, res: Response) => {
     const { mediaId } = req.params;
     const token = req.headers['x-client-token'] as string || req.query.token as string;
 
@@ -31,13 +31,13 @@ router.get('/api/videos/:mediaId/stream', async (req: Request, res: Response) =>
 /**
  * Route for hls
  */
-router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Response) => {
+router.get('/api/hls/:mediaId/master.m3u8', async (req: Request, res: Response) => {
     try {
         const { mediaId } = req.params;
 
         const profile = (req.query.profile as QualityProfile) ?? 'original';
-        const audio = Number(req.query.audio ?? 0);
-        const subtitle = req.query.subtitle as string | undefined;
+        const audioTrack = Number(req.query.audio ?? 0);
+        const subtitleTrack = Number(req.query.subtitle ?? -1);
 
         const token = req.headers['x-client-token'] as string || req.query.token as string || undefined;
 
@@ -61,7 +61,7 @@ router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Respons
             return res.status(401).json({ error: 'Invalid client token' });
         }
 
-        const session = streamingService.getOrCreateSession(client, file, profile);
+        const session = streamingService.getOrCreateSession(client, file, profile, audioTrack, subtitleTrack);
 
         switch (session.decision.mode) {
             case 'direct_play':
@@ -93,7 +93,7 @@ router.get('/api/videos/:mediaId/master.m3u8', async (req: Request, res: Respons
     }
 });
 
-router.get('/api/videos/hls/:sessionId/index.m3u8', async (req, res) => {
+router.get('/api/hls/:sessionId/index.m3u8', async (req, res) => {
     const { sessionId } = req.params;
 
     const session = streamingService.getSession(sessionId);
@@ -108,7 +108,7 @@ router.get('/api/videos/hls/:sessionId/index.m3u8', async (req, res) => {
     res.send(playlist);
 });
 
-router.get('/api/videos/hls/:sessionId/:segment', async (req: Request, res: Response): Promise<any> => {
+router.get('/api/hls/:sessionId/:segment', async (req: Request, res: Response): Promise<any> => {
         const { sessionId, segment } = req.params;
 
         const match = segment.match(/segment(\d+)\.ts/);

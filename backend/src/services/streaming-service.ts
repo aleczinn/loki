@@ -8,7 +8,7 @@ import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
 import { ClientInfo } from "../types/client-info";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
-import { BLUE, GREEN, MAGENTA, RESET, WHITE } from "../utils/utils";
+import { BLUE, formatDuration, formatFileSize, GREEN, MAGENTA, RESET, WHITE } from "../utils/utils";
 import { getTranscodingArgs } from "./transcoding-profiles";
 import { Request, Response } from 'express';
 import { getMimeType } from "../utils/media-utils";
@@ -372,10 +372,10 @@ export class StreamingService {
             if (start >= fileSize || end >= fileSize) {
                 res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
                 res.end();
-                return; // ← Kein Wert zurückgeben
+                return;
             }
 
-            logger.DEBUG(`Direct Play: Range ${start}-${end}/${fileSize} for ${file.name}`);
+            logger.DEBUG(`Direct Play: Range ${start} - ${end} for ${file.name} (${formatFileSize(fileSize)})`);
 
             res.status(206); // Partial Content
             res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);

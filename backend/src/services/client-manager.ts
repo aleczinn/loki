@@ -13,7 +13,6 @@ class ClientManager {
 
         if (this.clients.has(token)) {
             this.updateClientCapabilities(token, capabilities);
-            console.log("Update client capabilities for client " + token);
         } else {
             const clientInfo: ClientInfo = {
                 token,
@@ -23,8 +22,6 @@ class ClientManager {
             };
 
             this.clients.set(token, clientInfo);
-
-            console.log("Register new client with token " + token);
         }
         return token;
     }
