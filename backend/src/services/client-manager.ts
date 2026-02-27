@@ -1,4 +1,3 @@
-import { generateToken } from "../utils/utils";
 import { ClientInfo } from "../types/client-info";
 import { ClientCapabilities } from "../types/capabilities/client-capabilities";
 
@@ -8,7 +7,7 @@ class ClientManager {
 
     registerClient(token: string | null, capabilities: ClientCapabilities): string {
         if (!token) {
-            token = generateToken();
+            token = crypto.randomUUID();
         }
 
         if (this.clients.has(token)) {

@@ -62,7 +62,8 @@ export class StreamingService {
                        startTime: number = 0
     ): PlaySession {
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
-        const sessionId: string = `${client.token}-${file.id}`;
+        // const sessionId: string = `${client.token}-${file.id}`;
+        const sessionId = client.token;
 
         // Return session if already exists
         if (this.sessions.has(sessionId)) {
