@@ -35,8 +35,8 @@
                             <li>{{ $t('debug.labels.playback_method') }}: {{ $t(`base.methods.${sessionInfo.decision.mode}`) }}</li>
                             <li>{{ $t('debug.labels.stream_type') }}: {{ sessionInfo.decision.mode === 'transcode' ? $t(`debug.streamtype.hls`) : $t(`debug.streamtype.native`) }}</li>
 
-                            <li>Audio: {{ currentAudioTrack }} ({{ audioTracks[currentAudioTrack || 0].name }})</li>
-                            <li>Subtitle: {{ currentSubtitleTrack }} ({{ subtitleTracks[currentSubtitleTrack || 0].name }})</li>
+                            <li>Audio: {{ currentAudioTrack }} ({{ audioTracks[currentAudioTrack].name }})</li>
+                            <li>Subtitle: {{ currentSubtitleTrack }} ({{ subtitleTracks[currentSubtitleTrack + 1].name }})</li>
                         </ul>
                     </div>
 
@@ -273,9 +273,9 @@
                     <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
                     <div class="flex flex-col text-gray">
                         <button v-for="(track, index) in audioTracks"
-                                :key="index"
+                                :key="track.index"
                                 class="w-full px-4 py-2 text-left text-gray hover:bg-white/10 transition-colors flex gap-3 cursor-pointer"
-                                :class="{ 'bg-white/5': index === currentAudioTrack }"
+                                :class="{ 'bg-white/5': track.index === currentAudioTrack }"
                                 @click="selectAudioTrack(index)"
                         >
                             <span class="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -294,16 +294,16 @@
                         class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg p-4 dialog-backdrop"
                         @click.self="subtitleDialog?.close();"
                 >
-                    <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
+                    <h1 class="font-loki-sub text-xl text-white mb-4">Untertitel</h1>
                     <div class="flex flex-col text-gray">
-                        <button v-for="(track, index) in subtitleTracks"
-                                :key="index"
+                        <button v-for="(track) in subtitleTracks"
+                                :key="track.index"
                                 class="w-full px-4 py-2 text-left text-gray hover:bg-white/10 transition-colors flex gap-3 cursor-pointer"
-                                :class="{ 'bg-white/5': index === currentSubtitleTrack }"
-                                @click="selectSubtitleTrack(index)"
+                                :class="{ 'bg-white/5': track.index === currentSubtitleTrack }"
+                                @click="selectSubtitleTrack(track.index)"
                         >
                             <span class="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <icon-checkmark v-if="index === currentSubtitleTrack"
+                              <icon-checkmark v-if="track.index === currentSubtitleTrack"
                                               class="text-primary"
                                               aria-hidden="true"
                               />
@@ -401,7 +401,7 @@ const currentAudioTrack = ref(0);
 
 const subtitleDialog = ref<HTMLDialogElement | null>(null);
 const subtitleButtonRef = ref<HTMLElement | null>(null);
-const currentSubtitleTrack = ref(0);
+const currentSubtitleTrack = ref(-1);
 
 interface TrackInfo {
     index: number;
@@ -415,7 +415,36 @@ interface TrackInfo {
 const audioTracks = ref<TrackInfo[]>([]);
 const subtitleTracks = ref<TrackInfo[]>([]);
 
-// Track-Name generieren
+// Tracks aus Metadaten füllen + Auto-Selection
+function initTracksFromMetadata(file: MediaFile) {
+    // Audio Tracks
+    audioTracks.value = file.metadata.audio.map((track, index) => ({
+        index,
+        name: buildAudioTrackName(track, index),
+        language: track.Language?.toLowerCase(),
+        format: track.Format,
+        isDefault: track.Default === 'Yes',
+        isForced: track.Forced === 'Yes'
+    }));
+    currentAudioTrack.value = 0;
+
+    // Subtitle Tracks – "Aus" als erste Option
+    subtitleTracks.value = [
+        { index: -1, name: 'Aus', isDefault: false, isForced: false },
+        ...file.metadata.subtitle.map((track, index) => ({
+            index,
+            name: buildSubtitleTrackName(track),
+            language: track.Language?.toLowerCase(),
+            format: track.Format,
+            isDefault: track.Default === 'Yes',
+            isForced: track.Forced === 'Yes'
+        }))
+    ];
+    currentSubtitleTrack.value = -1;
+
+    // autoSelectTracks();
+}
+
 function buildAudioTrackName(track: any, index: number): string {
     const parts: string[] = [];
 
@@ -438,33 +467,22 @@ function buildAudioTrackName(track: any, index: number): string {
     return parts.join(' ');
 }
 
-// Tracks aus Metadaten füllen + Auto-Selection
-function initTracksFromMetadata(file: MediaFile) {
-    // Audio Tracks
-    audioTracks.value = file.metadata.audio.map((track, index) => ({
-        index,
-        name: buildAudioTrackName(track, index),
-        language: track.Language?.toLowerCase(),
-        format: track.Format,
-        isDefault: track.Default === 'Yes',
-        isForced: track.Forced === 'Yes'
-    }));
+function buildSubtitleTrackName(track: any): string {
+    const parts: string[] = [];
 
-    // Subtitle Tracks – "Aus" als erste Option
-    subtitleTracks.value = [
-        { index: -1, name: 'Aus', isDefault: false, isForced: false },
-        ...file.metadata.subtitle.map((track, index) => ({
-            index,
-            name: buildSubtitleTrackName(track),
-            language: track.Language?.toLowerCase(),
-            format: track.Format,
-            isDefault: track.Default === 'Yes',
-            isForced: track.Forced === 'Yes'
-        }))
-    ];
+    if (track.Title) {
+        parts.push(track.Title);
+    } else if (track.Language) {
+        parts.push(track.Language.toUpperCase());
+    } else {
+        parts.push('Unbekannt');
+    }
 
-    // Auto-Selection
-    autoSelectTracks();
+    if (track.Forced === 'Yes') parts.push('(Erzwungen)');
+    if (track.HearingImpaired === 'Yes') parts.push('(SDH)');
+    if (track.Commentary === 'Yes') parts.push('(Kommentar)');
+
+    return parts.join(' ');
 }
 
 function autoSelectTracks() {
@@ -484,24 +502,6 @@ function autoSelectTracks() {
     currentSubtitleTrack.value = germanForced?.index ?? -1;
 }
 
-function buildSubtitleTrackName(track: any): string {
-    const parts: string[] = [];
-
-    if (track.Title) {
-        parts.push(track.Title);
-    } else if (track.Language) {
-        parts.push(track.Language.toUpperCase());
-    } else {
-        parts.push('Unbekannt');
-    }
-
-    if (track.Forced === 'Yes') parts.push('(Erzwungen)');
-    if (track.HearingImpaired === 'Yes') parts.push('(SDH)');
-    if (track.Commentary === 'Yes') parts.push('(Kommentar)');
-
-    return parts.join(' ');
-}
-
 function handleCanPlay() {
     isLoading.value = false;
 }
@@ -519,11 +519,15 @@ async function selectAudioTrack(index: number) {
 }
 
 async function selectSubtitleTrack(index: number) {
-    const trackIndex = subtitleTracks.value[index]?.index ?? -1;
-    if (trackIndex === currentSubtitleTrack.value) return;
-    currentSubtitleTrack.value = trackIndex;
+    console.log('selectSubtitleTrack', index);
 
-    await restartSessionWithNewTracks();
+    currentSubtitleTrack.value = index;
+
+    // const trackIndex = subtitleTracks.value[index]?.index ?? -1;
+    // if (trackIndex === currentSubtitleTrack.value) return;
+    // currentSubtitleTrack.value = trackIndex;
+    //
+    // await restartSessionWithNewTracks();
 }
 
 /**
