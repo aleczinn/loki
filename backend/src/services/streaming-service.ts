@@ -203,6 +203,7 @@ export class StreamingService {
 
         // INPUT
         const args = [
+            '-noaccurate_seek',                  // Audio auch ab Keyframe, nicht sample-genau
             '-ss', String(startTime),
             '-i', file.path,
             '-threads', '0',

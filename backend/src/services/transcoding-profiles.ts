@@ -233,9 +233,6 @@ export function getTranscodingArgs(session: PlaySession): TranscodingArgs {
         }
         audioArgs.push('-ac', '2');
         audioArgs.push('-ar', '48000');
-
-        // Audio-Sync: PTS bei 0 starten + Lücken mit Stille füllen
-        audioArgs.push('-af', 'aresample=async=1:first_pts=0');
     }
 
     return { videoArgs, audioArgs, subtitleArgs };
