@@ -135,7 +135,14 @@ export class StreamingService {
         const playlistPath = path.join(TRANSCODE_PATH, session.id, job.id, 'playlist.m3u8');
 
         await this.waitForFile(playlistPath);
-        return readFile(playlistPath, 'utf-8');
+
+        let content = await readFile(playlistPath, 'utf-8');
+
+        // Cache-Busting: Job-ID an Segment-URLs anhängen
+        // Damit liefert der Browser bei neuem Job keine alten Segments aus dem Cache
+        content = content.replace(/(segment\d+\.ts)/g, `$1?j=${job.id}`);
+
+        return content;
     }
 
     async getSegment(session: PlaySession, segmentIndex: number): Promise<string | null> {
@@ -198,10 +205,12 @@ export class StreamingService {
         const args = [
             '-ss', String(startTime),
             '-i', file.path,
-            '-start_at_zero',                   // Timestamps bei 0 beginnen
-            '-avoid_negative_ts', 'make_zero',  // Negative Timestamps eliminieren
             '-threads', '0',
         ];
+
+        // MAPPING
+        args.push('-map', '0:v:0'); // First video Stream
+        args.push('-map', `0:a:${session.audioIndex}`);
 
         // VIDEO
         args.push(...transcodingArgs.videoArgs);
@@ -219,16 +228,12 @@ export class StreamingService {
         // SUBTITLE BURN-IN (falls nötig)
         args.push(...transcodingArgs.subtitleArgs);
 
-        // MAPPING
-        args.push('-map', '0:v:0'); // First video Stream
-
-        const audioIndex = session.audioIndex;
-        args.push('-map', `0:a:${audioIndex}`);
-
-        // Subtitle: Nur mappen wenn text-basiert und nicht burn-in
-        // Bei burn-in wird der Subtitle über den Video-Filter eingebrannt
-        // und braucht kein eigenes Mapping
-        // → Subtitle-Mapping passiert in getTranscodingArgs()
+        // TIMESTAMP & MUXING
+        args.push(
+            '-start_at_zero',            // Timestamps bei 0 beginnen
+            '-avoid_negative_ts', 'make_zero',  // Negative Timestamps eliminieren
+            '-max_muxing_queue_size', '2048',   //
+        );
 
         // HLS OUTPUT
         args.push(...[
