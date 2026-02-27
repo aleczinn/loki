@@ -148,7 +148,7 @@ export class StreamingService {
 
             // If segment exists -> return segment path
             if (await pathExists(segmentPath)) {
-                logger.DEBUG(`${WHITE}Serving existing segment ${segmentIndex} for session ${session.id}${RESET}`);
+                // logger.DEBUG(`${WHITE}Serving existing segment ${segmentIndex} for session ${session.id}${RESET}`);
                 return segmentPath;
             }
 
