@@ -7,11 +7,11 @@ import { findMediaFileById } from "../utils/media-utils";
 const router = Router();
 
 /**
- * Stop playback session
+ * Request a session
  */
 router.post('/api/session/start', async (req: Request, res: Response) => {
     try {
-        const { mediaId, profile, audioTrack, subtitleTrack } = req.body;
+        const { mediaId, profile, audioTrack, subtitleTrack, startTime } = req.body;
         const token = req.headers['x-client-token'] as string || req.query.token as string || undefined;
 
         if (!token) {
@@ -32,11 +32,18 @@ router.post('/api/session/start', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Media file not found' });
         }
 
-        const session = streamingService.getOrCreateSession(client, file, profile);
+        const session = streamingService.getOrCreateSession(client, file, profile, audioTrack, subtitleTrack, startTime || 0);
+        const playerMethod = session.decision.method;
+        const streamUrl = playerMethod === 'direct'
+            ? `/api/${file.id}/stream`
+            : `/api/hls/${session.id}/master.m3u8`;
 
         return res.status(200).json({
             sessionId: session.id,
-            file: session.file
+            method: playerMethod,
+            streamUrl: streamUrl,
+            duration: file.metadata.general.Duration,
+            decision: session.decision
         });
     } catch (error) {
         logger.ERROR(`Failed to start a new session: ${error}`);

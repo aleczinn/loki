@@ -107,16 +107,3 @@ export function getHashFromPath(filePath: string): string {
 export function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-/**
- * Generate or retrieve token for a client
- */
-export function generateToken(): string {
-    const timestamp = Date.now().toString();
-    const random = crypto.randomBytes(16).toString('hex');
-    return crypto
-        .createHash('sha256')
-        .update(`${timestamp}-${random}`)
-        .digest('hex')
-        .substring(0, 32); // Use first 32 chars for shorter tokens
-}

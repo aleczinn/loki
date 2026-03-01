@@ -8,7 +8,7 @@ import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
 import { ClientInfo } from "../types/client-info";
 import { FFMPEG_PATH } from "../utils/ffmpeg";
-import { BLUE, GREEN, MAGENTA, RESET, WHITE } from "../utils/utils";
+import { BLUE, formatDuration, formatFileSize, GREEN, MAGENTA, RESET, WHITE } from "../utils/utils";
 import { getTranscodingArgs } from "./transcoding-profiles";
 import { Request, Response } from 'express';
 import { getMimeType } from "../utils/media-utils";
@@ -54,14 +54,24 @@ export class StreamingService {
     private sessions: Map<string, PlaySession> = new Map();
     private lock = new AsyncLock();
 
-    getOrCreateSession(client: ClientInfo, file: MediaFile, profile: QualityProfile): PlaySession {
+    getOrCreateSession(client: ClientInfo,
+                       file: MediaFile,
+                       profile: QualityProfile,
+                       audioTrack: number = 0,
+                       subtitleTrack: number = -1,
+                       startTime: number = 0
+    ): PlaySession {
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
-        const sessionId: string = `${client.token}-${file.id}`;
+        const sessionId = client.token;
 
         // Return session if already exists
         if (this.sessions.has(sessionId)) {
             const session = this.sessions.get(sessionId)!;
             session.lastAccessed = new Date();
+
+            // Audio/Sub-Track aktualisieren
+            session.audioIndex = audioTrack;
+            session.subtitleIndex = subtitleTrack;
 
             // WICHTIG: decision might be changed (different profile)
             // We possibly need a new transcode if profile has changed
@@ -71,20 +81,18 @@ export class StreamingService {
                 // transcode continues and get restarted for the next segment
             }
 
-            // ✨ NEU: Stoppe alten Job und reset Session State
+            // Stoppe alten Job und reset Session State
             if (session.transcode) {
-                logger.INFO(`Cleaning up old transcode job for reused session ${sessionId}`);
                 this.stopTranscode(session).catch(err => {
                     logger.ERROR(`Failed to stop old transcode: ${err}`);
                 });
                 session.transcode = undefined;
             }
 
-            session.currentTime = 0;
+            session.currentTime = startTime;
             session.isPaused = false;
             session.pauseStartedAt = undefined;
 
-            logger.DEBUG(`Reusing session: ${sessionId}`);
             return session;
         }
 
@@ -93,11 +101,11 @@ export class StreamingService {
             client: client,
             file: file,
             decision: decision,
-            audioIndex: 0,
-            subtitleIndex: -1,
+            audioIndex: audioTrack,
+            subtitleIndex: subtitleTrack,
             createdAt: new Date(),
             lastAccessed: new Date(),
-            currentTime: 0,
+            currentTime: startTime,
             isPaused: false,
             pauseStartedAt: -1
         };
@@ -127,7 +135,14 @@ export class StreamingService {
         const playlistPath = path.join(TRANSCODE_PATH, session.id, job.id, 'playlist.m3u8');
 
         await this.waitForFile(playlistPath);
-        return readFile(playlistPath, 'utf-8');
+
+        let content = await readFile(playlistPath, 'utf-8');
+
+        // Cache-Busting: Job-ID an Segment-URLs anhängen
+        // Damit liefert der Browser bei neuem Job keine alten Segments aus dem Cache
+        content = content.replace(/(segment\d+\.ts)/g, `$1?j=${job.id}`);
+
+        return content;
     }
 
     async getSegment(session: PlaySession, segmentIndex: number): Promise<string | null> {
@@ -140,7 +155,7 @@ export class StreamingService {
 
             // If segment exists -> return segment path
             if (await pathExists(segmentPath)) {
-                logger.DEBUG(`${WHITE}Serving existing segment ${segmentIndex} for session ${session.id}${RESET}`);
+                // logger.DEBUG(`${WHITE}Serving existing segment ${segmentIndex} for session ${session.id}${RESET}`);
                 return segmentPath;
             }
 
@@ -181,7 +196,6 @@ export class StreamingService {
 
         const file = session.file;
         const duration = file.metadata.general.Duration;
-
         const framerate = session.file.metadata?.video[0]?.FrameRate ?? 25;
         const gopSize = Math.round(framerate * SEGMENT_DURATION);
 
@@ -189,10 +203,15 @@ export class StreamingService {
 
         // INPUT
         const args = [
+            '-noaccurate_seek',                  // Audio auch ab Keyframe, nicht sample-genau
             '-ss', String(startTime),
             '-i', file.path,
             '-threads', '0',
         ];
+
+        // MAPPING
+        args.push('-map', '0:v:0'); // First video Stream
+        args.push('-map', `0:a:${session.audioIndex}`);
 
         // VIDEO
         args.push(...transcodingArgs.videoArgs);
@@ -207,13 +226,18 @@ export class StreamingService {
         // AUDIO
         args.push(...transcodingArgs.audioArgs);
 
-        // GENERIC
-        args.push(...[
-            // Mapping
-            '-map', '0:v:0',  // First video stream
-            '-map', '0:a:0',  // First audio stream
+        // SUBTITLE BURN-IN (falls nötig)
+        args.push(...transcodingArgs.subtitleArgs);
 
-            // HLS
+        // TIMESTAMP & MUXING
+        args.push(
+            '-start_at_zero',            // Timestamps bei 0 beginnen
+            '-avoid_negative_ts', 'make_zero',  // Negative Timestamps eliminieren
+            '-max_muxing_queue_size', '2048',   //
+        );
+
+        // HLS OUTPUT
+        args.push(...[
             '-f', 'hls',
             '-hls_time', String(SEGMENT_DURATION),
             '-hls_list_size', '0',
@@ -226,7 +250,6 @@ export class StreamingService {
             '-nostats',
             '-loglevel', 'error',
 
-            // Output
             playlistPath
         ]);
 
@@ -352,8 +375,7 @@ export class StreamingService {
     /**
      * Direct Play - serve file as-is with Range support
      */
-    async streamDirectPlay(req: Request, res: Response, session: PlaySession, range?: string): Promise<void> {
-        const file = session.file;
+    async streamDirectPlay(req: Request, res: Response, file: MediaFile, range?: string): Promise<void> {
         const stats = await stat(file.path);
         const fileSize = stats.size;
 
@@ -373,10 +395,10 @@ export class StreamingService {
             if (start >= fileSize || end >= fileSize) {
                 res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
                 res.end();
-                return; // ← Kein Wert zurückgeben
+                return;
             }
 
-            logger.DEBUG(`Direct Play: Range ${start}-${end}/${fileSize} for ${file.name}`);
+            logger.DEBUG(`Direct Play: Range ${start} - ${end} for ${file.name} (${formatFileSize(fileSize)})`);
 
             res.status(206); // Partial Content
             res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
@@ -407,122 +429,6 @@ export class StreamingService {
                 }
             });
         }
-    }
-
-    /**
-     * Direct remux - Stream file via fragmented mp4.
-     * No video transcoding. Optional audio transcoding.
-     */
-    async streamDirectRemux(req: Request, res: Response, session: PlaySession): Promise<void> {
-        const file = session.file;
-        const duration = file.metadata.general.Duration;
-        const decision = session.decision;
-
-        res.setHeader('Content-Type', 'video/mp4');
-        res.setHeader('Accept-Ranges', 'bytes');
-        // res.setHeader('Cache-Control', 'no-cache');
-
-        const args: string[] = [
-            '-i', file.path,
-
-            '-map', '0:v:0',
-            '-map', '0:a:0',
-
-            // Video copy
-            '-c:v', 'copy',
-            '-c:a', 'copy',
-        ];
-
-        // SUBTITLE
-        // if (decision.subtitle.action === 'copy') {
-        //     // args.push('-c:s', 'copy');
-        //     args.push('-c:s', 'mov_text');
-        // } else {
-        //     args.push('-sn');
-        // }
-
-        // args.push('-sn');
-
-        args.push(
-            '-f', 'mp4',
-            '-movflags', 'frag_keyframe+empty_moov+faststart',
-            '-progress', 'pipe:2',
-            '-nostats',
-            'pipe:1'
-        )
-
-        logger.DEBUG(`${MAGENTA}DIRECT REMUX ARGS: ${args}${RESET}`);
-
-        const ffmpegProcess = spawn(FFMPEG_PATH, args);
-
-        const job: TranscodeJob = {
-            id: crypto.randomUUID(),
-            status: 'running',
-            process: ffmpegProcess,
-            startSegment: -1,
-        };
-        session.transcode = job;
-
-        ffmpegProcess.stdout.pipe(res);
-
-        let progressBuffer = '';
-
-        ffmpegProcess.stderr.on('data', (data) => {
-            progressBuffer += data.toString();
-
-            const lines = progressBuffer.split('\n');
-            progressBuffer = lines.pop() || '';
-
-            for (const line of lines) {
-                const [key, value] = line.trim().split('=');
-                if (!key || !value) continue;
-
-                switch (key) {
-                    case 'out_time_ms': {
-                        const timeMs = parseInt(value, 10);
-                        if (Number.isNaN(timeMs)) break;
-
-                        const transcodedSeconds = timeMs / 1_000_000; // Microseconds to seconds
-                        job.progress = (transcodedSeconds / duration) * 100;
-                        break;
-                    }
-
-                    case 'fps':
-                        job.fps = parseFloat(value);
-                        break;
-
-                    case 'speed':
-                        job.speed = parseFloat(value.replace('x', ''));
-                        break;
-
-                    case 'progress':
-                        if (value === 'end') {
-                            job.progress = 100;
-                        }
-                        break;
-                }
-            }
-        });
-
-        ffmpegProcess.on('error', (error: any) => {
-            logger.ERROR(`FFmpeg remux error: ${error}`);
-            if (!res.headersSent) {
-                res.status(500).end();
-            }
-        });
-
-        ffmpegProcess.on('close', (code: any) => {
-            if (code !== 0) {
-                logger.ERROR(`FFmpeg remux exited with code ${code}`);
-            } else {
-                logger.DEBUG(`Direct Remux completed for ${file.name}`);
-            }
-        });
-
-        req.on('close', () => {
-            logger.DEBUG('Client disconnected, killing FFmpeg remux');
-            ffmpegProcess.kill('SIGKILL');
-        });
     }
 
     async waitForFile(filePath: string, timeoutMs = 5000, intervalMs = 50): Promise<void> {

@@ -30,8 +30,13 @@
                         <h6 class="font-bold mb-1">{{ $t('debug.labels.playback_information') }}</h6>
                         <ul class="ml-2">
                             <li>{{ $t('debug.labels.player') }}: {{ $t('debug.player.html') }}</li>
+                            <!-- Abspielmethode: Direkt / HLS / DASH -->
+
                             <li>{{ $t('debug.labels.playback_method') }}: {{ $t(`base.methods.${sessionInfo.decision.mode}`) }}</li>
                             <li>{{ $t('debug.labels.stream_type') }}: {{ sessionInfo.decision.mode === 'transcode' ? $t(`debug.streamtype.hls`) : $t(`debug.streamtype.native`) }}</li>
+
+                            <li>Audio: {{ currentAudioTrack }} ({{ audioTracks[currentAudioTrack].name }})</li>
+                            <li>Subtitle: {{ currentSubtitleTrack }} ({{ subtitleTracks[currentSubtitleTrack + 1].name }})</li>
                         </ul>
                     </div>
 
@@ -268,9 +273,9 @@
                     <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
                     <div class="flex flex-col text-gray">
                         <button v-for="(track, index) in audioTracks"
-                                :key="index"
+                                :key="track.index"
                                 class="w-full px-4 py-2 text-left text-gray hover:bg-white/10 transition-colors flex gap-3 cursor-pointer"
-                                :class="{ 'bg-white/5': index === currentAudioTrack }"
+                                :class="{ 'bg-white/5': track.index === currentAudioTrack }"
                                 @click="selectAudioTrack(index)"
                         >
                             <span class="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -289,16 +294,16 @@
                         class="fixed top-[inherit] bottom-8 -translate-x-1/2 bg-black border border-black-900 rounded-lg p-4 dialog-backdrop"
                         @click.self="subtitleDialog?.close();"
                 >
-                    <h1 class="font-loki-sub text-xl text-white mb-4">Tonspur</h1>
+                    <h1 class="font-loki-sub text-xl text-white mb-4">Untertitel</h1>
                     <div class="flex flex-col text-gray">
-                        <button v-for="(track, index) in subtitleTracks"
-                                :key="index"
+                        <button v-for="(track) in subtitleTracks"
+                                :key="track.index"
                                 class="w-full px-4 py-2 text-left text-gray hover:bg-white/10 transition-colors flex gap-3 cursor-pointer"
-                                :class="{ 'bg-white/5': index === currentSubtitleTrack }"
-                                @click="selectSubtitleTrack(index)"
+                                :class="{ 'bg-white/5': track.index === currentSubtitleTrack }"
+                                @click="selectSubtitleTrack(track.index)"
                         >
                             <span class="w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <icon-checkmark v-if="index === currentSubtitleTrack"
+                              <icon-checkmark v-if="track.index === currentSubtitleTrack"
                                               class="text-primary"
                                               aria-hidden="true"
                               />
@@ -328,7 +333,7 @@ import IconPlayerRewind10 from "../../icons/player/icon-player-rewind-10.vue";
 import IconPlayerForward30 from "../../icons/player/icon-player-forward-30.vue";
 import type { MediaFile } from "../../types/media.ts";
 import IconFullscreen from "../../icons/icon-fullscreen.vue";
-import { clamp, formatBitrate, formatFileSize } from "../../lib/utils.ts";
+import { formatBitrate, formatFileSize } from "../../lib/utils.ts";
 import IconGear from "../../icons/icon-gear.vue";
 import IconPlayerVolume from "../../icons/player/icon-player-volume.vue";
 import IconPlayerMuted from "../../icons/player/icon-player-muted.vue";
@@ -396,26 +401,106 @@ const currentAudioTrack = ref(0);
 
 const subtitleDialog = ref<HTMLDialogElement | null>(null);
 const subtitleButtonRef = ref<HTMLElement | null>(null);
-const currentSubtitleTrack = ref(0);
+const currentSubtitleTrack = ref(-1);
 
-// TEMP
-const audioTracks = ref([
-    { name: 'DTS-HD MA 7.1 [SKELLETON Mix]', language: 'German', codec: 'Standard' },
-    { name: 'DTS-HD MA 5.1', language: 'German', codec: '' },
-    { name: 'DTS-HD MA 7.1', language: 'English', codec: '' },
-    { name: 'Audiokommentar m. Regisseur Chris Weitz DTS Stereo', language: 'English', codec: '' },
-]);
+interface TrackInfo {
+    index: number;
+    name: string;
+    language?: string;
+    format?: string;
+    isDefault: boolean;
+    isForced: boolean;
+}
 
-const subtitleTracks = ref([
-    { name: 'Aus' },
-    { name: 'Deutsch Erzwungen', language: 'de', format: 'SubRip' },
-    { name: 'Deutsch', language: 'de', format: 'PGS' },
-    { name: 'Deutsch SDH', language: 'de', format: 'PGS' },
-    { name: 'English Forced', language: 'en', format: 'SubRip' },
-    { name: 'English', language: 'en', format: 'PGS' },
-    { name: 'English SDH', language: 'en', format: 'PGS' },
-    { name: 'French', language: 'fr', format: 'VobSub' }
-]);
+const audioTracks = ref<TrackInfo[]>([]);
+const subtitleTracks = ref<TrackInfo[]>([]);
+
+// Tracks aus Metadaten füllen + Auto-Selection
+function initTracksFromMetadata(file: MediaFile) {
+    // Audio Tracks
+    audioTracks.value = file.metadata.audio.map((track, index) => ({
+        index,
+        name: buildAudioTrackName(track, index),
+        language: track.Language?.toLowerCase(),
+        format: track.Format,
+        isDefault: track.Default === 'Yes',
+        isForced: track.Forced === 'Yes'
+    }));
+    currentAudioTrack.value = 0;
+
+    // Subtitle Tracks – "Aus" als erste Option
+    subtitleTracks.value = [
+        { index: -1, name: 'Aus', isDefault: false, isForced: false },
+        ...file.metadata.subtitle.map((track, index) => ({
+            index,
+            name: buildSubtitleTrackName(track),
+            language: track.Language?.toLowerCase(),
+            format: track.Format,
+            isDefault: track.Default === 'Yes',
+            isForced: track.Forced === 'Yes'
+        }))
+    ];
+    currentSubtitleTrack.value = -1;
+
+    // autoSelectTracks();
+}
+
+function buildAudioTrackName(track: any, index: number): string {
+    const parts: string[] = [];
+
+    // Title wenn vorhanden
+    if (track.Title) {
+        parts.push(track.Title);
+    } else {
+        // Format-basierter Name
+        const format = track.Format || 'Unknown';
+        const channels = track.Channels || 2;
+        const channelLabel = channels === 2 ? 'Stereo' : `${channels - 1}.1`;
+        parts.push(`${format} ${channelLabel}`);
+    }
+
+    // Sprache
+    if (track.Language) {
+        parts.push(`(${track.Language.toUpperCase()})`);
+    }
+
+    return parts.join(' ');
+}
+
+function buildSubtitleTrackName(track: any): string {
+    const parts: string[] = [];
+
+    if (track.Title) {
+        parts.push(track.Title);
+    } else if (track.Language) {
+        parts.push(track.Language.toUpperCase());
+    } else {
+        parts.push('Unbekannt');
+    }
+
+    if (track.Forced === 'Yes') parts.push('(Erzwungen)');
+    if (track.HearingImpaired === 'Yes') parts.push('(SDH)');
+    if (track.Commentary === 'Yes') parts.push('(Kommentar)');
+
+    return parts.join(' ');
+}
+
+function autoSelectTracks() {
+    const preferredLang = 'de'; // Später aus User-Settings
+
+    // Audio: Erste deutsche Spur, sonst Default, sonst erste
+    const germanAudio = audioTracks.value.find(t => t.language === preferredLang);
+    const defaultAudio = audioTracks.value.find(t => t.isDefault);
+    currentAudioTrack.value = germanAudio?.index
+        ?? defaultAudio?.index
+        ?? 0;
+
+    // Subtitle: "Deutsch Erzwungen" wenn vorhanden, sonst aus
+    const germanForced = subtitleTracks.value.find(
+        t => t.language === preferredLang && t.isForced
+    );
+    currentSubtitleTrack.value = germanForced?.index ?? -1;
+}
 
 function handleCanPlay() {
     isLoading.value = false;
@@ -425,21 +510,67 @@ function handlePlaying() {
     isBuffering.value = false;
 }
 
-function selectAudioTrack(index: number) {
+async function selectAudioTrack(index: number) {
+    if (index === currentAudioTrack.value) return;
     currentAudioTrack.value = index;
 
-    // HLS Audio Track wechseln
-    if (hls.value) {
-        // hls.value.audioTrack = index;
-    }
+    // Session mit neuem Audio-Track neu starten
+    await restartSessionWithNewTracks();
 }
 
-function selectSubtitleTrack(index: number) {
+async function selectSubtitleTrack(index: number) {
+    console.log('selectSubtitleTrack', index);
+
     currentSubtitleTrack.value = index;
 
-    // HLS Audio Track wechseln
-    if (hls.value) {
-        // hls.value.audioTrack = index;
+    // const trackIndex = subtitleTracks.value[index]?.index ?? -1;
+    // if (trackIndex === currentSubtitleTrack.value) return;
+    // currentSubtitleTrack.value = trackIndex;
+    //
+    // await restartSessionWithNewTracks();
+}
+
+/**
+ * Track-Wechsel: Neue Session starten und Stream neu laden
+ */
+async function restartSessionWithNewTracks() {
+    if (!currentFile.value || !sessionId.value) return;
+
+    const savedTime = currentTime.value;
+
+    // Alte Session stoppen
+    await axios?.post('/session/stop', {
+        sessionId: sessionId.value,
+        time: savedTime
+    });
+
+    // Neue Session mit neuen Track-Indices
+    const response = await axios?.post('/session/start', {
+        mediaId: currentFile.value.id,
+        profile: props.profile,
+        audioTrack: currentAudioTrack.value,
+        subtitleTrack: currentSubtitleTrack.value,
+        startTime: savedTime
+    });
+
+    const data = response?.data;
+    sessionId.value = data.sessionId;
+    duration.value = data.duration;
+
+    switch (data.method) {
+        case 'direct': {
+            const token = sessionStorage.getItem(LOKI_TOKEN);
+            const url = `${data.streamUrl}${data.streamUrl.includes('?') ? '&' : '?'}token=${token}`;
+            if (videoRef.value) {
+                videoRef.value.src = url;
+                videoRef.value.currentTime = savedTime;
+                videoRef.value.play();
+            }
+            break;
+        }
+        case 'hls':
+            await reloadHLSStream(data.streamUrl, savedTime);
+            break;
     }
 }
 
@@ -524,41 +655,49 @@ const transcodingComputed = computed(() => {
     return { progress: 0, fps: 0, speed: 0 }
 });
 
-async function openPlayer(file: MediaFile) {
+async function setupPlayer(file: MediaFile) {
     currentFile.value = file;
     isOpen.value = true;
-
     cleanup();
-    duration.value = file.metadata.general.Duration;
 
     await nextTick();
+    if (!videoRef.value) return;
 
-    if (!videoRef.value) {
-        console.error("videoRef still null after nextTick()");
-        return;
-    }
+    // Tracks aus Metadaten füllen + Auto-Select
+    initTracksFromMetadata(file);
 
     const response = await axios?.post('/session/start', {
         mediaId: file.id,
-        profile: props.profile
+        profile: props.profile,
+        audioTrack: currentAudioTrack.value,
+        subtitleTrack: currentSubtitleTrack.value
     });
 
+    const data = response?.data;
     sessionId.value = response?.data.sessionId;
-    duration.value = file.metadata.general.Duration;
+    duration.value = data.duration;
 
     const token = sessionStorage.getItem(LOKI_TOKEN);
-    const url = `/api/videos/${file.id}/master.m3u8?token=${token}&profile=${props.profile}`;
+    const url = `${data.streamUrl}${data.streamUrl.includes('?') ? '&' : '?'}token=${token}`;
+
+    switch (data.method) {
+        case 'direct':
+            videoRef.value.src = url;
+            videoRef.value.volume = volume.value;
+            videoRef.value.play();
+            break;
+        case 'hls':
+            initHLSPlayer(url);
+            break;
+        case 'dash':
+            console.error("DASH is not supported right now!");
+            break;
+        default:
+            console.error(`Unknown player method: ${data.method}`);
+            break;
+    }
 
     startProgressReporting();
-
-    videoRef.value.src = url;
-    videoRef.value.volume = volume.value;
-
-    videoRef.value.play().catch(() => {
-        console.log("Abspielen mit native player fehlgeschlagen! Wechsle zu HLS");
-        initHLSPlayer(url);
-    });
-
     fetchSessionInfo();
 }
 
@@ -708,74 +847,52 @@ function togglePlayPause() {
     }
 }
 
-async function handleJobRestart(seekTime: number) {
-    if (!currentFile.value || !sessionId.value) return;
-
-    console.log(`Job restart - new startOffset: ${seekTime}s`);
-    startOffset.value = seekTime;
+/**
+ * Kern-Funktion: HLS-Stream neu laden und optional zu einer Position seeken
+ */
+async function reloadHLSStream(streamUrl: string, seekToTime?: number) {
+    if (!videoRef.value) return;
 
     const token = sessionStorage.getItem(LOKI_TOKEN);
-    const url = `/api/videos/${currentFile.value.id}/master.m3u8?token=${token}&profile=${props.profile}`;
+    const url = `${streamUrl}${streamUrl.includes('?') ? '&' : '?'}token=${token}`;
 
+    // Komplett zerstören — nur so werden Buffer geleert
     if (hls.value) {
-        console.log('Seamlessly switching HLS playlist');
+        hls.value.destroy();
+        hls.value = null;
+    }
 
-        // Stoppe aktuellen Stream
-        hls.value.stopLoad();
+    initHLSPlayer(url);
 
-        // Lade neue Playlist (ohne destroy!)
-        hls.value.loadSource(url);
-
-        // Warte auf neue Playlist
+    // Warten bis Manifest geladen
+    if (hls.value) {
         await new Promise<void>((resolve) => {
-            if (!hls.value) {
-                resolve();
-                return;
-            }
-
-            const onManifestParsed = () => {
-                hls.value!.off(Hls.Events.MANIFEST_PARSED, onManifestParsed);
-
-                // Starte bei Segment 0 im neuen Job
-                if (videoRef.value) {
-                    videoRef.value.currentTime = 0;
-                    currentTime.value = seekTime;
-                }
-
+            const onParsed = () => {
+                hls.value!.off(Hls.Events.MANIFEST_PARSED, onParsed);
                 resolve();
             };
-
-            hls.value.on(Hls.Events.MANIFEST_PARSED, onManifestParsed);
-        });
-
-        // Auto-play nach Switch
-        if (videoRef.value) {
-            videoRef.value.play().catch(err => {
-                console.error(`Failed to play after restart: ${err}`);
-            });
-        }
-    } else if (videoRef.value) {
-        // Native player - hier muss leider neu geladen werden
-        console.log('Reloading native video player');
-
-        videoRef.value.pause();
-        videoRef.value.src = url;
-        videoRef.value.load();
-
-        await new Promise<void>((resolve) => {
-            const onLoaded = () => {
-                videoRef.value!.removeEventListener('loadedmetadata', onLoaded);
-                resolve();
-            };
-            videoRef.value!.addEventListener('loadedmetadata', onLoaded);
-        });
-
-        videoRef.value.currentTime = 0;
-        currentTime.value = seekTime;
-        videoRef.value.play().catch(err => {
-            console.error(`Failed to play after restart: ${err}`);
+            hls.value!.on(Hls.Events.MANIFEST_PARSED, onParsed);
         });
     }
+
+    if (seekToTime !== undefined && seekToTime > 0) {
+        startOffset.value = seekToTime;
+        videoRef.value.currentTime = 0;
+        currentTime.value = seekToTime;
+    }
+}
+
+/**
+ * Nach Seek-Restart: Backend hat Job bereits neu gestartet,
+ * Frontend muss nur den HLS-Stream neu laden
+ */
+async function handleJobRestart(seekTime: number) {
+    if (!sessionId.value) return;
+
+    // URL aus der aktuellen Session – nicht manuell bauen
+    const streamUrl = `/api/hls/${sessionId.value}/master.m3u8`;
+    await reloadHLSStream(streamUrl, seekTime);
+    await fetchSessionInfo();
 }
 
 function skip(seconds: number) {
@@ -1091,7 +1208,7 @@ watch(volume, (newVal) => {
 
 defineExpose({
     play(file: MediaFile) {
-        openPlayer(file);
+        setupPlayer(file);
     },
     pause() {
         videoRef.value?.pause();
