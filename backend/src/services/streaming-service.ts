@@ -141,8 +141,6 @@ export class StreamingService {
         // Cache-Busting: Job-ID an Segment-URLs anhängen
         // Damit liefert der Browser bei neuem Job keine alten Segments aus dem Cache
         content = content.replace(/(segment\d+\.mp4)/g, `$1?j=${job.id}`);
-
-        content = content.replace(/(segment\d+\.mp4)/g, `$1?j=${job.id}`);
         content = content.replace(/(init\.mp4)/g, `$1?j=${job.id}`);
 
         return content;
@@ -186,8 +184,8 @@ export class StreamingService {
         const outputDir = path.join(TRANSCODE_PATH, session.id, jobId);
         await ensureDir(outputDir);
 
-        const playlistPath = path.join(outputDir, 'playlist.m3u8');
-        const segmentPath = path.join(outputDir, 'segment%d.ts');
+        // const playlistPath = path.join(outputDir, 'playlist.m3u8');
+        // const segmentPath = path.join(outputDir, 'segment%d.ts');
 
         const job: TranscodeJob = {
             id: jobId,
@@ -242,7 +240,7 @@ export class StreamingService {
         args.push(...transcodingArgs.audioArgs);
 
         // SUBTITLE BURN-IN (falls nötig)
-        args.push(...transcodingArgs.subtitleArgs);
+        // args.push(...transcodingArgs.subtitleArgs);
 
         // TIMESTAMP & MUXING
         args.push(
@@ -259,23 +257,22 @@ export class StreamingService {
             '-hls_playlist_type', 'event',
             '-hls_flags', 'independent_segments',
             '-start_number', String(startSegment),
-            // '-hls_segment_filename', segmentPath,
-
             '-hls_segment_type', 'fmp4',
             '-hls_fmp4_init_filename', 'init.mp4',
-            '-hls_segment_filename', path.join(outputDir, 'segment%d.mp4'),
+            '-hls_segment_filename', 'segment%d.mp4',
 
             '-progress', 'pipe:1',
             '-nostats',
             '-loglevel', 'error',
-
-            playlistPath
+            'playlist.m3u8'
         ]);
 
         logger.DEBUG(`FFMPEG ARGS: ${args.join('\n')}`);
 
-        // FFmpeg spawn
-        const ffmpegProcess: ChildProcess = spawn(FFMPEG_PATH, args);
+        // FFmpeg mit cwd spawnen — damit landen alle Output-Dateien in outputDir
+        const ffmpegProcess: ChildProcess = spawn(FFMPEG_PATH, args, {
+            cwd: outputDir
+        });
         job.process = ffmpegProcess;
 
         logger.INFO(`${GREEN}Transcode started - start segment ${startSegment} [${session.id}]${RESET}`);
@@ -342,8 +339,13 @@ export class StreamingService {
             if (job.status === 'stopped') return;
             // Log only important errors
             const msg = data.toString();
-            if (/error|Error|failed|invalid|No such|not found/i.test(msg)) {
-                logger.ERROR(`FFmpeg stderr: ${msg}`);
+            // if (/error|Error|failed|invalid|No such|not found/i.test(msg)) {
+            //     logger.ERROR(`FFmpeg stderr: ${msg}`);
+            // }
+
+            // TODO : TEMP - Log everything to find errors
+            if (msg) {
+                logger.DEBUG(`FFmpeg stderr: ${msg}`);
             }
         });
 
