@@ -5,6 +5,8 @@ import clientManager from "../services/client-manager";
 import { pathExists, stat } from "../utils/file-utils";
 import streamingService, { PlaySession } from "../services/streaming-service";
 import { BANDWIDTH_BY_PROFILE, QualityProfile } from "../services/transcode-decision";
+import path from "path";
+import { TRANSCODE_PATH } from "../app";
 
 const router = Router();
 
@@ -48,7 +50,7 @@ router.get('/api/hls/:sessionId/master.m3u8', async (req: Request, res: Response
 
         const masterPlaylist = [
             '#EXTM3U',
-            '#EXT-X-VERSION:3',
+            '#EXT-X-VERSION:7',
             `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth}`,
             `index.m3u8`
         ].join('\n');
@@ -86,27 +88,56 @@ router.get('/api/hls/:sessionId/index.m3u8', async (req, res) => {
 router.get('/api/hls/:sessionId/:segment', async (req: Request, res: Response): Promise<any> => {
     const { sessionId, segment } = req.params;
 
-    const match = segment.match(/segment(\d+)\.ts/);
-    if (!match) {
-        return res.sendStatus(404);
-    }
-
-    const segmentIndex = Number(match[1]);
     const session = streamingService.getSession(sessionId);
     if (!session) {
         return res.sendStatus(404);
     }
 
+    const job = session.transcode;
+    if (!job) {
+        return res.sendStatus(404);
+    }
+
+    const dir = path.join(TRANSCODE_PATH, sessionId, job.id);
+
+    // Init Segment (fMP4)
+    if (segment.startsWith('init') && segment.endsWith('.mp4')) {
+        const initPath = path.join(dir, 'init.mp4');
+
+        if (await pathExists(initPath)) {
+            res.setHeader('Content-Type', 'video/mp4');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            return res.sendFile(initPath);
+        }
+
+        // Warte kurz — init.mp4 wird von FFmpeg als erstes geschrieben
+        try {
+            await streamingService.waitForFile(initPath, 5000);
+            res.setHeader('Content-Type', 'video/mp4');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            return res.sendFile(initPath);
+        } catch {
+            return res.status(503).json({ error: 'Init segment not ready' });
+        }
+    }
+
+    // Media Segments
+    const match = segment.match(/segment(\d+)\.mp4/);
+    if (!match) {
+        return res.sendStatus(404);
+    }
+
+    const segmentIndex = Number(match[1]);
+
     try {
         const segmentPath = await streamingService.getSegment(session, segmentIndex);
 
         if (segmentPath && await pathExists(segmentPath)) {
-            res.setHeader('Content-Type', 'video/mp2t');
+            res.setHeader('Content-Type', 'video/mp4');
             res.setHeader('Cache-Control', 'public, max-age=3600');
             return res.sendFile(segmentPath);
         }
 
-        // Segment noch nicht fertig
         res.setHeader('Retry-After', '2');
         return res.status(503).json({
             error: 'Segment not ready',
@@ -116,6 +147,40 @@ router.get('/api/hls/:sessionId/:segment', async (req: Request, res: Response): 
         logger.ERROR(`Error serving segment ${segmentIndex}: ${error}`);
         return res.status(500).json({ error: 'Failed to serve segment' });
     }
+
+
+
+    // // const match = segment.match(/segment(\d+)\.ts/);
+    // const match = segment.match(/segment(\d+)\.mp4/);
+    // if (!match) {
+    //     return res.sendStatus(404);
+    // }
+    //
+    // const segmentIndex = Number(match[1]);
+    // const session = streamingService.getSession(sessionId);
+    // if (!session) {
+    //     return res.sendStatus(404);
+    // }
+    //
+    // try {
+    //     const segmentPath = await streamingService.getSegment(session, segmentIndex);
+    //
+    //     if (segmentPath && await pathExists(segmentPath)) {
+    //         res.setHeader('Content-Type', 'video/mp4'); // mime type to mp4 because of fMP4 -> change to video/mp2t for .ts files (mpegts)
+    //         res.setHeader('Cache-Control', 'public, max-age=3600');
+    //         return res.sendFile(segmentPath);
+    //     }
+    //
+    //     // Segment noch nicht fertig
+    //     res.setHeader('Retry-After', '2');
+    //     return res.status(503).json({
+    //         error: 'Segment not ready',
+    //         segmentIndex
+    //     });
+    // } catch (error) {
+    //     logger.ERROR(`Error serving segment ${segmentIndex}: ${error}`);
+    //     return res.status(500).json({ error: 'Failed to serve segment' });
+    // }
 });
 
 export default router;

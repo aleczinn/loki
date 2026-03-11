@@ -140,7 +140,10 @@ export class StreamingService {
 
         // Cache-Busting: Job-ID an Segment-URLs anhängen
         // Damit liefert der Browser bei neuem Job keine alten Segments aus dem Cache
-        content = content.replace(/(segment\d+\.ts)/g, `$1?j=${job.id}`);
+        content = content.replace(/(segment\d+\.mp4)/g, `$1?j=${job.id}`);
+
+        content = content.replace(/(segment\d+\.mp4)/g, `$1?j=${job.id}`);
+        content = content.replace(/(init\.mp4)/g, `$1?j=${job.id}`);
 
         return content;
     }
@@ -151,7 +154,7 @@ export class StreamingService {
         const job = session.transcode;
         if (job && (job.status === 'running' || job.status === 'completed')) {
             const dir = path.join(TRANSCODE_PATH, session.id, job.id);
-            const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
+            const segmentPath = path.join(dir, `segment${segmentIndex}.mp4`);
 
             // If segment exists -> return segment path
             if (await pathExists(segmentPath)) {
@@ -203,6 +206,13 @@ export class StreamingService {
 
         // INPUT
         const args = [
+            // Probing-Config:
+            // Lies bis zu 1 GB der Datei und analysiere bis zu 200 Sekunden, bevor du anfängst."
+            // Das garantiert, dass auch bei komplexen Containern alle Streams korrekt erkannt werden.
+            // Der Nachteil: Bei riesigen Dateien kann der Transcode-Start etwas länger dauern (ein paar hundert Millisekunden mehr).
+            '-analyzeduration', '200000000',  // 200M in Microsekunden
+            '-probesize', '1000000000',       // 1G in Bytes
+
             '-noaccurate_seek',                  // Audio auch ab Keyframe, nicht sample-genau
             '-ss', String(startTime),
             '-i', file.path,
@@ -212,6 +222,11 @@ export class StreamingService {
         // MAPPING
         args.push('-map', '0:v:0'); // First video Stream
         args.push('-map', `0:a:${session.audioIndex}`);
+        args.push('-map', '-0:s'); // Alle Subs ausschließen
+
+        // Strippt Metadata und Kapitel-Informationen aus dem Outut - Das reduziert Overhead und verhindert, dass kaputte Metadata den Transcode crashed
+        args.push('-map_metadata', '-1');
+        args.push('-map_chapters', '-1');
 
         // VIDEO
         args.push(...transcodingArgs.videoArgs);
@@ -244,7 +259,11 @@ export class StreamingService {
             '-hls_playlist_type', 'event',
             '-hls_flags', 'independent_segments',
             '-start_number', String(startSegment),
-            '-hls_segment_filename', segmentPath,
+            // '-hls_segment_filename', segmentPath,
+
+            '-hls_segment_type', 'fmp4',
+            '-hls_fmp4_init_filename', 'init.mp4',
+            '-hls_segment_filename', path.join(outputDir, 'segment%d.mp4'),
 
             '-progress', 'pipe:1',
             '-nostats',
@@ -323,7 +342,7 @@ export class StreamingService {
             if (job.status === 'stopped') return;
             // Log only important errors
             const msg = data.toString();
-            if (msg.includes('error') || msg.includes('Error')) {
+            if (/error|Error|failed|invalid|No such|not found/i.test(msg)) {
                 logger.ERROR(`FFmpeg stderr: ${msg}`);
             }
         });
