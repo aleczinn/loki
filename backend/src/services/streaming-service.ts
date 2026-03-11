@@ -54,38 +54,30 @@ export class StreamingService {
     private sessions: Map<string, PlaySession> = new Map();
     private lock = new AsyncLock();
 
-    getOrCreateSession(client: ClientInfo,
+    async getOrCreateSession(client: ClientInfo,
                        file: MediaFile,
                        profile: QualityProfile,
                        audioTrack: number = 0,
                        subtitleTrack: number = -1,
                        startTime: number = 0
-    ): PlaySession {
+    ): Promise<PlaySession> {
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
         const sessionId = client.token;
 
-        // Return session if already exists
         if (this.sessions.has(sessionId)) {
             const session = this.sessions.get(sessionId)!;
             session.lastAccessed = new Date();
 
-            // Audio/Sub-Track aktualisieren
             session.audioIndex = audioTrack;
             session.subtitleIndex = subtitleTrack;
 
-            // WICHTIG: decision might be changed (different profile)
-            // We possibly need a new transcode if profile has changed
             if (session.decision.profile !== decision.profile) {
                 logger.INFO(`Profile changed from ${session.decision.profile} to ${decision.profile}, updating session`);
                 session.decision = decision;
-                // transcode continues and get restarted for the next segment
             }
 
-            // Stoppe alten Job und reset Session State
             if (session.transcode) {
-                this.stopTranscode(session).catch(err => {
-                    logger.ERROR(`Failed to stop old transcode: ${err}`);
-                });
+                await this.stopTranscode(session);
                 session.transcode = undefined;
             }
 
@@ -140,7 +132,8 @@ export class StreamingService {
 
         // Cache-Busting: Job-ID an Segment-URLs anhängen
         // Damit liefert der Browser bei neuem Job keine alten Segments aus dem Cache
-        content = content.replace(/(segment\d+\.ts)/g, `$1?j=${job.id}`);
+        content = content.replace(/(segment\d+\.mp4)/g, `$1?j=${job.id}`);
+        content = content.replace(/(init\.mp4)/g, `$1?j=${job.id}`);
 
         return content;
     }
@@ -151,7 +144,7 @@ export class StreamingService {
         const job = session.transcode;
         if (job && (job.status === 'running' || job.status === 'completed')) {
             const dir = path.join(TRANSCODE_PATH, session.id, job.id);
-            const segmentPath = path.join(dir, `segment${segmentIndex}.ts`);
+            const segmentPath = path.join(dir, `segment${segmentIndex}.mp4`);
 
             // If segment exists -> return segment path
             if (await pathExists(segmentPath)) {
@@ -183,9 +176,6 @@ export class StreamingService {
         const outputDir = path.join(TRANSCODE_PATH, session.id, jobId);
         await ensureDir(outputDir);
 
-        const playlistPath = path.join(outputDir, 'playlist.m3u8');
-        const segmentPath = path.join(outputDir, 'segment%d.ts');
-
         const job: TranscodeJob = {
             id: jobId,
             status: 'running',
@@ -203,15 +193,42 @@ export class StreamingService {
 
         // INPUT
         const args = [
-            '-noaccurate_seek',                  // Audio auch ab Keyframe, nicht sample-genau
-            '-ss', String(startTime),
-            '-i', file.path,
-            '-threads', '0',
+            // Probing-Config:
+            // Lies bis zu 1 GB der Datei und analysiere bis zu 200 Sekunden, bevor du anfängst."
+            // Das garantiert, dass auch bei komplexen Containern alle Streams korrekt erkannt werden.
+            // Der Nachteil: Bei riesigen Dateien kann der Transcode-Start etwas länger dauern (ein paar hundert Millisekunden mehr).
+            '-analyzeduration', '200000000',  // 200M in Microsekunden
+            '-probesize', '1000000000',       // 1G in Bytes
+            '-noaccurate_seek'                // Audio auch ab Keyframe, nicht sample-genau
         ];
+
+        // ZU noaccurate_seek:
+        // bewirkt, dass FFmpeg beim Seeking zum nächsten Keyframe springt statt sample-genau zu suchen.
+        // Das ist bei HLS sinnvoll, weil HLS-Segmente ohnehin an Keyframes beginnen müssen.
+        // Der Kommentar "Audio auch ab Keyframe, nicht sample-genau" ist korrekt — ohne dieses Flag würde
+        // FFmpeg versuchen, den Audio-Stream sample-genau zu schneiden, was bei Copy-Modus zu Audio-Glitches am Segment-Anfang führen kann.
+
+        if (session.decision.video.action === 'copy') {
+            // Bei Remux: stärker drosseln, da fast keine CPU-Last
+            args.push('-readrate', '10');
+        } else {
+            // Bei Transcode: weniger drosseln, da GPU/CPU ohnehin limitiert
+            // Optional: Nur bei Remux drosseln, bei echtem Transcode
+            // limitiert die Encoding-Geschwindigkeit ohnehin
+        }
+
+        args.push('-ss', String(startTime));
+        args.push('-i', file.path);
+        args.push('-threads', '0');
 
         // MAPPING
         args.push('-map', '0:v:0'); // First video Stream
         args.push('-map', `0:a:${session.audioIndex}`);
+        args.push('-map', '-0:s'); // Alle Subs ausschließen
+
+        // Strippt Metadata und Kapitel-Informationen aus dem Outut - Das reduziert Overhead und verhindert, dass kaputte Metadata den Transcode crashed
+        args.push('-map_metadata', '-1');
+        args.push('-map_chapters', '-1');
 
         // VIDEO
         args.push(...transcodingArgs.videoArgs);
@@ -227,7 +244,7 @@ export class StreamingService {
         args.push(...transcodingArgs.audioArgs);
 
         // SUBTITLE BURN-IN (falls nötig)
-        args.push(...transcodingArgs.subtitleArgs);
+        // args.push(...transcodingArgs.subtitleArgs);
 
         // TIMESTAMP & MUXING
         args.push(
@@ -244,19 +261,22 @@ export class StreamingService {
             '-hls_playlist_type', 'event',
             '-hls_flags', 'independent_segments',
             '-start_number', String(startSegment),
-            '-hls_segment_filename', segmentPath,
+            '-hls_segment_type', 'fmp4',
+            '-hls_fmp4_init_filename', 'init.mp4',
+            '-hls_segment_filename', 'segment%d.mp4',
 
             '-progress', 'pipe:1',
             '-nostats',
             '-loglevel', 'error',
-
-            playlistPath
+            'playlist.m3u8'
         ]);
 
         logger.DEBUG(`FFMPEG ARGS: ${args.join('\n')}`);
 
-        // FFmpeg spawn
-        const ffmpegProcess: ChildProcess = spawn(FFMPEG_PATH, args);
+        // FFmpeg mit cwd spawnen — damit landen alle Output-Dateien in outputDir
+        const ffmpegProcess: ChildProcess = spawn(FFMPEG_PATH, args, {
+            cwd: outputDir
+        });
         job.process = ffmpegProcess;
 
         logger.INFO(`${GREEN}Transcode started - start segment ${startSegment} [${session.id}]${RESET}`);
@@ -323,8 +343,13 @@ export class StreamingService {
             if (job.status === 'stopped') return;
             // Log only important errors
             const msg = data.toString();
-            if (msg.includes('error') || msg.includes('Error')) {
-                logger.ERROR(`FFmpeg stderr: ${msg}`);
+            // if (/error|Error|failed|invalid|No such|not found/i.test(msg)) {
+            //     logger.ERROR(`FFmpeg stderr: ${msg}`);
+            // }
+
+            // TODO : TEMP - Log everything to find errors
+            if (msg) {
+                logger.DEBUG(`FFmpeg stderr: ${msg}`);
             }
         });
 
@@ -356,19 +381,32 @@ export class StreamingService {
         if (!job || job.status !== 'running') return;
 
         logger.INFO(`Stopping transcode [${session.id}]`);
-
         job.status = 'stopped';
 
-        // Kill process
         if (job.process && !job.process.killed) {
-            job.process.kill('SIGKILL');
+            await new Promise<void>((resolve) => {
+                const onExit = () => {
+                    job.process?.removeListener('exit', onExit);
+                    resolve();
+                };
 
-            // For windows also extra taskkill
-            if (process.platform === 'win32' && job.process.pid) {
-                try {
-                    require('child_process').execSync(`taskkill /PID ${job.process.pid} /T /F`, { stdio: 'ignore' });
-                } catch (e) {}
-            }
+                job.process!.on('exit', onExit);
+                job.process!.kill('SIGKILL');
+
+                if (process.platform === 'win32' && job.process!.pid) {
+                    try {
+                        require('child_process').execSync(
+                            `taskkill /PID ${job.process!.pid} /T /F`,
+                            { stdio: 'ignore' }
+                        );
+                    } catch (e) {}
+                }
+
+                // Safety timeout — falls exit Event nie kommt
+                setTimeout(() => {
+                    resolve();
+                }, 3000);
+            });
         }
     }
 
