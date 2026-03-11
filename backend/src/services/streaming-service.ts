@@ -54,38 +54,30 @@ export class StreamingService {
     private sessions: Map<string, PlaySession> = new Map();
     private lock = new AsyncLock();
 
-    getOrCreateSession(client: ClientInfo,
+    async getOrCreateSession(client: ClientInfo,
                        file: MediaFile,
                        profile: QualityProfile,
                        audioTrack: number = 0,
                        subtitleTrack: number = -1,
                        startTime: number = 0
-    ): PlaySession {
+    ): Promise<PlaySession> {
         const decision = transcodeDecisionService.decide(file, client.capabilities, profile);
         const sessionId = client.token;
 
-        // Return session if already exists
         if (this.sessions.has(sessionId)) {
             const session = this.sessions.get(sessionId)!;
             session.lastAccessed = new Date();
 
-            // Audio/Sub-Track aktualisieren
             session.audioIndex = audioTrack;
             session.subtitleIndex = subtitleTrack;
 
-            // WICHTIG: decision might be changed (different profile)
-            // We possibly need a new transcode if profile has changed
             if (session.decision.profile !== decision.profile) {
                 logger.INFO(`Profile changed from ${session.decision.profile} to ${decision.profile}, updating session`);
                 session.decision = decision;
-                // transcode continues and get restarted for the next segment
             }
 
-            // Stoppe alten Job und reset Session State
             if (session.transcode) {
-                this.stopTranscode(session).catch(err => {
-                    logger.ERROR(`Failed to stop old transcode: ${err}`);
-                });
+                await this.stopTranscode(session);
                 session.transcode = undefined;
             }
 
@@ -184,9 +176,6 @@ export class StreamingService {
         const outputDir = path.join(TRANSCODE_PATH, session.id, jobId);
         await ensureDir(outputDir);
 
-        // const playlistPath = path.join(outputDir, 'playlist.m3u8');
-        // const segmentPath = path.join(outputDir, 'segment%d.ts');
-
         const job: TranscodeJob = {
             id: jobId,
             status: 'running',
@@ -210,12 +199,27 @@ export class StreamingService {
             // Der Nachteil: Bei riesigen Dateien kann der Transcode-Start etwas länger dauern (ein paar hundert Millisekunden mehr).
             '-analyzeduration', '200000000',  // 200M in Microsekunden
             '-probesize', '1000000000',       // 1G in Bytes
-
-            '-noaccurate_seek',                  // Audio auch ab Keyframe, nicht sample-genau
-            '-ss', String(startTime),
-            '-i', file.path,
-            '-threads', '0',
+            '-noaccurate_seek'                // Audio auch ab Keyframe, nicht sample-genau
         ];
+
+        // ZU noaccurate_seek:
+        // bewirkt, dass FFmpeg beim Seeking zum nächsten Keyframe springt statt sample-genau zu suchen.
+        // Das ist bei HLS sinnvoll, weil HLS-Segmente ohnehin an Keyframes beginnen müssen.
+        // Der Kommentar "Audio auch ab Keyframe, nicht sample-genau" ist korrekt — ohne dieses Flag würde
+        // FFmpeg versuchen, den Audio-Stream sample-genau zu schneiden, was bei Copy-Modus zu Audio-Glitches am Segment-Anfang führen kann.
+
+        if (session.decision.video.action === 'copy') {
+            // Bei Remux: stärker drosseln, da fast keine CPU-Last
+            args.push('-readrate', '10');
+        } else {
+            // Bei Transcode: weniger drosseln, da GPU/CPU ohnehin limitiert
+            // Optional: Nur bei Remux drosseln, bei echtem Transcode
+            // limitiert die Encoding-Geschwindigkeit ohnehin
+        }
+
+        args.push('-ss', String(startTime));
+        args.push('-i', file.path);
+        args.push('-threads', '0');
 
         // MAPPING
         args.push('-map', '0:v:0'); // First video Stream
@@ -377,19 +381,32 @@ export class StreamingService {
         if (!job || job.status !== 'running') return;
 
         logger.INFO(`Stopping transcode [${session.id}]`);
-
         job.status = 'stopped';
 
-        // Kill process
         if (job.process && !job.process.killed) {
-            job.process.kill('SIGKILL');
+            await new Promise<void>((resolve) => {
+                const onExit = () => {
+                    job.process?.removeListener('exit', onExit);
+                    resolve();
+                };
 
-            // For windows also extra taskkill
-            if (process.platform === 'win32' && job.process.pid) {
-                try {
-                    require('child_process').execSync(`taskkill /PID ${job.process.pid} /T /F`, { stdio: 'ignore' });
-                } catch (e) {}
-            }
+                job.process!.on('exit', onExit);
+                job.process!.kill('SIGKILL');
+
+                if (process.platform === 'win32' && job.process!.pid) {
+                    try {
+                        require('child_process').execSync(
+                            `taskkill /PID ${job.process!.pid} /T /F`,
+                            { stdio: 'ignore' }
+                        );
+                    } catch (e) {}
+                }
+
+                // Safety timeout — falls exit Event nie kommt
+                setTimeout(() => {
+                    resolve();
+                }, 3000);
+            });
         }
     }
 
