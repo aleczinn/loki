@@ -784,16 +784,45 @@ function initHLSPlayer(url: string) {
 
     hls.value.loadSource(url);
     hls.value.attachMedia(videoRef.value);
-    hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
-        videoRef.value!.play();
+    // hls.value.on(Hls.Events.MANIFEST_PARSED, () => {
+    //     videoRef.value!.play();
+    // });
+
+    // Play erst wenn genug gepuffert ist (FRAG_BUFFERED statt MANIFEST_PARSED)
+    hls.value.on(Hls.Events.FRAG_BUFFERED, function onFirstFrag() {
+        hls.value!.off(Hls.Events.FRAG_BUFFERED, onFirstFrag);
+        videoRef.value?.play().catch(err => {
+            console.warn('Autoplay blocked:', err);
+        });
     });
 
-    // Handle HLS errors
     hls.value.on(Hls.Events.ERROR, (_, data) => {
         if (data.fatal) {
             console.error('Fatal HLS error:', data);
+
+            // Auto-Recovery bei fatalen Fehlern
+            switch (data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                    console.warn('Network error, trying to recover...');
+                    hls.value?.startLoad();
+                    break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                    console.warn('Media error, trying to recover...');
+                    hls.value?.recoverMediaError();
+                    break;
+                default:
+                    console.error('Unrecoverable error');
+                    break;
+            }
         }
     });
+
+    // Handle HLS errors
+    // hls.value.on(Hls.Events.ERROR, (_, data) => {
+    //     if (data.fatal) {
+    //         console.error('Fatal HLS error:', data);
+    //     }
+    // });
 
     if (videoRef.value) {
         videoRef.value.volume = volume.value;
@@ -856,30 +885,42 @@ async function reloadHLSStream(streamUrl: string, seekToTime?: number) {
     const token = sessionStorage.getItem(LOKI_TOKEN);
     const url = `${streamUrl}${streamUrl.includes('?') ? '&' : '?'}token=${token}`;
 
-    // Komplett zerstören — nur so werden Buffer geleert
     if (hls.value) {
         hls.value.destroy();
         hls.value = null;
     }
 
+    // Offset VOR dem HLS-Init setzen, damit updateProgress sofort korrekt rechnet
+    if (seekToTime !== undefined && seekToTime > 0) {
+        startOffset.value = seekToTime;
+        currentTime.value = seekToTime;
+    }
+
     initHLSPlayer(url);
 
-    // Warten bis Manifest geladen
+    // Warte bis Manifest geladen UND erste Daten gepuffert
     if (hls.value) {
         await new Promise<void>((resolve) => {
-            const onParsed = () => {
-                hls.value!.off(Hls.Events.MANIFEST_PARSED, onParsed);
+            const onBufferAppended = () => {
+                hls.value!.off(Hls.Events.BUFFER_APPENDED, onBufferAppended);
                 resolve();
             };
+            // Fallback: Falls BUFFER_APPENDED nicht kommt, nach MANIFEST_PARSED + Timeout resolven
+            const onParsed = () => {
+                hls.value!.off(Hls.Events.MANIFEST_PARSED, onParsed);
+                // Gib hls.js 500ms um den ersten Buffer zu füllen
+                setTimeout(() => {
+                    hls.value?.off(Hls.Events.BUFFER_APPENDED, onBufferAppended);
+                    resolve();
+                }, 500);
+            };
+            hls.value!.on(Hls.Events.BUFFER_APPENDED, onBufferAppended);
             hls.value!.on(Hls.Events.MANIFEST_PARSED, onParsed);
         });
     }
 
-    if (seekToTime !== undefined && seekToTime > 0) {
-        startOffset.value = seekToTime;
-        videoRef.value.currentTime = 0;
-        currentTime.value = seekToTime;
-    }
+    // NICHT videoRef.value.currentTime = 0 setzen!
+    // Der Stream beginnt dank -start_at_zero bereits bei 0.
 }
 
 function skip(seconds: number) {
@@ -911,6 +952,11 @@ async function handleSeek(seconds: number) {
             const streamUrl = `/api/hls/${sessionId.value}/master.m3u8`;
             await reloadHLSStream(streamUrl, newOffset);
             await fetchSessionInfo();
+
+            // Safety: Falls play() im initHLSPlayer nicht geklappt hat
+            if (videoRef.value && !wasPaused) {
+                videoRef.value.play().catch(() => {});
+            }
         } else {
             // Normaler Seek innerhalb des aktuellen Jobs
             if (videoRef.value) {
