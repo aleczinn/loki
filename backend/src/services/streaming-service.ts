@@ -199,7 +199,8 @@ export class StreamingService {
             // Der Nachteil: Bei riesigen Dateien kann der Transcode-Start etwas länger dauern (ein paar hundert Millisekunden mehr).
             '-analyzeduration', '200000000',  // 200M in Microsekunden
             '-probesize', '1000000000',       // 1G in Bytes
-            '-noaccurate_seek'                // Audio auch ab Keyframe, nicht sample-genau
+            '-noaccurate_seek',               // Audio auch ab Keyframe, nicht sample-genau
+            '-fflags', '+genpts'              // Erzeugt Presentation Timestamps für Frames die keine haben. Manche kaputte Container haben fehlende oder inkonsistente PTS-Werte. Das Flag ist ein Sicherheitsnetz — schadet nie, hilft bei problematischen Dateien. Kannst du optional hinzufügen.
         ];
 
         // ZU noaccurate_seek:
@@ -248,9 +249,10 @@ export class StreamingService {
 
         // TIMESTAMP & MUXING
         args.push(
-            '-start_at_zero',            // Timestamps bei 0 beginnen
-            '-avoid_negative_ts', 'make_zero',  // Negative Timestamps eliminieren
-            '-max_muxing_queue_size', '2048',   //
+            '-copyts',                  // Behält Audio/Video-Sync bei
+            '-start_at_zero',                  // Output-Timestamps bei 0 normalisieren
+            '-avoid_negative_ts', 'disabled',  // Keine Timestamp-Korrektur nötig
+            '-max_muxing_queue_size', '2048',
         );
 
         // HLS OUTPUT
@@ -522,7 +524,7 @@ export class StreamingService {
         logger.DEBUG(`${BLUE}Session Heartbeat: ${sessionId} @ ${currentTime}s (${isPaused ? 'paused' : 'playing'})${RESET}`);
     }
 
-    async handleSeek(sessionId: string, time: number): Promise<{ restart: boolean, startOffset?: number }> {
+    async handleSeek(sessionId: string, time: number): Promise<{ restart: boolean, startTimeSec?: number }> {
         return this.lock.acquire(`seek-${sessionId}`, async () => {
             const session = this.sessions.get(sessionId);
             if (!session) throw new Error(`No session ${sessionId}`);
@@ -535,16 +537,16 @@ export class StreamingService {
 
             logger.INFO(`Seek ${sessionId} → ${time}s (segment ${targetSegment})`);
 
-            if (session.decision.mode !== 'transcode') {
+            // Nur bei echtem Direct Play (Byte-Range) nichts tun.
+            if (session.decision.mode === 'direct_play') {
                 return { restart: false };
             }
 
-            // Kein Job → starten
+            // Sofern kein Job existiert, muss neu gestartet werden
             if (!job) {
                 logger.DEBUG(`No job → starting transcode`);
                 await this.startTranscode(session, targetSegment);
-                const startOffset = targetSegment * SEGMENT_DURATION;
-                return { restart: true, startOffset };
+                return { restart: true, startTimeSec: targetSegment * SEGMENT_DURATION };
             }
 
             // Prüfe ob Seek innerhalb des Job-Fensters liegt
@@ -567,8 +569,7 @@ export class StreamingService {
             }
 
             await this.startTranscode(session, targetSegment);
-            const startOffset = targetSegment * SEGMENT_DURATION;
-            return { restart: true, startOffset };
+            return { restart: true, startTimeSec: targetSegment * SEGMENT_DURATION };
         });
     }
 

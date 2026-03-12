@@ -43,7 +43,8 @@ router.post('/api/session/start', async (req: Request, res: Response) => {
             method: playerMethod,
             streamUrl: streamUrl,
             duration: file.metadata.general.Duration,
-            decision: session.decision
+            decision: session.decision,
+            startTimeSec: startTime || 0
         });
     } catch (error) {
         logger.ERROR(`Failed to start a new session: ${error}`);

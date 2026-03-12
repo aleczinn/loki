@@ -676,6 +676,7 @@ async function setupPlayer(file: MediaFile) {
     const data = response?.data;
     sessionId.value = response?.data.sessionId;
     duration.value = data.duration;
+    startOffset.value = data.startTimeSec || 0;
 
     const token = sessionStorage.getItem(LOKI_TOKEN);
     const url = `${data.streamUrl}${data.streamUrl.includes('?') ? '&' : '?'}token=${token}`;
@@ -714,7 +715,6 @@ async function fetchSessionInfo() {
 
 function cleanup() {
     sessionId.value = null;
-    startOffset.value = 0;
     currentTime.value = 0;
     duration.value = 0;
     buffered.value = 0;
@@ -882,19 +882,6 @@ async function reloadHLSStream(streamUrl: string, seekToTime?: number) {
     }
 }
 
-/**
- * Nach Seek-Restart: Backend hat Job bereits neu gestartet,
- * Frontend muss nur den HLS-Stream neu laden
- */
-async function handleJobRestart(seekTime: number) {
-    if (!sessionId.value) return;
-
-    // URL aus der aktuellen Session – nicht manuell bauen
-    const streamUrl = `/api/hls/${sessionId.value}/master.m3u8`;
-    await reloadHLSStream(streamUrl, seekTime);
-    await fetchSessionInfo();
-}
-
 function skip(seconds: number) {
     const baseTime = isSeeking.value ? seekTarget.value : currentTime.value;
     const newTime = baseTime + seconds;
@@ -920,14 +907,15 @@ async function handleSeek(seconds: number) {
 
         if (response?.data.restart) {
             // Job wurde neu gestartet → HLS komplett neu laden
-            await handleJobRestart(response.data.startOffset || target);
+            const newOffset = response.data.startTimeSec ?? target;
+            const streamUrl = `/api/hls/${sessionId.value}/master.m3u8`;
+            await reloadHLSStream(streamUrl, newOffset);
             await fetchSessionInfo();
         } else {
             // Normaler Seek innerhalb des aktuellen Jobs
             if (videoRef.value) {
                 // Setze Position relativ zum aktuellen Job
-                const newJobTime = target - (startOffset.value || 0);
-                videoRef.value.currentTime = newJobTime;
+                videoRef.value.currentTime = target - startOffset.value;
                 currentTime.value = target;
 
                 if (!wasPaused) {
@@ -957,28 +945,15 @@ function handleVolume(newValue: number) {
 function updateProgress() {
     if (!videoRef.value) return;
 
-    // Globale Zeit = Job-relative Zeit + Offset
     currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
-
-
-    // currentTime.value = (videoRef.value.currentTime || 0) + (startOffset.value || 0);
-    // currentTime.value = videoRef.value.currentTime;
-    // duration.value = videoRef.value.duration || 0;
 }
 
 function updateBuffer() {
     if (!videoRef.value || !duration.value) return;
 
-    // const b = videoRef.value.buffered;
-    // if (b.length > 0) {
-    //     // Get the end of the last buffered range
-    //     buffered.value = b.end(b.length - 1);
-    // }
-
     const b = videoRef.value.buffered;
     if (b.length > 0) {
-        // Buffered relativ zur globalen Timeline
-        buffered.value = b.end(b.length - 1) + (startOffset.value || 0);
+        buffered.value = b.end(b.length - 1) + startOffset.value;
     } else {
         buffered.value = 0;
     }
