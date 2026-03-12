@@ -2,7 +2,7 @@ import * as path from 'path';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
-import { clearDir, ensureDir, pathExists, readFile, stat } from "../utils/file-utils";
+import { deleteDir, ensureDir, pathExists, readFile, stat } from "../utils/file-utils";
 import { ChildProcess, spawn } from 'child_process';
 import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
@@ -15,7 +15,6 @@ import { getMimeType } from "../utils/media-utils";
 import fs from "fs";
 
 export const SEGMENT_DURATION = 4; // seconds per segment
-export const PAUSE_TRANSCODE_AFTER = 30000; // pause transcode after x milliseconds. -1 means no pausing.
 
 interface TranscodeJob {
     id: string;
@@ -571,7 +570,7 @@ export class StreamingService {
 
             // Altes Verzeichnis asynchron aufräumen
             const oldDir = path.join(TRANSCODE_PATH, session.id, oldJobId);
-            clearDir(oldDir).catch(e => logger.WARNING(`Failed to clean old job dir: ${e}`));
+            deleteDir(oldDir).catch(e => logger.WARNING(`Failed to clean old job dir: ${e}`));
 
             await this.startTranscode(session, targetSegment);
             return { restart: true, startTimeSec: targetSegment * SEGMENT_DURATION };
