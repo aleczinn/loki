@@ -409,6 +409,8 @@ const hls = ref<Hls | null>(null)
 // SEEKING
 const isSeeking = ref(false);
 const seekTarget = ref(0);
+const seekLock = ref(false);
+const pendingSeekTarget = ref<number | null>(null);
 
 // POPUPS
 const audioDialog = ref<HTMLDialogElement | null>(null);
@@ -806,20 +808,26 @@ function skip(seconds: number) {
 }
 
 async function handleSeek(seconds: number) {
-    if (!videoRef.value || !sessionId.value) return;
-
-    const wasPaused = videoRef.value.paused;
+    const target = Math.max(0, Math.min(seconds, duration.value));
+    seekTarget.value = target;
     isSeeking.value = true;
-    seekTarget.value = seconds;
 
-    videoRef.value.pause();
+    if (seekLock.value) {
+        pendingSeekTarget.value = target;
+        return;
+    }
 
-    const startTimeSec = Math.max(0, Math.min(seconds, duration.value));
+    seekLock.value = true;
 
     try {
+        if (!videoRef.value || !sessionId.value) return;
+
+        const wasPaused = videoRef.value.paused;
+        videoRef.value.pause();
+
         const response = await axios?.post('/session/seek', {
             sessionId: sessionId.value,
-            startTimeSec: startTimeSec
+            startTimeSec: target
         });
 
         if (response?.data.restart) {
@@ -827,28 +835,24 @@ async function handleSeek(seconds: number) {
             startOffset.value = response.data.startTimeSec ?? 0;
 
             // HLS komplett neu laden
-            const token = sessionStorage.getItem(LOKI_TOKEN);
-            const streamUrl = `/api/hls/${sessionId.value}/master.m3u8?token=${token}&t=${Date.now()}`;
-
             if (hls.value) {
                 hls.value.destroy();
                 hls.value = null;
             }
 
+            await new Promise(r => setTimeout(r, 50));
+
+            const token = sessionStorage.getItem(LOKI_TOKEN);
+            const streamUrl = `/api/hls/${sessionId.value}/master.m3u8?token=${token}&t=${Date.now()}`;
             initHLSPlayer(streamUrl);
 
             await fetchSessionInfo();
-
-            // Safety: Falls play() im initHLSPlayer nicht geklappt hat
-            if (videoRef.value && !wasPaused) {
-                videoRef.value.play().catch(() => {});
-            }
         } else {
             // Normaler Seek innerhalb des aktuellen Jobs
             if (videoRef.value) {
                 // Setze Position relativ zum aktuellen Job
-                videoRef.value.currentTime = startTimeSec - startOffset.value;
-                currentTime.value = startTimeSec;
+                videoRef.value.currentTime = target - startOffset.value;
+                currentTime.value = target;
 
                 if (!wasPaused) {
                     videoRef.value.play();
@@ -857,12 +861,16 @@ async function handleSeek(seconds: number) {
         }
     } catch (error) {
         console.error(`Seek failed: ${error}`);
-
-        if (!wasPaused && videoRef.value) {
-            videoRef.value.play();
-        }
     } finally {
-        isSeeking.value = false;
+        seekLock.value = false;
+
+        if (pendingSeekTarget.value !== null) {
+            const next = pendingSeekTarget.value;
+            pendingSeekTarget.value = null;
+            handleSeek(next);
+        } else {
+            isSeeking.value = false;
+        }
     }
 }
 
