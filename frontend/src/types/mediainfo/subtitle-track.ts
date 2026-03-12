@@ -1,4 +1,4 @@
-import { BaseTrack } from './base-track'
+import type { BaseTrack } from './base-track';
 
 export interface SubtitleTrack extends BaseTrack {
     '@type': 'Text';

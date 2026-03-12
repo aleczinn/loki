@@ -88,6 +88,28 @@ export function clearDirSync(path: string) {
 }
 
 /**
+ * Deletes a directory
+ */
+export async function deleteDir(path: string) {
+    try {
+        await rm(path, { recursive: true, force: true });
+    } catch (error) {
+        logger.ERROR(`${RED}Error deleting dir ${path}: ${error}${RESET}`);
+    }
+}
+
+/**
+ * Deletes a directory
+ */
+export function deleteDirSync(path: string) {
+    try {
+        fs.rmSync(path, { recursive: true, force: true });
+    } catch (error) {
+        logger.ERROR(`${RED}Error: ${error}${RESET}`);
+    }
+}
+
+/**
  * Deletes a file if it exists.
  */
 export async function deleteFile(filePath: string): Promise<void> {

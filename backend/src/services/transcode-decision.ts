@@ -4,11 +4,13 @@ import { preferFragmentedMp4 } from "../settings";
 import { logger } from "../logger";
 
 export type StreamMode = 'direct_play' | 'direct_remux' | 'transcode';
+export type PlayerMethod = 'direct' | 'hls'; // Add DASH later
 export type GenericStreamingType = 'copy' | 'transcode';
 export type SubtitleStreamingType = 'copy' | 'burn_in' | 'none';
 
 export interface TranscodeDecision {
     mode: StreamMode;
+    method: PlayerMethod;
     profile: QualityProfile;
     container: {
         needsRemux: boolean;
@@ -65,6 +67,13 @@ export class TranscodeDecisionService {
         const needsVideoTranscode = videoDecision.action === 'transcode' || subtitleDecision.action === 'burn_in';
         const needsAudioTranscode = audioDecision.action === 'transcode';
 
+        // Wenn burn_in nötig ist, aber Video auf copy steht → Video muss transkodiert werden
+        if (subtitleDecision.action === 'burn_in' && videoDecision.action === 'copy') {
+            videoDecision.action = 'transcode';
+            videoDecision.reason = 'Video transcoding required for subtitle burn-in';
+            videoDecision.targetCodec = this.selectBestVideoCodec(capabilities);
+        }
+
         if (needsVideoTranscode || needsAudioTranscode || profile !== 'original') {
             mode = 'transcode';
         } else if (containerDecision.needsRemux) {
@@ -92,8 +101,12 @@ export class TranscodeDecisionService {
             containerDecision.reason = 'fragmented-mp4-preferred';
         }
 
+        // TODO : Adjust later if DASH is added
+        const method: PlayerMethod = mode === 'direct_play' ? 'direct' : 'hls';
+
         return {
             mode,
+            method,
             profile,
             container: containerDecision,
             video: videoDecision,
