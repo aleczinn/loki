@@ -823,10 +823,20 @@ async function handleSeek(seconds: number) {
         });
 
         if (response?.data.restart) {
-            // Job wurde neu gestartet → HLS komplett neu laden
-            const newOffset = response.data.startTimeSec;
-            const streamUrl = `/api/hls/${sessionId.value}/master.m3u8`;
-            // TODO : restart stream
+            // Offset aktualisieren — das ist der absolute Zeitpunkt, ab dem der neue Job startet
+            startOffset.value = response.data.startTimeSec ?? 0;
+
+            // HLS komplett neu laden
+            const token = sessionStorage.getItem(LOKI_TOKEN);
+            const streamUrl = `/api/hls/${sessionId.value}/master.m3u8?token=${token}&t=${Date.now()}`;
+
+            if (hls.value) {
+                hls.value.destroy();
+                hls.value = null;
+            }
+
+            initHLSPlayer(streamUrl);
+
             await fetchSessionInfo();
 
             // Safety: Falls play() im initHLSPlayer nicht geklappt hat

@@ -2,7 +2,7 @@ import * as path from 'path';
 import { MediaFile } from "../types/media-file";
 import { logger } from "../logger";
 import AsyncLock from "async-lock";
-import { ensureDir, pathExists, readFile, stat } from "../utils/file-utils";
+import { clearDir, ensureDir, pathExists, readFile, stat } from "../utils/file-utils";
 import { ChildProcess, spawn } from 'child_process';
 import { TRANSCODE_PATH } from "../app";
 import transcodeDecisionService, { QualityProfile, TranscodeDecision } from "./transcode-decision";
@@ -251,7 +251,7 @@ export class StreamingService {
         args.push(
             '-copyts',                  // Behält Audio/Video-Sync bei
             '-start_at_zero',                  // Output-Timestamps bei 0 normalisieren
-            '-avoid_negative_ts', 'disabled',  // Keine Timestamp-Korrektur nötig
+            '-avoid_negative_ts', 'make_zero', // Timestamp-Korrektur
             '-max_muxing_queue_size', '2048',
         );
 
@@ -564,9 +564,14 @@ export class StreamingService {
             logger.INFO(`Seek outside window (current: ${job.startSegment}–${job.lastGeneratedSegment}, target: ${targetSegment}) → restarting`);
 
             // Nur stoppen wenn noch läuft
+            const oldJobId = job.id;
             if (job.status === 'running') {
                 await this.stopTranscode(session);
             }
+
+            // Altes Verzeichnis asynchron aufräumen
+            const oldDir = path.join(TRANSCODE_PATH, session.id, oldJobId);
+            clearDir(oldDir).catch(e => logger.WARNING(`Failed to clean old job dir: ${e}`));
 
             await this.startTranscode(session, targetSegment);
             return { restart: true, startTimeSec: targetSegment * SEGMENT_DURATION };
