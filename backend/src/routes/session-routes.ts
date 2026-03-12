@@ -78,17 +78,17 @@ router.post('/api/session/progress', async (req: Request, res: Response) => {
  */
 router.post('/api/session/seek', async (req: Request, res: Response) => {
     try {
-        const { sessionId, time } = req.body;
+        const { sessionId, startTimeSec } = req.body;
 
         if (!sessionId) {
             return res.status(400).json({ error: 'Session ID required' });
         }
 
-        if (!time) {
+        if (!startTimeSec) {
             return res.status(400).json({ error: 'No time provided' });
         }
 
-        const result = await streamingService.handleSeek(sessionId, time);
+        const result = await streamingService.handleSeek(sessionId, startTimeSec);
 
         res.status(200).send(result);
     } catch (error) {
