@@ -304,10 +304,11 @@ export class StreamingService {
 
                         const transcodedSeconds = timeMs / 1_000_000; // Microseconds to seconds
                         const absoluteTime = startTime + transcodedSeconds;
-                        const progress = (transcodedSeconds  / duration) * 100;
+                        const remainingDuration = duration - startTime;
+                        const progress = remainingDuration > 0 ? (transcodedSeconds / remainingDuration) * 100 : 100;
 
                         job.lastGeneratedSegment = Math.floor(absoluteTime / SEGMENT_DURATION);
-                        job.progress = progress;
+                        job.progress = Math.min(progress, 100);
                         break;
                     }
 
